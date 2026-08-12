@@ -12,7 +12,7 @@ RUN git clone --branch "v${OPENEMS_VERSION}" --depth 1 --recurse-submodules \
 FROM ubuntu:24.04
 ARG OPENEMS_VERSION=0.0.36
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      libboost-system1.83.0 libhdf5-103-1t64 libtinyxml2.6.2v5 libvtk9.3 octave python3 python3-pip \
+      libboost-all-dev libhdf5-dev libtinyxml-dev libvtk9-dev octave python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /opt/openems /opt/openems
 ENV PATH=/opt/openems/bin:${PATH} OCTAVE_PATH=/opt/openems/share/openEMS/matlab

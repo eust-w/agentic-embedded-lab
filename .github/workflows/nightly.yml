@@ -1,5 +1,9 @@
 name: nightly-simulation
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: ["codex/ael-full-platform"]

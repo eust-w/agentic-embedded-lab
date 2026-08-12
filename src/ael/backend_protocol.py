@@ -5,8 +5,9 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from .constants import API_VERSION
 from .contracts import Event, StrictModel
+
+BACKEND_API_VERSION = "ael.dev/backend/v1"
 
 
 class BackendOperation(StrEnum):
@@ -19,7 +20,7 @@ class BackendOperation(StrEnum):
 
 
 class BackendRequest(StrictModel):
-    api_version: Literal["ael.dev/v1"] = API_VERSION
+    api_version: Literal["ael.dev/backend/v1"] = BACKEND_API_VERSION
     request_id: str
     operation: BackendOperation
     virtual_time_us: int | None = Field(default=None, ge=0)
@@ -27,7 +28,7 @@ class BackendRequest(StrictModel):
 
 
 class BackendResponse(StrictModel):
-    api_version: Literal["ael.dev/v1"] = API_VERSION
+    api_version: Literal["ael.dev/backend/v1"] = BACKEND_API_VERSION
     request_id: str
     ok: bool
     outputs: dict[str, Any] = Field(default_factory=dict)

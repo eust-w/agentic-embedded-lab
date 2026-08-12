@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+from io import StringIO
 from pathlib import Path
 
 from ael.adapters.subprocess_adapter import SubprocessAdapter
+from ael.backend_protocol import BackendResponse
+from ael.backend_workers.ngspice import NgspiceWorker
 from ael.contracts import BackendName, SystemComponent
 
 
@@ -49,3 +52,19 @@ raw.write_bytes(b'raw')
     finally:
         adapter.shutdown()
         os.environ.pop("AEL_NGSPICE_BIN", None)
+
+
+def test_backend_worker_rejects_wrong_protocol_without_crashing(monkeypatch) -> None:
+    monkeypatch.setenv("AEL_NGSPICE_BIN", "/does/not/exist")
+    output = StringIO()
+    NgspiceWorker().serve(
+        StringIO(
+            '{"api_version":"ael.dev/v1","request_id":"bad",'
+            '"operation":"probe","payload":{}}\n'
+        ),
+        output,
+    )
+    response = BackendResponse.model_validate_json(output.getvalue())
+    assert response.api_version == "ael.dev/backend/v1"
+    assert response.ok is False
+    assert response.request_id == "bad"

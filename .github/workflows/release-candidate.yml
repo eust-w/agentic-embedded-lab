@@ -1,5 +1,9 @@
 name: release-candidate-software-gates
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   id-token: write
@@ -38,9 +42,9 @@ jobs:
             curl -fsS http://127.0.0.1:9000/minio/health/live && break
             sleep 1
           done
-          docker run --rm --network host --entrypoint sh \
+          docker run --rm --network host --entrypoint /bin/sh \
             quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z \
-            sh -c 'mc alias set local http://127.0.0.1:9000 test-only test-only-secret && mc mb local/ael-test'
+            -c 'mc alias set local http://127.0.0.1:9000 test-only test-only-secret && mc mb local/ael-test'
       - run: pytest tests/test_worker.py tests/test_server_storage.py tests/test_security.py tests/test_api.py
       - name: PostgreSQL/S3 semantic experiment
         env:

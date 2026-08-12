@@ -41,6 +41,7 @@ class BackendWorker(ABC):
 
     def serve(self, input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
         for line in input_stream:
+            request: BackendRequest | None = None
             try:
                 request = BackendRequest.model_validate_json(line)
                 response = self.handle(request)
@@ -53,7 +54,7 @@ class BackendWorker(ABC):
                 )
             output_stream.write(response.model_dump_json() + "\n")
             output_stream.flush()
-            if response.request_id != "invalid" and request.operation == BackendOperation.SHUTDOWN:
+            if request is not None and request.operation == BackendOperation.SHUTDOWN:
                 return
 
     def handle(self, request: BackendRequest) -> BackendResponse:
