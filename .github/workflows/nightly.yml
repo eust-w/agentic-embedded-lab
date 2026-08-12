@@ -129,4 +129,19 @@ jobs:
         env:
           AEL_RENODE_IMAGE: ael-renode:ci
           AEL_OCI_RUNTIME: docker
-        run: ael run benchmarks/experiments/riscv-smoke.yaml
+        run: |
+          set +e
+          timeout --signal=TERM 25s docker run --rm \
+            --network=none \
+            --mount "type=bind,src=$PWD,dst=/workspace" \
+            --workdir /workspace \
+            --entrypoint=renode \
+            ael-renode:ci --disable-gui /workspace/scripts/renode-riscv-direct.resc \
+            >renode-direct.log 2>&1
+          direct_status=$?
+          set -e
+          sed -n '1,240p' renode-direct.log
+          test "$direct_status" -eq 0
+          grep -F 'AEL_PHASE:ran' renode-direct.log
+          grep -F 'AEL_REGISTER:failure:0' renode-direct.log
+          ael run benchmarks/experiments/riscv-smoke.yaml

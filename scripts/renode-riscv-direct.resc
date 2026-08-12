@@ -1,0 +1,16 @@
+using sysbus
+mach create "ael-hifive1-direct"
+machine LoadPlatformDescription @/workspace/benchmarks/models/renode/sifive-fe310-ael.repl
+python "print('AEL_PHASE:platform')"
+sysbus LoadELF @/workspace/firmware/zephyr/build-hifive1/zephyr/zephyr.elf
+python "print('AEL_PHASE:elf')"
+cpu PC `sysbus GetSymbolAddress "__start"`
+cpu PerformanceInMips 320
+sysbus WriteDoubleWord 0x80003c00 4
+sysbus WriteDoubleWord 0x80003c04 1
+sysbus WriteDoubleWord 0x80003c08 0xFFFFFFFF
+python "print('AEL_PHASE:configured')"
+emulation RunFor "0.001"
+python "print('AEL_PHASE:ran')"
+python "print('AEL_REGISTER:failure:%x' % self.Machine.SystemBus.ReadDoubleWord(0x80003c08))"
+quit
