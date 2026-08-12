@@ -46,9 +46,18 @@ jobs:
         run: |
           set +e
           timeout --kill-after=5s --signal=TERM 25s docker run --rm \
+            --read-only \
             --network=none \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --pids-limit=512 \
+            --memory=4g \
+            --cpus=2 \
+            --tmpfs=/tmp:rw,nosuid,size=2g \
             --mount "type=bind,src=$PWD,dst=/workspace" \
-            --workdir /workspace \
+            --workdir /tmp \
+            --env HOME=/tmp/ael-home \
+            --env XDG_CONFIG_HOME=/tmp/ael-config \
             --entrypoint=renode \
             ael-renode:ci --disable-gui --console /workspace/scripts/renode-riscv-direct.resc \
             >renode-direct.log 2>&1
