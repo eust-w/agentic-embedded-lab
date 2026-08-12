@@ -1,0 +1,73 @@
+name: renode-riscv-smoke
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ["codex/ael-full-platform"]
+    paths:
+      - ".github/workflows/renode-smoke.yml"
+      - "benchmarks/models/renode/**"
+      - "benchmarks/systems/renode-riscv-smoke.yaml"
+      - "benchmarks/experiments/riscv-smoke.yaml"
+      - "containers/renode/**"
+      - "firmware/zephyr/**"
+      - "scripts/renode-riscv-direct.resc"
+      - "src/ael/adapters/**"
+      - "src/ael/backend_workers/renode.py"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          toolchains: riscv64-zephyr-elf
+          sdk-version: 1.0.1
+      - uses: docker/setup-buildx-action@v3
+      - run: |
+          west build -p always -b hifive1_revb firmware/zephyr \
+            -d firmware/zephyr/build-hifive1
+          python -m pip install -e .
+          docker buildx build \
+            --file containers/renode/Dockerfile \
+            --tag ael-renode:ci \
+            --cache-from type=gha,scope=renode \
+            --load .
+      - name: Direct Renode phase probe
+        run: |
+          set +e
+          timeout --kill-after=5s --signal=TERM 25s docker run --rm \
+            --network=none \
+            --mount "type=bind,src=$PWD,dst=/workspace" \
+            --workdir /workspace \
+            --entrypoint=renode \
+            ael-renode:ci --disable-gui /workspace/scripts/renode-riscv-direct.resc \
+            >renode-direct.log 2>&1
+          direct_status=$?
+          set -e
+          sed -n '1,240p' renode-direct.log
+          test "$direct_status" -eq 0
+          grep -F 'AEL_PHASE:ran' renode-direct.log
+          grep -F 'AEL_REGISTER:failure:0' renode-direct.log
+      - name: Adapter evidence smoke
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_OCI_RUNTIME: docker
+        run: ael run benchmarks/experiments/riscv-smoke.yaml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: renode-riscv-smoke-evidence
+          path: |
+            renode-direct.log
+            runs/
+          retention-days: 14
