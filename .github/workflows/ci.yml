@@ -23,6 +23,10 @@ jobs:
         run: |
           cmake -S native/fmi-proxies -B .ael/build/fmi -DCMAKE_BUILD_TYPE=Release
           cmake --build .ael/build/fmi --parallel
+          for proxy in RenodeFmu NgspiceFmu ModelicaFmu Ns3Fmu OpenEmsFmu; do
+            nm -D ".ael/build/fmi/${proxy}.so" | grep -F ' fmi2SetDebugLogging'
+            nm -D ".ael/build/fmi/${proxy}.so" | grep -F ' fmi2DoStep'
+          done
       - run: ael schema export schemas/v1
       - run: git diff --exit-code -- schemas/v1
       - run: ael validate examples/experiments/synthetic-smoke.yaml

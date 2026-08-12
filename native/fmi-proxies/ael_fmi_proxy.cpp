@@ -167,6 +167,13 @@ fmi2Status getValues(const Map& values, const fmi2ValueReference vr[], std::size
 extern "C" {
 FMI2_EXPORT fmi2String fmi2GetTypesPlatform() { return "default"; }
 FMI2_EXPORT fmi2String fmi2GetVersion() { return "2.0"; }
+FMI2_EXPORT fmi2Status fmi2SetDebugLogging(
+    fmi2Component component,
+    fmi2Boolean,
+    std::size_t,
+    const fmi2String[]) {
+    return component ? fmi2OK : fmi2Error;
+}
 FMI2_EXPORT fmi2Component fmi2Instantiate(
     fmi2String instanceName,
     fmi2Type fmuType,
