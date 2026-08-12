@@ -131,7 +131,7 @@ jobs:
           AEL_OCI_RUNTIME: docker
         run: |
           set +e
-          timeout --signal=TERM 25s docker run --rm \
+          timeout --kill-after=5s --signal=TERM 25s docker run --rm \
             --network=none \
             --mount "type=bind,src=$PWD,dst=/workspace" \
             --workdir /workspace \
