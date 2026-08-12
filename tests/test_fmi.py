@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
@@ -149,3 +150,39 @@ def test_fmi_bridge_accepts_qualified_ssp_instance_name() -> None:
     bridge.components = {"mcu": component("mcu")}
     bridge.adapters = {"mcu": FakeAdapter()}
     assert bridge.exchange("STEP root.mcu 0 0.001 r1=2") == "OK r2=3.0"
+    assert bridge.exchange("STEP /workspace/model/temp/mcu 0 0.001 r1=2") == "OK r2=3.0"
+
+
+def test_fmi_bridge_rejects_nonterminal_component_match() -> None:
+    bridge = object.__new__(FmiBridgeServer)
+    bridge.components = {"mcu": component("mcu")}
+    bridge.adapters = {}
+    with pytest.raises(ValueError, match="unknown FMI component instance"):
+        bridge.exchange("STEP /workspace/mcu/temp/other 0 0.001")
+
+
+def test_fmi_orchestrator_fails_closed_on_coordinator_log_error(tmp_path, monkeypatch) -> None:
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(command, **kwargs):
+        log_argument = next(item for item in command if item.startswith("--logFile="))
+        Path(log_argument.split("=", 1)[1]).write_text(
+            "info: started\nerror: hidden doStep failure\n",
+            encoding="utf-8",
+        )
+        return Completed()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("ael.fmi.subprocess.run", fake_run)
+    system = SystemManifest(name="fail-closed", components=[component("test")])
+    with pytest.raises(RuntimeError, match="reported an error"):
+        FmiOrchestrator().run(
+            system,
+            tmp_path / "system.ssp",
+            stop_time_s=0.001,
+            timeout_s=1,
+            seed=1,
+        )

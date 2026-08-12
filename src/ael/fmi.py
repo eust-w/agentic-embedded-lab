@@ -266,13 +266,15 @@ class FmiBridgeServer:
         if instance_name in self.components:
             component_id = instance_name
         else:
-            # SSP masters may qualify the FMU instance as root.component.
-            # Accept only an unambiguous suffix from the manifest; never route
-            # arbitrary instance text to a backend.
+            # SSP masters qualify FMU instances differently. OMSimulator 2.1.3
+            # uses both dotted model names and extracted paths ending in
+            # ``/temp/<component>``. Accept only an exact terminal identifier
+            # from the manifest; never route arbitrary instance text.
             matches = [
                 component_id
                 for component_id in self.components
                 if instance_name.endswith(f".{component_id}")
+                or instance_name.endswith(f"/{component_id}")
             ]
             if len(matches) != 1:
                 raise ValueError(f"unknown FMI component instance: {instance_name}")
@@ -380,14 +382,26 @@ class FmiOrchestrator:
                     check=False,
                     env=environment,
                 )
-                if completed.returncode != 0:
-                    log_excerpt = ""
-                    if log_file.is_file():
-                        log_excerpt = log_file.read_text(
-                            encoding="utf-8", errors="replace"
-                        )[-4000:]
+                log_text = ""
+                if log_file.is_file():
+                    log_text = log_file.read_text(encoding="utf-8", errors="replace")
+                # OMSimulator 2.1.3 can return zero after an FMU doStep error.
+                # A coordinator log error/fatal is therefore authoritative and
+                # must fail closed even when the process exit code is success.
+                log_failures = [
+                    line
+                    for line in log_text.splitlines()
+                    if re.search(r"(?:^|\|)\s*(?:error|fatal):", line, flags=re.IGNORECASE)
+                ]
+                if completed.returncode != 0 or log_failures:
+                    log_excerpt = log_text[-4000:]
+                    reason = (
+                        f"OMSimulator exited {completed.returncode}"
+                        if completed.returncode != 0
+                        else "OMSimulator reported an error in its execution log"
+                    )
                     raise RuntimeError(
-                        f"OMSimulator exited {completed.returncode}: "
+                        f"{reason}: "
                         f"{(completed.stderr or completed.stdout)[-4000:]}\n"
                         f"--- OMSimulator log ---\n{log_excerpt}"
                     )
