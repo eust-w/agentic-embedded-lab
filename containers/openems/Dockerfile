@@ -28,7 +28,9 @@ ENV PATH=/opt/openems/bin:${PATH} \
     OCTAVE_PATH=/opt/openems/share/openEMS/matlab:/opt/openems/share/CSXCAD/matlab
 RUN openEMS --version | grep -F "${OPENEMS_VERSION}"
 RUN octave-cli --no-gui --quiet --eval \
-      "status=system('openEMS --version'); assert(status == 0);"
+      "[status,out]=system('openEMS --version 2>&1'); disp(out); \
+       assert(isempty(strfind(out,'error while loading shared libraries'))); \
+       assert(!isempty(strfind(out,'version v${OPENEMS_VERSION}')));"
 WORKDIR /workspace
 COPY pyproject.toml README.md LICENSE /workspace/
 COPY src /workspace/src
