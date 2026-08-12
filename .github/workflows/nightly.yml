@@ -12,7 +12,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          toolchains: arm-zephyr-eabi:riscv64-zephyr-elf
+          sdk-version: 1.0.1
+      - run: scripts/build-firmware.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zephyr-reference-firmware
+          path: |
+            firmware/zephyr/build-stm32/zephyr/zephyr.elf
+            firmware/zephyr/build-hifive1/zephyr/zephyr.elf
+          retention-days: 7
+
   simulation:
+    needs: firmware
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -20,13 +40,11 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - uses: docker/setup-buildx-action@v3
-      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+      - uses: actions/download-artifact@v4
         with:
-          app-path: .
-          toolchains: arm-zephyr-eabi:riscv64-zephyr-elf
-          sdk-version: 1.0.1
+          name: zephyr-reference-firmware
+          path: firmware/zephyr
       - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
-      - run: scripts/build-firmware.sh
       - name: Build pinned backend images
         run: |
           # Build the largest source image first while the runner has maximum headroom.
