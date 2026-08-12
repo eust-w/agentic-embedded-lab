@@ -52,6 +52,7 @@ class RenodeWorker(BackendWorker):
                 "using sysbus",
                 f'mach create "{self.component.id}"',
                 f"machine LoadPlatformDescription @{model}",
+                "python \"print('AEL_PHASE:platform')\"",
             ]
             memory_tags = self.component.properties.get("memory_tags", [])
             if not isinstance(memory_tags, list):
@@ -77,16 +78,19 @@ class RenodeWorker(BackendWorker):
                 if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
                     raise ValueError("Renode memory tag name is not safe")
                 lines.append(f'sysbus Tag <{address:#x} {size}> "{name}" {default:#x}')
+            lines.append("python \"print('AEL_PHASE:tags')\"")
             performance_mips = self.component.properties.get("performance_mips")
             if performance_mips is not None:
                 if not isinstance(performance_mips, int) or not 1 <= performance_mips <= 100000:
                     raise ValueError("Renode performance_mips must be an integer from 1 to 100000")
                 lines.append(f"cpu PerformanceInMips {performance_mips}")
+            lines.append("python \"print('AEL_PHASE:performance')\"")
         else:
             lines = [f"include @{model}"]
         firmware = self.property_path("firmware")
         if firmware:
             lines.append(f"sysbus LoadELF @{firmware}")
+            lines.append("python \"print('AEL_PHASE:elf')\"")
             entry_symbol = self.component.properties.get("entry_symbol")
             if entry_symbol is not None:
                 if not isinstance(entry_symbol, str) or not re.fullmatch(
@@ -94,7 +98,9 @@ class RenodeWorker(BackendWorker):
                 ):
                     raise ValueError("Renode entry_symbol is not a safe ELF symbol")
                 lines.append(f'cpu PC `sysbus GetSymbolAddress "{entry_symbol}"`')
+            lines.append("python \"print('AEL_PHASE:entry')\"")
         lines.extend(self._register_io_lines())
+        lines.append("python \"print('AEL_PHASE:bridge')\"")
         return lines
 
     def step(
