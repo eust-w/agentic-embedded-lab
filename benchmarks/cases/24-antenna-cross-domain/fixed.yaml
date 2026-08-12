@@ -48,8 +48,28 @@ assertions:
   operator: eq
   expected: 0
   critical: true
+- metric: circuit.failure
+  operator: eq
+  expected: 0
+  critical: true
+- metric: plant.failure
+  operator: eq
+  expected: 0
+  critical: true
+- metric: network.failure
+  operator: eq
+  expected: 0
+  critical: true
+- metric: antenna.failure
+  operator: eq
+  expected: 0
+  critical: true
 observables:
 - mcu.failure
+- circuit.failure
+- plant.failure
+- network.failure
+- antenna.failure
 allowed_model_states:
 - conformance_validated
 - hardware_validated

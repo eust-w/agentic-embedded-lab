@@ -40,6 +40,7 @@ components:
       input_registers: {case_id: 0x2001fc00, fixed: 0x2001fc04, network_retries: 0x2001fc14}
       output_registers: {failure: 0x2001fc08, retries: 0x2001fc0c, current: 0x2001fc10}
       output_sentinels: {failure: 0xffffffff}
+      output_scales: {retries: 0.001}
   - id: circuit
     type: transient-power-path
     backend: ngspice

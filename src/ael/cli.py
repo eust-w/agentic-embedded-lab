@@ -177,7 +177,7 @@ def benchmark_run(
 ) -> None:
     manifest = service(workspace).run_benchmarks(set(case_id) if case_id else None, source_revision)
     emit(manifest)
-    if any(entry.status != "passed" for entry in manifest.entries):
+    if any(entry["status"] != "passed" for entry in manifest["entries"]):
         raise typer.Exit(2)
 
 

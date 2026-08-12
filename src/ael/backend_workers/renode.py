@@ -134,9 +134,23 @@ class RenodeWorker(BackendWorker):
         result = self.run_tool(["--disable-gui", "--console", str(script)])
         combined = f"{result.stdout}\n{result.stderr}"
         metrics, events = self.parse_output(combined, self.virtual_time_us + step_us)
-        outputs = {
+        raw_outputs = {
             match.group(1): int(match.group(2), 16) for match in REGISTER_RESULT.finditer(combined)
         }
+        scales = self.component.properties.get("output_scales", {})
+        if not isinstance(scales, dict):
+            raise ValueError("Renode output_scales must be an object")
+        unknown_scales = set(scales) - set(output_registers)
+        if unknown_scales:
+            raise ValueError(
+                f"Renode output scales refer to unknown outputs: {sorted(unknown_scales)}"
+            )
+        outputs: dict[str, Any] = {}
+        for name, value in raw_outputs.items():
+            scale = scales.get(name, 1)
+            if not isinstance(scale, (int, float)) or isinstance(scale, bool):
+                raise ValueError(f"Renode output scale for {name!r} must be numeric")
+            outputs[name] = value * scale
         return outputs, metrics, events, {}
 
     def snapshot(self, destination: Path) -> Path:

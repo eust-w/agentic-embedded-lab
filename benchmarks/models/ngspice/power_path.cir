@@ -1,5 +1,5 @@
 AEL functional power-path transient model
-.param source_resistance='0.1 + AEL_fault_scale*8'
+.param source_resistance='0.1 + AEL_fault_scale*12'
 .param capacitance='47u/(1 + AEL_fault_scale*20)'
 Vsource source 0 3.3
 Rsource source rail {source_resistance}

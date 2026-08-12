@@ -200,7 +200,21 @@ class FmiBridgeServer:
         fields = request.split()
         if len(fields) < 4 or fields[0] != "STEP":
             raise ValueError("invalid FMI bridge request")
-        component_id = fields[1]
+        instance_name = fields[1]
+        if instance_name in self.components:
+            component_id = instance_name
+        else:
+            # SSP masters may qualify the FMU instance as root.component.
+            # Accept only an unambiguous suffix from the manifest; never route
+            # arbitrary instance text to a backend.
+            matches = [
+                component_id
+                for component_id in self.components
+                if instance_name.endswith(f".{component_id}")
+            ]
+            if len(matches) != 1:
+                raise ValueError(f"unknown FMI component instance: {instance_name}")
+            component_id = matches[0]
         current_us = round(float(fields[2]) * 1_000_000)
         step_us = round(float(fields[3]) * 1_000_000)
         component = self.components[component_id]
@@ -263,10 +277,15 @@ class FmiOrchestrator:
         # Keep Unix sockets under the workspace so an isolated OMSimulator
         # container can access them through the scoped workspace mount. Never
         # expose the host-wide /tmp directory to the co-simulation process.
-        runtime_root = Path.cwd().resolve() / ".ael" / "runtime"
+        workspace_root = Path.cwd().resolve()
+        runtime_root = workspace_root / ".ael" / "runtime"
         runtime_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="ael-fmi-", dir=runtime_root) as temporary:
-            root = Path(temporary)
+            # Linux AF_UNIX names are normally limited to 108 bytes. GitHub's
+            # checkout path is already long, so publish a workspace-relative
+            # name. Both the host bridge and isolated OMSimulator use the same
+            # workspace as their current directory.
+            root = Path(temporary).relative_to(workspace_root)
             environment = os.environ.copy()
             grouped: dict[BackendName, list[Any]] = {}
             for component in system.components:

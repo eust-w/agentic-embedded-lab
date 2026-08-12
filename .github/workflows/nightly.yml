@@ -54,10 +54,13 @@ jobs:
               --file "containers/${backend}/Dockerfile" \
               --tag "ael-${backend}:ci" \
               --cache-from "type=gha,scope=${backend}" \
+              --cache-to "type=gha,mode=max,scope=${backend}" \
               --load .
             docker buildx prune --all --force
           done
       - name: Execute 24 faulty/fixed pairs
+        id: benchmark
+        continue-on-error: true
         env:
           AEL_RENODE_IMAGE: ael-renode:ci
           AEL_NGSPICE_IMAGE: ael-ngspice:ci
@@ -68,6 +71,9 @@ jobs:
           AEL_OCI_RUNTIME: docker
         run: ael benchmark run --source-revision "$GITHUB_SHA"
       - name: Execute FMI 2.0/SSP five-domain acceptance
+        id: fmi
+        if: always()
+        continue-on-error: true
         env:
           AEL_RENODE_IMAGE: ael-renode:ci
           AEL_NGSPICE_IMAGE: ael-ngspice:ci
@@ -79,6 +85,9 @@ jobs:
           docker run --rm --entrypoint=OMSimulator ael-openmodelica:ci --version
           scripts/run-fmi-acceptance.py --om-simulator scripts/omsimulator-container
       - name: Check 20-run deterministic trace
+        id: determinism
+        if: always()
+        continue-on-error: true
         env:
           AEL_RENODE_IMAGE: ael-renode:ci
           AEL_NGSPICE_IMAGE: ael-ngspice:ci
@@ -87,8 +96,15 @@ jobs:
           AEL_OPENEMS_IMAGE: ael-openems:ci
           AEL_OCI_RUNTIME: docker
         run: scripts/check-determinism.py benchmarks/cases/24-antenna-cross-domain/fixed.yaml --warmup --repeats 20
-      - run: ael release check --profile simulation
+      - name: Check simulation release gate
+        id: simulation_gate
+        if: always()
+        continue-on-error: true
+        run: ael release check --profile simulation
       - name: Production gate must remain blocked
+        id: production_gate
+        if: always()
+        continue-on-error: true
         run: |
           if ael release check --profile production >production-gate.json; then
             exit 1
@@ -105,6 +121,20 @@ jobs:
             .ael/build/fmi/*.ssp
             production-gate.json
           retention-days: 30
+      - name: Enforce all software simulation gates
+        if: always()
+        env:
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+          FMI_OUTCOME: ${{ steps.fmi.outcome }}
+          DETERMINISM_OUTCOME: ${{ steps.determinism.outcome }}
+          SIMULATION_GATE_OUTCOME: ${{ steps.simulation_gate.outcome }}
+          PRODUCTION_GATE_OUTCOME: ${{ steps.production_gate.outcome }}
+        run: |
+          test "$BENCHMARK_OUTCOME" = success
+          test "$FMI_OUTCOME" = success
+          test "$DETERMINISM_OUTCOME" = success
+          test "$SIMULATION_GATE_OUTCOME" = success
+          test "$PRODUCTION_GATE_OUTCOME" = success
 
   riscv-smoke:
     needs: firmware
@@ -126,6 +156,7 @@ jobs:
             --file containers/renode/Dockerfile \
             --tag ael-renode:ci \
             --cache-from type=gha,scope=renode \
+            --cache-to type=gha,mode=max,scope=renode \
             --load .
       - name: Boot RISC-V Zephyr reference in Renode
         env:

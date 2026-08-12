@@ -255,6 +255,41 @@ def test_renode_adapter_uses_agent_readable_register_output(tmp_path: Path, monk
         adapter.shutdown()
 
 
+def test_renode_adapter_applies_declared_output_scale(tmp_path: Path, monkeypatch) -> None:
+    tool = tmp_path / "renode"
+    tool.write_text(
+        "#!/bin/sh\n"
+        "case \"$*\" in *-v*|*--version*) echo 'Renode 1.16.1';; "
+        "*) echo 'AEL_REGISTER:retries:1f4';; esac\n",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    model = tmp_path / "platform.resc"
+    model.write_text("mach create 'test'\n", encoding="utf-8")
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_RENODE_BIN", str(tool))
+    adapter = SubprocessAdapter(BackendName.RENODE, "ael.backend_workers.renode", "1.16.1")
+    adapter.prepare(
+        SystemComponent(
+            id="mcu",
+            type="test",
+            backend=BackendName.RENODE,
+            model="platform.resc",
+            step_us=1000,
+            properties={
+                "output_registers": {"retries": 0x2001FC0C},
+                "output_scales": {"retries": 0.001},
+            },
+        ),
+        seed=1,
+    )
+    try:
+        result = adapter.step(0, 1000)
+        assert result.outputs["retries"] == 0.5
+    finally:
+        adapter.shutdown()
+
+
 def test_renode_worker_builds_network_independent_repl_script(tmp_path: Path, monkeypatch) -> None:
     tool = tmp_path / "renode"
     tool.write_text(

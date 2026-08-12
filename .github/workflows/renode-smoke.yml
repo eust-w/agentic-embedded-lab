@@ -41,6 +41,7 @@ jobs:
             --file containers/renode/Dockerfile \
             --tag ael-renode:ci \
             --cache-from type=gha,scope=renode \
+            --cache-to type=gha,mode=max,scope=renode \
             --load .
       - name: Direct Renode phase probe
         run: |
