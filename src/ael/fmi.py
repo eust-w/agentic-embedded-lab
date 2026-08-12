@@ -132,9 +132,7 @@ def export_ssp(system: SystemManifest, destination: Path) -> Path:
     return destination
 
 
-def export_ssp_package(
-    system: SystemManifest, destination: Path, fmus: dict[str, Path]
-) -> Path:
+def export_ssp_package(system: SystemManifest, destination: Path, fmus: dict[str, Path]) -> Path:
     with tempfile.TemporaryDirectory(prefix="ael-ssp-") as temporary:
         root = Path(temporary)
         resources = root / "resources"
@@ -191,9 +189,7 @@ class FmiBridgeServer:
             adapter = catalog.create(backend)
             adapter.prepare(component, seed)
             self.adapters[component.id] = adapter
-        self.server = socketserver.ThreadingUnixStreamServer(
-            str(socket_path), _FmiRequestHandler
-        )
+        self.server = socketserver.ThreadingUnixStreamServer(str(socket_path), _FmiRequestHandler)
         self.server.bridge = self  # type: ignore[attr-defined]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
@@ -231,9 +227,7 @@ class FmiBridgeServer:
             if port.direction not in {"output", "bidirectional"}:
                 continue
             if port.name in result.outputs:
-                prefix = {"real": "r", "integer": "i", "boolean": "b"}.get(
-                    port.data_type
-                )
+                prefix = {"real": "r", "integer": "i", "boolean": "b"}.get(port.data_type)
                 if prefix is None:
                     raise ValueError(f"unsupported FMI port type: {port.data_type}")
                 value = result.outputs[port.name]
@@ -266,7 +260,12 @@ class FmiOrchestrator:
     ) -> FmiRunResult:
         validate_fmi_topology(system)
         servers: list[FmiBridgeServer] = []
-        with tempfile.TemporaryDirectory(prefix="ael-fmi-") as temporary:
+        # Keep Unix sockets under the workspace so an isolated OMSimulator
+        # container can access them through the scoped workspace mount. Never
+        # expose the host-wide /tmp directory to the co-simulation process.
+        runtime_root = Path.cwd().resolve() / ".ael" / "runtime"
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="ael-fmi-", dir=runtime_root) as temporary:
             root = Path(temporary)
             environment = os.environ.copy()
             grouped: dict[BackendName, list[Any]] = {}
@@ -276,9 +275,7 @@ class FmiOrchestrator:
             try:
                 for backend, components in grouped.items():
                     socket_path = root / f"{backend.value}.sock"
-                    server = FmiBridgeServer(
-                        backend, components, socket_path, self.catalog, seed
-                    )
+                    server = FmiBridgeServer(backend, components, socket_path, self.catalog, seed)
                     server.start()
                     servers.append(server)
                     variable = f"AEL_FMI_SOCKET_{backend.value.upper().replace('-', '_')}"

@@ -175,7 +175,10 @@ def benchmark_run(
     source_revision: Annotated[str, typer.Option("--source-revision")] = "working-tree",
     workspace: WorkspaceOption = DEFAULT_WORKSPACE,
 ) -> None:
-    emit(service(workspace).run_benchmarks(set(case_id) if case_id else None, source_revision))
+    manifest = service(workspace).run_benchmarks(set(case_id) if case_id else None, source_revision)
+    emit(manifest)
+    if any(entry.status != "passed" for entry in manifest.entries):
+        raise typer.Exit(2)
 
 
 @release_app.command("check")
