@@ -4,12 +4,6 @@
 # platform remains executable in AEL's network-disabled backend sandbox. SVD
 # annotations improve register names in logs; they do not implement behavior.
 
-maskRom: Memory.MappedMemory @sysbus 0x1000
-    size: 0x1000
-
-otp: Memory.MappedMemory @sysbus 0x20000
-    size: 0x2000
-
 dtim: Memory.MappedMemory @ sysbus 0x80000000
     size: 0x4000
 
@@ -33,11 +27,7 @@ clint: IRQControllers.CoreLevelInterruptor @ sysbus 0x02000000
     [0,1] -> cpu@[3,7]
     frequency: 62000000
 
-qspi0Xip: Memory.MappedMemory @ sysbus 0x20000000
-    // HiFive1 Rev B carries 32 MiB QSPI flash. The upstream generic FE310
-    // platform maps the complete 512 MiB XIP address window, which needlessly
-    // materializes that whole region in constrained container workers.
-    size: 0x02000000
-
-gpioInputs: GPIOPort.SiFive_GPIO @ sysbus 0x10012000
-    [0-31] -> plic@[8-39]
+code: Memory.MappedMemory @ sysbus 0x20000000
+    // AEL maps only the executable reference image window. This is a
+    // functional firmware model, not an implementation of QSPI flash.
+    size: 0x00040000

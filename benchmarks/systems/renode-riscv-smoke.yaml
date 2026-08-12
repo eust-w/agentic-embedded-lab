@@ -24,7 +24,7 @@ components:
       output_sentinels: {failure: 0xffffffff}
 fidelity:
   firmware_cpu: functional
-  memory: hifive1-revb-32MiB-qspi-functional
+  memory: synthetic-code-window-and-dtim-functional
   register: functional-bridge
   timing: virtual-functional
   electrical: unverified
