@@ -23,9 +23,24 @@ jobs:
         run: |
           cmake -S native/fmi-proxies -B .ael/build/fmi -DCMAKE_BUILD_TYPE=Release
           cmake --build .ael/build/fmi --parallel
+          exports=(
+            fmi2GetVersion fmi2GetTypesPlatform fmi2SetDebugLogging
+            fmi2Instantiate fmi2FreeInstance fmi2SetupExperiment
+            fmi2EnterInitializationMode fmi2ExitInitializationMode
+            fmi2Terminate fmi2Reset fmi2GetReal fmi2SetReal
+            fmi2GetInteger fmi2SetInteger fmi2GetBoolean fmi2SetBoolean
+            fmi2GetString fmi2SetString fmi2GetFMUstate fmi2SetFMUstate
+            fmi2FreeFMUstate fmi2SerializedFMUstateSize
+            fmi2SerializeFMUstate fmi2DeSerializeFMUstate
+            fmi2GetDirectionalDerivative fmi2SetRealInputDerivatives
+            fmi2GetRealOutputDerivatives fmi2DoStep fmi2CancelStep
+            fmi2GetStatus fmi2GetRealStatus fmi2GetIntegerStatus
+            fmi2GetBooleanStatus fmi2GetStringStatus
+          )
           for proxy in RenodeFmu NgspiceFmu ModelicaFmu Ns3Fmu OpenEmsFmu; do
-            nm -D ".ael/build/fmi/${proxy}.so" | grep -F ' fmi2SetDebugLogging'
-            nm -D ".ael/build/fmi/${proxy}.so" | grep -F ' fmi2DoStep'
+            for symbol in "${exports[@]}"; do
+              nm -D ".ael/build/fmi/${proxy}.so" | grep -F " ${symbol}"
+            done
           done
       - run: ael schema export schemas/v1
       - run: git diff --exit-code -- schemas/v1

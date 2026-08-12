@@ -284,6 +284,49 @@ FMI2_EXPORT fmi2Status fmi2FreeFMUstate(fmi2Component, fmi2FMUstate* state) {
     delete static_cast<State*>(*state); *state = nullptr; return fmi2OK;
 #endif
 }
+// FMI 2.0 declares these entry points optional according to the capability
+// flags in modelDescription.xml.  OMSimulator 2.1.3's bundled fmi4c loader
+// nevertheless resolves the complete function table before instantiation.
+// Keep the symbols present and report unsupported operations at runtime; this
+// preserves the advertised capabilities without making the FMU unloadable.
+FMI2_EXPORT fmi2Status fmi2SerializedFMUstateSize(
+    fmi2Component, fmi2FMUstate, std::size_t*) {
+    return fmi2Error;
+}
+FMI2_EXPORT fmi2Status fmi2SerializeFMUstate(
+    fmi2Component, fmi2FMUstate, fmi2Byte[], std::size_t) {
+    return fmi2Error;
+}
+FMI2_EXPORT fmi2Status fmi2DeSerializeFMUstate(
+    fmi2Component, const fmi2Byte[], std::size_t, fmi2FMUstate*) {
+    return fmi2Error;
+}
+FMI2_EXPORT fmi2Status fmi2GetDirectionalDerivative(
+    fmi2Component,
+    const fmi2ValueReference[],
+    std::size_t,
+    const fmi2ValueReference[],
+    std::size_t,
+    const fmi2Real[],
+    fmi2Real[]) {
+    return fmi2Error;
+}
+FMI2_EXPORT fmi2Status fmi2SetRealInputDerivatives(
+    fmi2Component,
+    const fmi2ValueReference[],
+    std::size_t,
+    const fmi2Integer[],
+    const fmi2Real[]) {
+    return fmi2Error;
+}
+FMI2_EXPORT fmi2Status fmi2GetRealOutputDerivatives(
+    fmi2Component,
+    const fmi2ValueReference[],
+    std::size_t,
+    const fmi2Integer[],
+    fmi2Real[]) {
+    return fmi2Error;
+}
 FMI2_EXPORT fmi2Status fmi2GetStatus(fmi2Component, fmi2StatusKind, fmi2Status*) { return fmi2Discard; }
 FMI2_EXPORT fmi2Status fmi2GetRealStatus(fmi2Component c, fmi2StatusKind kind, fmi2Real* value) {
     if (!c || !value || kind != fmi2LastSuccessfulTime) return fmi2Discard;
