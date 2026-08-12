@@ -138,7 +138,11 @@ class SubprocessAdapter(Adapter):
                 "--pids-limit=512",
                 "--memory=4g",
                 f"--cpus={backend_cpu_limit():g}",
-                "--tmpfs=/tmp:rw,nosuid,size=2g",
+                # Renode JITs architecture translators into /tmp and dlopens
+                # them. The root filesystem remains read-only and the backend
+                # remains offline/capability-free, but its ephemeral tmpfs must
+                # permit executable mappings.
+                "--tmpfs=/tmp:rw,exec,nosuid,nodev,size=2g",
                 "--mount",
                 f"type=bind,src={workspace},dst=/workspace",
                 "--workdir=/workspace",

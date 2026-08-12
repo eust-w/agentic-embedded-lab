@@ -53,7 +53,7 @@ jobs:
             --pids-limit=512 \
             --memory=4g \
             --cpus=2 \
-            --tmpfs=/tmp:rw,nosuid,size=2g \
+            --tmpfs=/tmp:rw,exec,nosuid,nodev,size=2g \
             --mount "type=bind,src=$PWD,dst=/workspace" \
             --workdir /tmp \
             --env HOME=/tmp/ael-home \

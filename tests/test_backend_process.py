@@ -26,9 +26,7 @@ def test_backend_cpu_limit_is_runner_safe_and_validated(monkeypatch) -> None:
         backend_cpu_limit()
 
 
-def test_backend_container_places_writable_config_under_tmpfs(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_backend_container_places_writable_config_under_tmpfs(tmp_path: Path, monkeypatch) -> None:
     class FakeProcess:
         stdin = None
         stdout = None
@@ -47,6 +45,7 @@ def test_backend_container_places_writable_config_under_tmpfs(
     adapter = SubprocessAdapter(BackendName.RENODE, "ael.backend_workers.renode", "1.16.1")
     adapter._start()
     assert "--read-only" in adapter.launch_command
+    assert "--tmpfs=/tmp:rw,exec,nosuid,nodev,size=2g" in adapter.launch_command
     assert "--env=HOME=/tmp/ael-home" in adapter.launch_command
     assert "--env=XDG_CONFIG_HOME=/tmp/ael-config" in adapter.launch_command
 
@@ -103,8 +102,7 @@ def test_backend_worker_rejects_wrong_protocol_without_crashing(monkeypatch) -> 
     output = StringIO()
     NgspiceWorker().serve(
         StringIO(
-            '{"api_version":"ael.dev/v1","request_id":"bad",'
-            '"operation":"probe","payload":{}}\n'
+            '{"api_version":"ael.dev/v1","request_id":"bad","operation":"probe","payload":{}}\n'
         ),
         output,
     )
@@ -118,7 +116,7 @@ def test_ns3_version_probe_uses_the_wrapper_show_command(tmp_path: Path, monkeyp
     tool = tmp_path / "ns3"
     tool.write_text(
         "#!/bin/sh\n"
-        "if [ \"$1 $2\" = \"show version\" ]; then echo 'ns-3.47'; exit 0; fi\n"
+        'if [ "$1 $2" = "show version" ]; then echo \'ns-3.47\'; exit 0; fi\n'
         "echo ns3 >&2\nexit 2\n",
         encoding="utf-8",
     )
@@ -141,22 +139,18 @@ def test_version_probe_prefers_pinned_semver_over_architecture_width(
     tmp_path: Path, monkeypatch
 ) -> None:
     tool = tmp_path / "openEMS"
-    tool.write_text(
-        "#!/bin/sh\necho 'openEMS 64bit -- version v0.0.36'\n", encoding="utf-8"
-    )
+    tool.write_text("#!/bin/sh\necho 'openEMS 64bit -- version v0.0.36'\n", encoding="utf-8")
     tool.chmod(0o755)
     monkeypatch.setenv("AEL_OPENEMS_BIN", str(tool))
     worker = OpenEmsWorker()
     assert worker.detected_version == "0.0.36"
 
 
-def test_backend_tool_failure_preserves_stdout_and_stderr(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_backend_tool_failure_preserves_stdout_and_stderr(tmp_path: Path, monkeypatch) -> None:
     tool = tmp_path / "ngspice"
     tool.write_text(
         "#!/bin/sh\n"
-        "if [ \"$1\" = \"--version\" ]; then echo 'ngspice-46'; exit 0; fi\n"
+        'if [ "$1" = "--version" ]; then echo \'ngspice-46\'; exit 0; fi\n'
         "echo 'first monitor error'\n"
         "echo 'managed stack tail' >&2\n"
         "exit 9\n",
@@ -223,9 +217,7 @@ def test_ns3_worker_executes_matching_read_only_precompiled_model(
     assert events[0].type == "ns3.network"
 
 
-def test_renode_adapter_uses_agent_readable_register_output(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_renode_adapter_uses_agent_readable_register_output(tmp_path: Path, monkeypatch) -> None:
     tool = tmp_path / "renode"
     tool.write_text(
         "#!/usr/bin/env python3\n"
@@ -263,9 +255,7 @@ def test_renode_adapter_uses_agent_readable_register_output(
         adapter.shutdown()
 
 
-def test_renode_worker_builds_network_independent_repl_script(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_renode_worker_builds_network_independent_repl_script(tmp_path: Path, monkeypatch) -> None:
     tool = tmp_path / "renode"
     tool.write_text(
         "#!/usr/bin/env python3\n"
@@ -317,9 +307,7 @@ def test_renode_worker_builds_network_independent_repl_script(
         adapter.shutdown()
 
 
-def test_renode_worker_rejects_monitor_command_in_entry_symbol(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_renode_worker_rejects_monitor_command_in_entry_symbol(tmp_path: Path, monkeypatch) -> None:
     tool = tmp_path / "renode"
     tool.write_text("#!/bin/sh\necho 'Renode 1.16.1'\n", encoding="utf-8")
     tool.chmod(0o755)
