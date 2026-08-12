@@ -38,9 +38,13 @@ class NgspiceWorker(BackendWorker):
         )
         log = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.log"
         raw = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.raw"
-        result = self.run_tool(
-            ["-b", "-o", str(log), "-r", str(raw), str(deck)]
-        )
+        # ngspice 46 deliberately disables `.measure` in batch mode when
+        # `-r` is present.  Run the authoritative measurement pass without a
+        # raw-file override, then make a second evidence-only pass for the
+        # waveform.  The deck is deterministic and both files are retained in
+        # the Evidence Bundle.
+        result = self.run_tool(["-b", "-o", str(log), str(deck)])
+        self.run_tool(["-b", "-r", str(raw), str(deck)])
         combined = result.stdout + "\n" + log.read_text(encoding="utf-8", errors="replace")
         metrics, events = self.parse_output(combined, self.virtual_time_us + step_us)
         supply_voltage = metrics.get("supply_voltage")

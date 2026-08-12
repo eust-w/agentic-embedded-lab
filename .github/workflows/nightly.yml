@@ -119,6 +119,8 @@ jobs:
             runs/
             .ael/build/fmi/*.fmu
             .ael/build/fmi/*.ssp
+            .ael/build/fmi/*.log
+            .ael/build/fmi/*-result.csv
             production-gate.json
           retention-days: 30
       - name: Enforce all software simulation gates

@@ -62,13 +62,15 @@ import pathlib, sys
 if '--version' in sys.argv or '-v' in sys.argv:
     print('ngspice-46')
     raise SystemExit(0)
-log = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
-raw = pathlib.Path(sys.argv[sys.argv.index('-r') + 1])
 deck = pathlib.Path(sys.argv[-1]).read_text().splitlines()
 assert deck[0] == 'AEL test deck'
 assert deck[1].startswith('.param AEL_fault_scale=')
-log.write_text('ael_supply_voltage = 3.290000e+00\\nAEL_EVENT circuit.ok {}\\n')
-raw.write_bytes(b'raw')
+if '-o' in sys.argv:
+    log = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
+    log.write_text('ael_supply_voltage = 3.290000e+00\\nAEL_EVENT circuit.ok {}\\n')
+if '-r' in sys.argv:
+    raw = pathlib.Path(sys.argv[sys.argv.index('-r') + 1])
+    raw.write_bytes(b'raw')
 """,
         encoding="utf-8",
     )
@@ -265,8 +267,8 @@ def test_renode_adapter_applies_declared_output_scale(tmp_path: Path, monkeypatc
     tool = tmp_path / "renode"
     tool.write_text(
         "#!/bin/sh\n"
-        "case \"$*\" in *-v*|*--version*) echo 'Renode 1.16.1';; "
-        "*) echo 'AEL_REGISTER:retries:1f4';; esac\n",
+        "if [ \"$1\" = '-v' ] || [ \"$1\" = '--version' ]; then "
+        "echo 'Renode 1.16.1'; else echo 'AEL_REGISTER:retries:1f4'; fi\n",
         encoding="utf-8",
     )
     tool.chmod(0o755)

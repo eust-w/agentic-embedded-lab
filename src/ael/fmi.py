@@ -319,9 +319,15 @@ class FmiOrchestrator:
                     env=environment,
                 )
                 if completed.returncode != 0:
+                    log_excerpt = ""
+                    if log_file.is_file():
+                        log_excerpt = log_file.read_text(
+                            encoding="utf-8", errors="replace"
+                        )[-4000:]
                     raise RuntimeError(
                         f"OMSimulator exited {completed.returncode}: "
-                        f"{(completed.stderr or completed.stdout)[-4000:]}"
+                        f"{(completed.stderr or completed.stdout)[-4000:]}\n"
+                        f"--- OMSimulator log ---\n{log_excerpt}"
                     )
                 return FmiRunResult(result_file, log_file, completed.returncode)
             finally:

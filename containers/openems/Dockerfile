@@ -23,6 +23,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /opt/openems /opt/openems
 COPY --from=build /opt/openems-runtime-libs /opt/openems-runtime-libs
+RUN cp -a /opt/openems-runtime-libs/. /usr/local/lib/ && ldconfig
 ENV PATH=/opt/openems/bin:${PATH} \
     LD_LIBRARY_PATH=/opt/openems/lib:/opt/openems-runtime-libs \
     OCTAVE_PATH=/opt/openems/share/openEMS/matlab:/opt/openems/share/CSXCAD/matlab

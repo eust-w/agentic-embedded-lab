@@ -7,6 +7,7 @@ import platform
 import subprocess
 from pathlib import Path
 
+from fmpy import read_model_description
 from package_fmu import package
 
 from ael.contracts import AcceptanceEntry, AcceptanceManifest, SystemManifest
@@ -43,6 +44,7 @@ def main() -> None:
         )
         fmu = build_dir / f"{component.id}.fmu"
         package(proxy, build_dir / f"{proxy}{library_suffix()}", ports, fmu)
+        read_model_description(fmu, validate=True)
         fmus[component.id] = fmu
     ssp = export_ssp_package(system, build_dir / "five-domain.ssp", fmus)
     result = FmiOrchestrator().run(
