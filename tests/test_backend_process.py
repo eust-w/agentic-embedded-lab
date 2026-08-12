@@ -25,6 +25,31 @@ def test_backend_cpu_limit_is_runner_safe_and_validated(monkeypatch) -> None:
         backend_cpu_limit()
 
 
+def test_backend_container_places_writable_config_under_tmpfs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    class FakeProcess:
+        stdin = None
+        stdout = None
+        stderr = None
+
+        @staticmethod
+        def poll() -> None:
+            return None
+
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_RENODE_IMAGE", "ael-renode:test")
+    monkeypatch.setattr("ael.adapters.subprocess_adapter.shutil.which", lambda _: "/bin/docker")
+    monkeypatch.setattr(
+        "ael.adapters.subprocess_adapter.subprocess.Popen", lambda *args, **kwargs: FakeProcess()
+    )
+    adapter = SubprocessAdapter(BackendName.RENODE, "ael.backend_workers.renode", "1.16.1")
+    adapter._start()
+    assert "--read-only" in adapter.launch_command
+    assert "--env=HOME=/tmp/ael-home" in adapter.launch_command
+    assert "--env=XDG_CONFIG_HOME=/tmp/ael-config" in adapter.launch_command
+
+
 def test_ngspice_process_adapter_executes_fixed_binary_protocol(
     tmp_path: Path, monkeypatch
 ) -> None:

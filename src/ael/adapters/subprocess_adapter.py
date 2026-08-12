@@ -143,6 +143,8 @@ class SubprocessAdapter(Adapter):
                 f"type=bind,src={workspace},dst=/workspace",
                 "--workdir=/workspace",
                 "--env=AEL_WORKSPACE=/workspace",
+                "--env=HOME=/tmp/ael-home",
+                "--env=XDG_CONFIG_HOME=/tmp/ael-config",
                 "--entrypoint=python3",
                 image,
                 "-m",
