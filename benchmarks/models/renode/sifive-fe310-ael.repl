@@ -1,8 +1,8 @@
-# SPDX-License-Identifier: MIT
-# Derived from Renode v1.16.1 platforms/cpus/sifive-fe310.repl.
-# The upstream network-fetched SVD annotation is intentionally omitted so the
-# platform remains executable in AEL's network-disabled backend sandbox. SVD
-# annotations improve register names in logs; they do not implement behavior.
+// SPDX-License-Identifier: MIT
+// Derived from Renode v1.16.1 platforms/cpus/sifive-fe310.repl.
+// The upstream network-fetched SVD annotation is intentionally omitted so the
+// platform remains executable in AEL's network-disabled backend sandbox. SVD
+// annotations improve register names in logs; they do not implement behavior.
 
 dtim: Memory.MappedMemory @ sysbus 0x80000000
     size: 0x4000
