@@ -57,6 +57,7 @@ def test_ssp_export(tmp_path) -> None:
     tree = ElementTree.parse(output)
     ssd_namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
     ssc_namespace = "http://ssp-standard.org/SSP1/SystemStructureCommon"
+    oms_namespace = "https://raw.githubusercontent.com/OpenModelica/OMSimulator/master/schema/oms.xsd"
     assert tree.getroot().attrib["name"] == "one_with_punctuation"
     ssd_tags = {
         "SystemStructureDescription",
@@ -67,12 +68,27 @@ def test_ssp_export(tmp_path) -> None:
         "Connector",
         "Connections",
         "Connection",
+        "Annotations",
     }
     for node in tree.iter():
         local_name = node.tag.rsplit("}", 1)[-1]
-        expected_namespace = ssd_namespace if local_name in ssd_tags else ssc_namespace
+        if local_name == "Annotations" and node.tag.startswith(f"{{{oms_namespace}}}"):
+            expected_namespace = oms_namespace
+        elif local_name in ssd_tags:
+            expected_namespace = ssd_namespace
+        elif local_name in {"Annotation", "Real", "Integer", "Boolean", "String"}:
+            expected_namespace = ssc_namespace
+        else:
+            expected_namespace = oms_namespace
         assert node.tag.startswith(f"{{{expected_namespace}}}")
     assert tree.find(f".//{{{ssc_namespace}}}Real") is not None
+    master = tree.find(f".//{{{oms_namespace}}}FixedStepMaster")
+    assert master is not None
+    assert master.attrib["stepSize"] == "0.001000000"
+    xml = output.read_text(encoding="utf-8")
+    assert "<ssd:SystemStructureDescription" in xml
+    assert "<ssd:System " in xml
+    assert "<ssc:Real" in xml
 
 
 def test_nonrollback_component_is_explicit_in_schedule() -> None:

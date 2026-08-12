@@ -99,14 +99,24 @@ def export_ssp(system: SystemManifest, destination: Path) -> Path:
     validate_fmi_topology(system)
     ssd_namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
     ssc_namespace = "http://ssp-standard.org/SSP1/SystemStructureCommon"
-    ElementTree.register_namespace("", ssd_namespace)
+    oms_namespace = "https://raw.githubusercontent.com/OpenModelica/OMSimulator/master/schema/oms.xsd"
+    # OMSimulator 2.1.3 compares qualified element names (for example
+    # ``ssd:System``) rather than namespace URIs.  Emit the conventional SSP
+    # prefixes instead of relying on a semantically equivalent default
+    # namespace so the standards-compliant document also remains executable
+    # by the pinned production coordinator.
+    ElementTree.register_namespace("ssd", ssd_namespace)
     ElementTree.register_namespace("ssc", ssc_namespace)
+    ElementTree.register_namespace("oms", oms_namespace)
 
     def ssd(tag: str) -> str:
         return f"{{{ssd_namespace}}}{tag}"
 
     def ssc(tag: str) -> str:
         return f"{{{ssc_namespace}}}{tag}"
+
+    def oms(tag: str) -> str:
+        return f"{{{oms_namespace}}}{tag}"
 
     execution_name = _ssp_identifier(system.name)
     root = ElementTree.Element(
@@ -153,6 +163,32 @@ def export_ssp(system: SystemManifest, destination: Path) -> Path:
             endElement=target_element,
             endConnector=target_connector,
         )
+    # SSP permits vendor annotations.  OMSimulator requires this one to select
+    # a weakly-coupled FMI Co-Simulation master while importing an SSP 1.0
+    # package; without it the system type is left undefined and FMUs cannot be
+    # instantiated.  The step is derived deterministically from declared
+    # periodic components and does not change the public SystemManifest.
+    periodic_steps = [component.step_us for component in system.components if component.step_us]
+    master_step_us = math.gcd(*periodic_steps) if periodic_steps else 1000
+    annotations = ElementTree.SubElement(system_node, ssd("Annotations"))
+    annotation = ElementTree.SubElement(
+        annotations,
+        ssc("Annotation"),
+        type="org.openmodelica",
+    )
+    oms_annotations = ElementTree.SubElement(annotation, oms("Annotations"))
+    simulation_information = ElementTree.SubElement(
+        oms_annotations,
+        oms("SimulationInformation"),
+    )
+    ElementTree.SubElement(
+        simulation_information,
+        oms("FixedStepMaster"),
+        description="oms-ma",
+        stepSize=f"{master_step_us / 1_000_000:.9f}",
+        absoluteTolerance="0.0001",
+        relativeTolerance="0.0001",
+    )
     destination.parent.mkdir(parents=True, exist_ok=True)
     ElementTree.ElementTree(root).write(destination, encoding="utf-8", xml_declaration=True)
     return destination
