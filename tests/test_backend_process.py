@@ -149,6 +149,35 @@ def test_version_probe_prefers_pinned_semver_over_architecture_width(
     assert worker.detected_version == "0.0.36"
 
 
+def test_backend_tool_failure_preserves_stdout_and_stderr(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "ngspice"
+    tool.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1\" = \"--version\" ]; then echo 'ngspice-46'; exit 0; fi\n"
+        "echo 'first monitor error'\n"
+        "echo 'managed stack tail' >&2\n"
+        "exit 9\n",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    monkeypatch.setenv("AEL_NGSPICE_BIN", str(tool))
+    worker = NgspiceWorker()
+    worker.component = SystemComponent(
+        id="circuit",
+        type="test",
+        backend=BackendName.NGSPICE,
+        step_us=1000,
+    )
+    worker.runtime_dir = tmp_path
+    with pytest.raises(RuntimeError) as failure:
+        worker.run_tool(["--fail"])
+    message = str(failure.value)
+    assert "first monitor error" in message
+    assert "managed stack tail" in message
+
+
 def test_ns3_worker_executes_matching_read_only_precompiled_model(
     tmp_path: Path, monkeypatch
 ) -> None:

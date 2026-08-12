@@ -202,11 +202,24 @@ class BackendWorker(ABC):
             },
         )
         if result.returncode != 0:
+            stdout = self._diagnostic_excerpt(result.stdout)
+            stderr = self._diagnostic_excerpt(result.stderr)
             raise RuntimeError(
-                f"{self.backend_name} exited {result.returncode}: "
-                f"{(result.stderr or result.stdout)[-4000:]}"
+                f"{self.backend_name} exited {result.returncode}:\n"
+                f"--- stdout ---\n{stdout}\n"
+                f"--- stderr ---\n{stderr}"
             )
         return result
+
+    @staticmethod
+    def _diagnostic_excerpt(output: str, limit: int = 6000) -> str:
+        """Keep both the first error context and the final stack frames."""
+        if not output:
+            return "<empty>"
+        if len(output) <= limit:
+            return output
+        half = limit // 2
+        return f"{output[:half]}\n... <truncated {len(output) - limit} chars> ...\n{output[-half:]}"
 
     def parse_output(
         self, output: str, event_time_us: int
