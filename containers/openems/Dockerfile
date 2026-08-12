@@ -2,7 +2,7 @@
 FROM ubuntu:24.04 AS build
 ARG OPENEMS_VERSION=0.0.36
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      build-essential ca-certificates cmake git libboost-all-dev libeigen3-dev libhdf5-dev \
+      build-essential ca-certificates cmake git libboost-all-dev libcgal-dev libeigen3-dev libhdf5-dev \
       libtinyxml-dev libvtk9-dev octave octave-dev python3 qtbase5-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --branch "v${OPENEMS_VERSION}" --depth 1 --recurse-submodules \
