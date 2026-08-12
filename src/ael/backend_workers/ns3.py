@@ -89,10 +89,11 @@ class Ns3Worker(BackendWorker):
             result = self.run_tool(
                 ["run", f"{program} {' '.join(arguments)}"], cwd=ns3_root
             )
-        metrics, events = self.parse_output(
-            f"{result.stdout}\n{result.stderr}", self.virtual_time_us + step_us
-        )
-        return metrics.copy(), metrics, events, {}
+        combined = f"{result.stdout}\n{result.stderr}"
+        log = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.log"
+        log.write_text(combined, encoding="utf-8")
+        metrics, events = self.parse_output(combined, self.virtual_time_us + step_us)
+        return metrics.copy(), metrics, events, {"log": self.artifact_reference(log)}
 
 
 if __name__ == "__main__":

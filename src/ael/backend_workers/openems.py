@@ -21,7 +21,7 @@ class OpenEmsWorker(BackendWorker):
 
     def __init__(self) -> None:
         super().__init__()
-        self.cache: dict[str, tuple[dict[str, Any], dict[str, str]]] = {}
+        self.cache: dict[str, dict[str, Any]] = {}
 
     def step(
         self, step_us: int
@@ -31,7 +31,7 @@ class OpenEmsWorker(BackendWorker):
         ).hexdigest()
         persistent = self.workspace / ".ael" / "openems-cache" / f"{cache_key}.json"
         if cache_key in self.cache:
-            metrics, artifacts = self.cache[cache_key]
+            metrics = self.cache[cache_key]
             event = Event(
                 sequence=0,
                 virtual_time_us=self.virtual_time_us + step_us,
@@ -40,12 +40,11 @@ class OpenEmsWorker(BackendWorker):
                 payload={"cache_key": cache_key},
                 fidelity_ref="openems:tool-executed-cached",
             )
-            return metrics.copy(), metrics.copy(), [event], artifacts.copy()
+            return metrics.copy(), metrics.copy(), [event], {}
         if persistent.is_file():
             record = json.loads(persistent.read_text(encoding="utf-8"))
             metrics = record["metrics"]
-            artifacts = record["artifacts"]
-            self.cache[cache_key] = (metrics.copy(), artifacts.copy())
+            self.cache[cache_key] = metrics.copy()
             event = Event(
                 sequence=0,
                 virtual_time_us=self.virtual_time_us + step_us,
@@ -54,13 +53,16 @@ class OpenEmsWorker(BackendWorker):
                 payload={"cache_key": cache_key},
                 fidelity_ref="openems:tool-executed-cached",
             )
-            return metrics.copy(), metrics.copy(), [event], artifacts.copy()
+            return metrics.copy(), metrics.copy(), [event], {
+                "cache_record": self.artifact_reference(persistent)
+            }
         scenario = self.model_path()
         octave = shutil.which("octave-cli") or shutil.which("octave")
         if octave is None:
             raise RuntimeError("openEMS scenarios require octave-cli or octave")
         environment = {
             **os.environ,
+            "AEL_OUTPUT_DIR": str(self.runtime_dir / "openems-result"),
             **{
                 f"AEL_INPUT_{name.upper()}": str(value)
                 for name, value in self.inputs.items()
@@ -83,10 +85,17 @@ class OpenEmsWorker(BackendWorker):
         metrics, events = self.parse_output(
             f"{result.stdout}\n{result.stderr}", self.virtual_time_us + step_us
         )
-        result_dir = self.component.properties.get("result_dir")
-        artifacts = {"result_dir": str(scenario.parent / result_dir)} if result_dir else {}
-        self.cache[cache_key] = (metrics.copy(), artifacts.copy())
-        write_json(persistent, {"metrics": metrics, "artifacts": artifacts})
+        result_dir = self.runtime_dir / "openems-result"
+        artifacts = (
+            {"result_dir": self.artifact_reference(result_dir)}
+            if result_dir.is_dir()
+            else {}
+        )
+        log = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.log"
+        log.write_text(f"{result.stdout}\n{result.stderr}", encoding="utf-8")
+        artifacts["log"] = self.artifact_reference(log)
+        self.cache[cache_key] = metrics.copy()
+        write_json(persistent, {"metrics": metrics})
         return metrics.copy(), metrics, events, artifacts
 
 

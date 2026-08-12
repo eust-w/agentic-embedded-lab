@@ -93,10 +93,18 @@ class SubprocessAdapter(Adapter):
             virtual_time_us=virtual_time_us,
             payload={"step_us": step_us},
         )
-        return AdapterStepResult(response.outputs, response.metrics, response.events)
+        return AdapterStepResult(
+            response.outputs, response.metrics, response.events, response.artifacts
+        )
 
     def snapshot(self, destination: str) -> str | None:
-        response = self._call(BackendOperation.SNAPSHOT, payload={"destination": destination})
+        workspace = Path(os.environ.get("AEL_WORKSPACE", Path.cwd())).resolve()
+        destination_path = Path(destination)
+        if destination_path.is_absolute():
+            destination_path = destination_path.resolve().relative_to(workspace)
+        response = self._call(
+            BackendOperation.SNAPSHOT, payload={"destination": str(destination_path)}
+        )
         return response.artifacts.get("snapshot")
 
     def shutdown(self) -> None:

@@ -9,5 +9,4 @@ Iload rail 0 PWL(0 0.002 100u {AEL_load_microamp*1u+AEL_rf_retries*0.004} 3m {AE
 .measure tran ael_supply_voltage MIN v(rail) FROM=100u TO=4m
 .measure tran ael_peak_current MAX i(Vsource) FROM=100u TO=4m
 .measure tran ael_power AVG par('-v(source)*i(Vsource)') FROM=100u TO=4m
-.measure tran ael_failure PARAM='ael_supply_voltage < 2.7'
 .end

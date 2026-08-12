@@ -20,7 +20,8 @@ FDTD = InitFDTD('EndCriteria', 1e-4);
 FDTD = SetGaussExcite(FDTD, f0, fc);
 BC = {'PML_8' 'PML_8' 'PML_8' 'PML_8' 'PML_8' 'PML_8'};
 FDTD = SetBoundaryCond(FDTD, BC);
-Sim_Path = fullfile(tempdir(), ['ael-openems-' num2str(detune)]);
+Sim_Path = getenv('AEL_OUTPUT_DIR');
+if isempty(Sim_Path), Sim_Path = fullfile(tempdir(), ['ael-openems-' num2str(detune)]); end
 if exist(Sim_Path, 'dir'), rmdir(Sim_Path, 's'); end
 mkdir(Sim_Path);
 WriteOpenEMS(fullfile(Sim_Path, 'antenna.xml'), FDTD, CSX);

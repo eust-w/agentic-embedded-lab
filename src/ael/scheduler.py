@@ -113,6 +113,7 @@ class DeterministicScheduler:
                     self._reject_non_finite(result.outputs)
                     self._reject_non_finite(result.metrics)
                     recorder.add_events(result.events)
+                    recorder.add_artifacts(component.id, virtual_time + step_us, result.artifacts)
                     for name, value in result.metrics.items():
                         metrics[f"{component.id}.{name}"] = value
                     for port, value in result.outputs.items():

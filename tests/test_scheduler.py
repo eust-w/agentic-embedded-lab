@@ -4,8 +4,11 @@ import hashlib
 import threading
 from pathlib import Path
 
-from ael.contracts import RunStatus
+from ael.contracts import ExperimentSpec, RunStatus, SystemManifest
+from ael.evidence import EvidenceRecorder
+from ael.io import load_document
 from ael.service import AelService
+from ael.storage import WorkspaceLayout
 
 EXPERIMENT = Path("examples/experiments/synthetic-smoke.yaml")
 
@@ -69,3 +72,21 @@ def test_pre_cancelled_run_stops_safely_with_evidence(workspace: Path) -> None:
     assert result.status == RunStatus.CANCELLED
     assert (result.evidence_dir / "bundle.json").is_file()
     assert "cancelled" in (result.error or "")
+
+
+def test_backend_artifact_is_copied_and_content_addressed(workspace: Path) -> None:
+    experiment = load_document(workspace / EXPERIMENT, ExperimentSpec, workspace)
+    system = load_document(workspace / experiment.system, SystemManifest, workspace)
+    source = workspace / ".ael" / "backend-runtime" / "tool.log"
+    source.parent.mkdir(parents=True)
+    source.write_text("authoritative backend output\n", encoding="utf-8")
+    recorder = EvidenceRecorder(WorkspaceLayout(workspace), "artifact-test", experiment, system)
+    recorder.add_artifacts(
+        "plant", 1000, {"log": ".ael/backend-runtime/tool.log"}
+    )
+    bundle = recorder.finalize(RunStatus.PASSED)
+    relative = "artifacts/plant/0000000000001000/log/tool.log"
+    assert (recorder.run_dir / relative).read_text(encoding="utf-8") == (
+        "authoritative backend output\n"
+    )
+    assert relative in bundle.artifact_hashes

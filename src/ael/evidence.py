@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import shutil
 from datetime import UTC, datetime
 from xml.etree import ElementTree
 
@@ -59,6 +61,27 @@ class EvidenceRecorder:
                 "passed": passed,
             }
         )
+
+    def add_artifacts(
+        self, component_id: str, virtual_time_us: int, artifacts: dict[str, str]
+    ) -> None:
+        for label, reference in sorted(artifacts.items()):
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+", label):
+                raise ValueError(f"unsafe backend artifact label: {label!r}")
+            source = resolve_workspace_path(self.layout.root, reference, must_exist=True)
+            destination = (
+                self.run_dir
+                / "artifacts"
+                / component_id
+                / f"{virtual_time_us:016d}"
+                / label
+            )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if source.is_dir():
+                shutil.copytree(source, destination)
+            else:
+                destination.mkdir()
+                shutil.copy2(source, destination / source.name)
 
     def finalize(self, status: RunStatus, *, error: str | None = None) -> EvidenceBundle:
         events_path = self.run_dir / "events.jsonl"

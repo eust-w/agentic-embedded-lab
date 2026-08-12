@@ -65,7 +65,7 @@ raw = pathlib.Path(sys.argv[sys.argv.index('-r') + 1])
 deck = pathlib.Path(sys.argv[-1]).read_text().splitlines()
 assert deck[0] == 'AEL test deck'
 assert deck[1].startswith('.param AEL_fault_scale=')
-log.write_text('ael_failure = 0.000000e+00\\nAEL_EVENT circuit.ok {}\\n')
+log.write_text('ael_supply_voltage = 3.290000e+00\\nAEL_EVENT circuit.ok {}\\n')
 raw.write_bytes(b'raw')
 """,
         encoding="utf-8",
@@ -91,7 +91,11 @@ raw.write_bytes(b'raw')
     try:
         result = adapter.step(0, 1000)
         assert result.metrics["failure"] == 0.0
+        assert result.metrics["supply_voltage"] == 3.29
         assert result.events[0].type == "circuit.ok"
+        assert not Path(result.artifacts["log"]).is_absolute()
+        assert (tmp_path / result.artifacts["log"]).is_file()
+        assert (tmp_path / result.artifacts["raw"]).is_file()
     finally:
         adapter.shutdown()
         os.environ.pop("AEL_NGSPICE_BIN", None)

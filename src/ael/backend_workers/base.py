@@ -89,7 +89,11 @@ class BackendWorker(ABC):
                 )
             self.component = component
             self.seed = int(request.payload["seed"])
-            self.runtime_dir = Path(tempfile.mkdtemp(prefix=f"ael-{self.backend_name}-"))
+            runtime_root = self.workspace / ".ael" / "backend-runtime"
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            self.runtime_dir = Path(
+                tempfile.mkdtemp(prefix=f"ael-{self.backend_name}-", dir=runtime_root)
+            )
             self.prepare()
             return BackendResponse(request_id=request.request_id, ok=True)
         self._require_prepared()
@@ -128,7 +132,7 @@ class BackendWorker(ABC):
             return BackendResponse(
                 request_id=request.request_id,
                 ok=True,
-                artifacts={"snapshot": str(snapshot)},
+                artifacts={"snapshot": self.artifact_reference(snapshot)},
             )
         if request.operation == BackendOperation.SHUTDOWN:
             self.shutdown()
@@ -160,6 +164,16 @@ class BackendWorker(ABC):
 
     def shutdown(self) -> None:
         self.component = None
+        if self.runtime_dir is not None:
+            shutil.rmtree(self.runtime_dir, ignore_errors=True)
+            self.runtime_dir = None
+
+    def artifact_reference(self, path: Path) -> str:
+        resolved = path.resolve()
+        try:
+            return str(resolved.relative_to(self.workspace))
+        except ValueError as error:
+            raise ValueError("backend artifact is outside the workspace") from error
 
     def model_path(self) -> Path:
         self._require_prepared()

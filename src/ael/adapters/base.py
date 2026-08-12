@@ -22,6 +22,7 @@ class AdapterStepResult:
     outputs: dict[str, Any] = field(default_factory=dict)
     metrics: dict[str, Any] = field(default_factory=dict)
     events: list[Event] = field(default_factory=list)
+    artifacts: dict[str, str] = field(default_factory=dict)
 
 
 class Adapter(ABC):

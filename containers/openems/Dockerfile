@@ -19,7 +19,7 @@ RUN git clone --branch "v${OPENEMS_VERSION}" --depth 1 --recurse-submodules \
 FROM ubuntu:24.04
 ARG OPENEMS_VERSION=0.0.36
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      octave python3 python3-pip \
+      libtinyxml2.6.2v5 octave python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /opt/openems /opt/openems
 COPY --from=build /opt/openems-runtime-libs /opt/openems-runtime-libs
@@ -27,6 +27,8 @@ ENV PATH=/opt/openems/bin:${PATH} \
     LD_LIBRARY_PATH=/opt/openems/lib:/opt/openems-runtime-libs \
     OCTAVE_PATH=/opt/openems/share/openEMS/matlab:/opt/openems/share/CSXCAD/matlab
 RUN openEMS --version | grep -F "${OPENEMS_VERSION}"
+RUN octave-cli --no-gui --quiet --eval \
+      "status=system('openEMS --version'); assert(status == 0);"
 WORKDIR /workspace
 COPY pyproject.toml README.md LICENSE /workspace/
 COPY src /workspace/src

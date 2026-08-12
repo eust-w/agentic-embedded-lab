@@ -29,13 +29,16 @@ class ModelicaWorker(BackendWorker):
         script.write_text(text, encoding="utf-8")
         result = self.run_tool([str(script)], cwd=script.parent)
         combined = f"{result.stdout}\n{result.stderr}"
+        log = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.log"
+        log.write_text(combined, encoding="utf-8")
         metrics, events = self.parse_output(combined, self.virtual_time_us + step_us)
         result_file = self.component.properties.get("result_file")
         artifacts: dict[str, str] = {}
         if result_file:
             path = self.runtime_dir / result_file
             if path.exists():
-                artifacts["result"] = str(path)
+                artifacts["result"] = self.artifact_reference(path)
+        artifacts["log"] = self.artifact_reference(log)
         return metrics.copy(), metrics, events, artifacts
 
 

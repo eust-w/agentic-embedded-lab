@@ -43,7 +43,16 @@ class NgspiceWorker(BackendWorker):
         )
         combined = result.stdout + "\n" + log.read_text(encoding="utf-8", errors="replace")
         metrics, events = self.parse_output(combined, self.virtual_time_us + step_us)
-        return metrics.copy(), metrics, events, {"raw": str(raw), "log": str(log)}
+        supply_voltage = metrics.get("supply_voltage")
+        if isinstance(supply_voltage, (int, float)):
+            # ngspice does not portably support a .measure PARAM expression
+            # referencing another transient measurement. Derive the discrete
+            # assertion signal from the measured rail minimum instead.
+            metrics["failure"] = float(supply_voltage < 2.7)
+        return metrics.copy(), metrics, events, {
+            "raw": self.artifact_reference(raw),
+            "log": self.artifact_reference(log),
+        }
 
 
 if __name__ == "__main__":
