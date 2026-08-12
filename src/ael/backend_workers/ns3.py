@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from ael.contracts import Event
@@ -17,6 +20,10 @@ class Ns3Worker(BackendWorker):
     def _version(self) -> str | None:
         if self.tool is None:
             return None
+        attestation = self.tool.resolve().parent / ".ael-version"
+        if attestation.is_file():
+            detected = attestation.read_text(encoding="utf-8").strip()
+            return detected or None
         for arguments in (("show", "version"), ("--version",)):
             try:
                 result = subprocess.run(
@@ -42,10 +49,6 @@ class Ns3Worker(BackendWorker):
             assert ns3_root
         else:
             ns3_root = self.tool.resolve().parent
-        program = str(self.component.properties.get("program", "scratch/ael-network"))
-        scratch = ns3_root / "scratch" / f"{program.rsplit('/', 1)[-1]}.cc"
-        scratch.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, scratch)
         arguments = [
             f"--{name}={value}" for name, value in sorted(self.inputs.items())
         ]
@@ -55,9 +58,37 @@ class Ns3Worker(BackendWorker):
                 f"--stopUs={self.virtual_time_us + step_us}",
             ]
         )
-        result = self.run_tool(
-            ["run", f"{program} {' '.join(arguments)}"], cwd=ns3_root
-        )
+        precompiled = os.environ.get("AEL_NS3_PRECOMPILED")
+        digest_file = os.environ.get("AEL_NS3_MODEL_SHA256")
+        if precompiled and digest_file:
+            expected_digest = Path(digest_file).read_text(encoding="utf-8").strip()
+            actual_digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            if actual_digest != expected_digest:
+                raise RuntimeError(
+                    "ns-3 model does not match the read-only precompiled image; rebuild it"
+                )
+            result = subprocess.run(
+                [precompiled, *arguments],
+                cwd=self.runtime_dir,
+                capture_output=True,
+                text=True,
+                timeout=int(self.component.properties.get("timeout_s", 120)),
+                check=False,
+                env={**os.environ, "AEL_SEED": str(self.seed)},
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"ns3 exited {result.returncode}: "
+                    f"{(result.stderr or result.stdout)[-4000:]}"
+                )
+        else:
+            program = str(self.component.properties.get("program", "scratch/ael-network"))
+            scratch = ns3_root / "scratch" / f"{program.rsplit('/', 1)[-1]}.cc"
+            scratch.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, scratch)
+            result = self.run_tool(
+                ["run", f"{program} {' '.join(arguments)}"], cwd=ns3_root
+            )
         metrics, events = self.parse_output(
             f"{result.stdout}\n{result.stderr}", self.virtual_time_us + step_us
         )

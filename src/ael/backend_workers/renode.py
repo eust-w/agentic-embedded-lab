@@ -43,8 +43,8 @@ class RenodeWorker(BackendWorker):
         output_registers = self.component.properties.get("output_registers", {})
         for name, address in sorted(output_registers.items()):
             lines.append(
-                f'python "print \'AEL_REGISTER:{name}:%x\' % '
-                f'(monitor.Machine[\'sysbus\'].ReadDoubleWord({address}))"'
+                f'python "print(\'AEL_REGISTER:{name}:%x\' % '
+                f'self.Machine.SystemBus.ReadDoubleWord({address}))"'
             )
         lines.extend([f"Save @{next_snapshot}", "quit"])
         script.write_text("\n".join(lines) + "\n", encoding="utf-8")

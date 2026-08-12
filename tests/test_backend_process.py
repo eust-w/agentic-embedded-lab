@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from io import StringIO
 from pathlib import Path
 
 from ael.adapters.subprocess_adapter import SubprocessAdapter
-from ael.backend_protocol import BackendResponse
+from ael.backend_protocol import BackendOperation, BackendRequest, BackendResponse
 from ael.backend_workers.ngspice import NgspiceWorker
 from ael.backend_workers.ns3 import Ns3Worker
 from ael.contracts import BackendName, SystemComponent
@@ -86,3 +87,95 @@ def test_ns3_version_probe_uses_the_wrapper_show_command(tmp_path: Path, monkeyp
     monkeypatch.setenv("AEL_NS3_BIN", str(tool))
     worker = Ns3Worker()
     assert worker.detected_version == "3.47"
+
+
+def test_ns3_version_probe_accepts_image_build_attestation(tmp_path: Path, monkeypatch) -> None:
+    tool = tmp_path / "ns3"
+    tool.write_text("#!/bin/sh\necho should-not-run >&2\nexit 99\n", encoding="utf-8")
+    tool.chmod(0o755)
+    (tmp_path / ".ael-version").write_text("3.47\n", encoding="utf-8")
+    monkeypatch.setenv("AEL_NS3_BIN", str(tool))
+    assert Ns3Worker().detected_version == "3.47"
+
+
+def test_ns3_worker_executes_matching_read_only_precompiled_model(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "ns3"
+    tool.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+    tool.chmod(0o755)
+    (tmp_path / ".ael-version").write_text("3.47\n", encoding="utf-8")
+    model = tmp_path / "network.cc"
+    model.write_text("// fixed test network\n", encoding="utf-8")
+    binary = tmp_path / "ael-network"
+    binary.write_text(
+        "#!/bin/sh\n"
+        "echo 'AEL_METRIC packet_loss=0.01'\n"
+        "echo 'AEL_EVENT ns3.network {\"calibrated\":false}'\n",
+        encoding="utf-8",
+    )
+    binary.chmod(0o755)
+    digest = tmp_path / "ael-network.sha256"
+    digest.write_text(hashlib.sha256(model.read_bytes()).hexdigest() + "\n", encoding="utf-8")
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_NS3_BIN", str(tool))
+    monkeypatch.setenv("AEL_NS3_PRECOMPILED", str(binary))
+    monkeypatch.setenv("AEL_NS3_MODEL_SHA256", str(digest))
+    worker = Ns3Worker()
+    component = SystemComponent(
+        id="network",
+        type="test",
+        backend=BackendName.NS3,
+        model="network.cc",
+        step_us=1000,
+    )
+    response = worker.handle(
+        BackendRequest(
+            request_id="prepare",
+            operation=BackendOperation.PREPARE,
+            payload={"component": component.model_dump(mode="json"), "seed": 3},
+        )
+    )
+    assert response.ok
+    _, metrics, events, _ = worker.step(1000)
+    assert metrics["packet_loss"] == 0.01
+    assert events[0].type == "ns3.network"
+
+
+def test_renode_adapter_uses_agent_readable_register_output(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "renode"
+    tool.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib, sys\n"
+        "if '-v' in sys.argv or '--version' in sys.argv:\n"
+        "    print('Renode 1.16.1')\n"
+        "    raise SystemExit(0)\n"
+        "script = pathlib.Path(sys.argv[-1]).read_text()\n"
+        "assert 'self.Machine.SystemBus.ReadDoubleWord(537000968)' in script\n"
+        "print('AEL_REGISTER:failure:1')\n",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    model = tmp_path / "platform.resc"
+    model.write_text("mach create 'test'\n", encoding="utf-8")
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_RENODE_BIN", str(tool))
+    adapter = SubprocessAdapter(BackendName.RENODE, "ael.backend_workers.renode", "1.16.1")
+    adapter.prepare(
+        SystemComponent(
+            id="mcu",
+            type="test",
+            backend=BackendName.RENODE,
+            model="platform.resc",
+            step_us=1000,
+            properties={"output_registers": {"failure": 0x2001FC08}},
+        ),
+        seed=1,
+    )
+    try:
+        result = adapter.step(0, 1000)
+        assert result.outputs["failure"] == 1
+    finally:
+        adapter.shutdown()
