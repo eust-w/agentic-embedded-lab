@@ -12,6 +12,7 @@ from ael.backend_protocol import BackendOperation, BackendRequest, BackendRespon
 from ael.backend_workers.ngspice import NgspiceWorker
 from ael.backend_workers.ns3 import Ns3Worker
 from ael.backend_workers.openems import OpenEmsWorker
+from ael.backend_workers.renode import RenodeWorker
 from ael.contracts import BackendName, SystemComponent
 
 
@@ -294,8 +295,8 @@ def test_renode_worker_builds_network_independent_repl_script(
             model="platform.repl",
             step_us=1000,
             properties={
-                "setup_commands": ["cpu PerformanceInMips 320"],
-                "post_firmware_commands": ['cpu PC `sysbus GetSymbolAddress "__start"`'],
+                "performance_mips": 320,
+                "entry_symbol": "__start",
                 "firmware": "firmware.elf",
             },
         ),
@@ -305,6 +306,30 @@ def test_renode_worker_builds_network_independent_repl_script(
         adapter.step(0, 1000)
     finally:
         adapter.shutdown()
+
+
+def test_renode_worker_rejects_monitor_command_in_entry_symbol(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "renode"
+    tool.write_text("#!/bin/sh\necho 'Renode 1.16.1'\n", encoding="utf-8")
+    tool.chmod(0o755)
+    (tmp_path / "platform.repl").write_text("cpu: CPU.RiscV32 @ sysbus\n", encoding="utf-8")
+    (tmp_path / "firmware.elf").write_bytes(b"ELF")
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_RENODE_BIN", str(tool))
+    worker = RenodeWorker()
+    worker.component = SystemComponent(
+        id="mcu",
+        type="test",
+        backend=BackendName.RENODE,
+        model="platform.repl",
+        step_us=1000,
+        properties={"firmware": "firmware.elf", "entry_symbol": '__start"; quit'},
+    )
+    worker.runtime_dir = tmp_path
+    with pytest.raises(ValueError, match="safe ELF symbol"):
+        worker._initialization_lines()
 
 
 def test_vendored_renode_platforms_do_not_fetch_runtime_assets(workspace: Path) -> None:

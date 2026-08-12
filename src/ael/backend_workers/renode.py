@@ -45,25 +45,23 @@ class RenodeWorker(BackendWorker):
                 f'mach create "{self.component.id}"',
                 f"machine LoadPlatformDescription @{model}",
             ]
-            setup_commands = self.component.properties.get("setup_commands", [])
-            if not isinstance(setup_commands, list) or not all(
-                isinstance(command, str) for command in setup_commands
-            ):
-                raise ValueError("Renode setup_commands must be a list of strings")
-            lines.extend(setup_commands)
+            performance_mips = self.component.properties.get("performance_mips")
+            if performance_mips is not None:
+                if not isinstance(performance_mips, int) or not 1 <= performance_mips <= 100000:
+                    raise ValueError("Renode performance_mips must be an integer from 1 to 100000")
+                lines.append(f"cpu PerformanceInMips {performance_mips}")
         else:
             lines = [f"include @{model}"]
         firmware = self.property_path("firmware")
         if firmware:
             lines.append(f"sysbus LoadELF @{firmware}")
-            post_firmware_commands = self.component.properties.get(
-                "post_firmware_commands", []
-            )
-            if not isinstance(post_firmware_commands, list) or not all(
-                isinstance(command, str) for command in post_firmware_commands
-            ):
-                raise ValueError("Renode post_firmware_commands must be a list of strings")
-            lines.extend(post_firmware_commands)
+            entry_symbol = self.component.properties.get("entry_symbol")
+            if entry_symbol is not None:
+                if not isinstance(entry_symbol, str) or not re.fullmatch(
+                    r"[A-Za-z_][A-Za-z0-9_.]*", entry_symbol
+                ):
+                    raise ValueError("Renode entry_symbol is not a safe ELF symbol")
+                lines.append(f'cpu PC `sysbus GetSymbolAddress "{entry_symbol}"`')
         lines.extend(self._register_io_lines())
         return lines
 

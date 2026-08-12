@@ -14,12 +14,8 @@ components:
     properties:
       firmware: firmware/zephyr/build-hifive1/zephyr/zephyr.elf
       model_state: conformance_validated
-      setup_commands:
-        - sysbus Tag <0x10008000 4> "PRCI_HFROSCCFG" 0xFFFFFFFF
-        - sysbus Tag <0x10008008 4> "PRCI_PLLCFG" 0xFFFFFFFF
-        - cpu PerformanceInMips 320
-      post_firmware_commands:
-        - cpu PC `sysbus GetSymbolAddress "__start"`
+      performance_mips: 320
+      entry_symbol: __start
       input_registers: {case_id: 0x80003c00, fixed: 0x80003c04}
       output_registers: {failure: 0x80003c08}
       output_sentinels: {failure: 0xffffffff}
