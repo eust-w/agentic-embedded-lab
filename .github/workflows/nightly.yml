@@ -34,8 +34,8 @@ jobs:
               --file "containers/${backend}/Dockerfile" \
               --tag "ael-${backend}:ci" \
               --cache-from "type=gha,scope=${backend}" \
-              --cache-to "type=gha,mode=max,scope=${backend}" \
               --load .
+            docker buildx prune --all --force
           done
       - name: Execute 24 faulty/fixed pairs
         env:
