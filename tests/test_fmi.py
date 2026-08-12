@@ -55,10 +55,24 @@ def test_ssp_export(tmp_path) -> None:
     output = export_ssp(system, tmp_path / "SystemStructure.ssd")
     assert output.exists()
     tree = ElementTree.parse(output)
-    namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
+    ssd_namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
+    ssc_namespace = "http://ssp-standard.org/SSP1/SystemStructureCommon"
     assert tree.getroot().attrib["name"] == "one_with_punctuation"
-    assert all(node.tag.startswith(f"{{{namespace}}}") for node in tree.iter())
-    assert tree.find(f".//{{{namespace}}}Real") is not None
+    ssd_tags = {
+        "SystemStructureDescription",
+        "System",
+        "Elements",
+        "Component",
+        "Connectors",
+        "Connector",
+        "Connections",
+        "Connection",
+    }
+    for node in tree.iter():
+        local_name = node.tag.rsplit("}", 1)[-1]
+        expected_namespace = ssd_namespace if local_name in ssd_tags else ssc_namespace
+        assert node.tag.startswith(f"{{{expected_namespace}}}")
+    assert tree.find(f".//{{{ssc_namespace}}}Real") is not None
 
 
 def test_nonrollback_component_is_explicit_in_schedule() -> None:

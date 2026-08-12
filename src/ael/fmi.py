@@ -97,32 +97,37 @@ def _ssp_identifier(value: str) -> str:
 
 def export_ssp(system: SystemManifest, destination: Path) -> Path:
     validate_fmi_topology(system)
-    namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
-    ElementTree.register_namespace("", namespace)
+    ssd_namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
+    ssc_namespace = "http://ssp-standard.org/SSP1/SystemStructureCommon"
+    ElementTree.register_namespace("", ssd_namespace)
+    ElementTree.register_namespace("ssc", ssc_namespace)
 
-    def qualified(tag: str) -> str:
-        return f"{{{namespace}}}{tag}"
+    def ssd(tag: str) -> str:
+        return f"{{{ssd_namespace}}}{tag}"
+
+    def ssc(tag: str) -> str:
+        return f"{{{ssc_namespace}}}{tag}"
 
     execution_name = _ssp_identifier(system.name)
     root = ElementTree.Element(
-        qualified("SystemStructureDescription"),
+        ssd("SystemStructureDescription"),
         attrib={"version": "1.0", "name": execution_name},
     )
-    system_node = ElementTree.SubElement(root, qualified("System"), name=execution_name)
-    elements = ElementTree.SubElement(system_node, qualified("Elements"))
+    system_node = ElementTree.SubElement(root, ssd("System"), name=execution_name)
+    elements = ElementTree.SubElement(system_node, ssd("Elements"))
     for component in system.components:
         proxy = FMI_PROXY_NAMES.get(component.backend, component.backend.value)
         component_node = ElementTree.SubElement(
             elements,
-            qualified("Component"),
+            ssd("Component"),
             name=component.id,
             source=component.model or f"ael-proxy://{proxy}",
         )
-        connector_node = ElementTree.SubElement(component_node, qualified("Connectors"))
+        connector_node = ElementTree.SubElement(component_node, ssd("Connectors"))
         for port in component.ports:
             connector = ElementTree.SubElement(
                 connector_node,
-                qualified("Connector"),
+                ssd("Connector"),
                 name=port.name,
                 kind="inout" if port.direction == "bidirectional" else port.direction,
             )
@@ -135,14 +140,14 @@ def export_ssp(system: SystemManifest, destination: Path) -> Path:
             if type_name is None:
                 raise ValueError(f"SSP/FMI does not support port type: {port.data_type}")
             attributes = {"unit": port.unit} if port.unit and port.unit != "1" else {}
-            ElementTree.SubElement(connector, qualified(type_name), **attributes)
-    connections = ElementTree.SubElement(system_node, qualified("Connections"))
+            ElementTree.SubElement(connector, ssc(type_name), **attributes)
+    connections = ElementTree.SubElement(system_node, ssd("Connections"))
     for connection in system.connections:
         source_element, source_connector = connection.source.split(".", 1)
         target_element, target_connector = connection.target.split(".", 1)
         ElementTree.SubElement(
             connections,
-            qualified("Connection"),
+            ssd("Connection"),
             startElement=source_element,
             startConnector=source_connector,
             endElement=target_element,
