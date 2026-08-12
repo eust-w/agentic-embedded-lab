@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
+      - uses: docker/setup-buildx-action@v3
       - uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
           app-path: .
@@ -29,7 +30,12 @@ jobs:
       - name: Build pinned backend images
         run: |
           for backend in renode ngspice openmodelica ns3 openems; do
-            docker build --file "containers/${backend}/Dockerfile" --tag "ael-${backend}:ci" .
+            docker buildx build \
+              --file "containers/${backend}/Dockerfile" \
+              --tag "ael-${backend}:ci" \
+              --cache-from "type=gha,scope=${backend}" \
+              --cache-to "type=gha,mode=max,scope=${backend}" \
+              --load .
           done
       - name: Execute 24 faulty/fixed pairs
         env:
