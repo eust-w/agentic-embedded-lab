@@ -20,6 +20,7 @@ components:
         - cpu PerformanceInMips 320
       input_registers: {case_id: 0x80003c00, fixed: 0x80003c04}
       output_registers: {failure: 0x80003c08}
+      output_sentinels: {failure: 0xffffffff}
 fidelity:
   firmware_cpu: functional
   register: functional-bridge

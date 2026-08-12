@@ -234,6 +234,7 @@ def test_renode_adapter_uses_agent_readable_register_output(
         "    raise SystemExit(0)\n"
         "script = pathlib.Path(sys.argv[-1]).read_text()\n"
         "assert 'self.Machine.SystemBus.ReadDoubleWord(537000968)' in script\n"
+        "assert 'Save @' not in script\n"
         "print('AEL_REGISTER:failure:1')\n",
         encoding="utf-8",
     )
@@ -298,3 +299,11 @@ def test_renode_worker_builds_network_independent_repl_script(
         adapter.step(0, 1000)
     finally:
         adapter.shutdown()
+
+
+def test_vendored_renode_platforms_do_not_fetch_runtime_assets(workspace: Path) -> None:
+    for name in ("sifive-fe310-ael.repl", "stm32f4-ael.repl"):
+        platform = workspace / "benchmarks/models/renode" / name
+        assert platform.is_file()
+        assert "http://" not in platform.read_text(encoding="utf-8")
+        assert "https://" not in platform.read_text(encoding="utf-8")
