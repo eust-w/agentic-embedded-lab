@@ -31,7 +31,12 @@ port = calcPort(port, Sim_Path, freq);
 s11 = port.uf.ref ./ port.uf.inc;
 [min_s11, idx] = min(20*log10(abs(s11)));
 resonance = freq(idx);
-rf_loss_db = max(0, min_s11 + 10 + detune * 0.35);
+% This is a functional, deliberately uncalibrated link-budget proxy.  The
+% geometry delta contributes 0.35 dB/mm while the simulated return loss
+% reduces that penalty.  Do not add a nominal loss offset here: doing so
+% would turn the tuned reference geometry into a failing antenna even when
+% detune is zero.  Hardware equivalence remains explicitly unverified.
+rf_loss_db = max(0, min_s11 + abs(detune) * 0.35);
 failure = double(rf_loss_db > 6);
 fprintf('AEL_METRIC resonance_hz=%g\n', resonance);
 fprintf('AEL_METRIC s11_db=%g\n', min_s11);

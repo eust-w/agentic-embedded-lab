@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from xml.etree import ElementTree
+
 import pytest
 
 from ael.adapters.base import AdapterStepResult
@@ -49,10 +51,14 @@ def test_algebraic_loop_is_rejected() -> None:
 
 
 def test_ssp_export(tmp_path) -> None:
-    system = SystemManifest(name="one", components=[component("a")])
+    system = SystemManifest(name="one-with-punctuation", components=[component("a")])
     output = export_ssp(system, tmp_path / "SystemStructure.ssd")
     assert output.exists()
-    assert "SystemStructureDescription" in output.read_text(encoding="utf-8")
+    tree = ElementTree.parse(output)
+    namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
+    assert tree.getroot().attrib["name"] == "one_with_punctuation"
+    assert all(node.tag.startswith(f"{{{namespace}}}") for node in tree.iter())
+    assert tree.find(f".//{{{namespace}}}Real") is not None
 
 
 def test_nonrollback_component_is_explicit_in_schedule() -> None:

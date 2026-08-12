@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import socketserver
 import subprocess
 import tempfile
@@ -80,28 +81,48 @@ def validate_fmi_topology(system: SystemManifest) -> list[str]:
     return warnings
 
 
+def _ssp_identifier(value: str) -> str:
+    """Return an OMSimulator-safe SSP model identifier.
+
+    XML NCNames allow punctuation that OMSimulator model identifiers reject.
+    Keep the public manifest name unchanged and normalize only the generated
+    SSP execution identifier.
+    """
+
+    identifier = re.sub(r"[^A-Za-z0-9_]", "_", value)
+    if not identifier or not re.match(r"[A-Za-z_]", identifier):
+        identifier = f"ael_{identifier}"
+    return identifier
+
+
 def export_ssp(system: SystemManifest, destination: Path) -> Path:
     validate_fmi_topology(system)
     namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
+    ElementTree.register_namespace("", namespace)
+
+    def qualified(tag: str) -> str:
+        return f"{{{namespace}}}{tag}"
+
+    execution_name = _ssp_identifier(system.name)
     root = ElementTree.Element(
-        "SystemStructureDescription",
-        attrib={"xmlns": namespace, "version": "1.0", "name": system.name},
+        qualified("SystemStructureDescription"),
+        attrib={"version": "1.0", "name": execution_name},
     )
-    system_node = ElementTree.SubElement(root, "System", name=system.name)
-    elements = ElementTree.SubElement(system_node, "Elements")
+    system_node = ElementTree.SubElement(root, qualified("System"), name=execution_name)
+    elements = ElementTree.SubElement(system_node, qualified("Elements"))
     for component in system.components:
         proxy = FMI_PROXY_NAMES.get(component.backend, component.backend.value)
         component_node = ElementTree.SubElement(
             elements,
-            "Component",
+            qualified("Component"),
             name=component.id,
             source=component.model or f"ael-proxy://{proxy}",
         )
-        connector_node = ElementTree.SubElement(component_node, "Connectors")
+        connector_node = ElementTree.SubElement(component_node, qualified("Connectors"))
         for port in component.ports:
             connector = ElementTree.SubElement(
                 connector_node,
-                "Connector",
+                qualified("Connector"),
                 name=port.name,
                 kind="inout" if port.direction == "bidirectional" else port.direction,
             )
@@ -114,14 +135,14 @@ def export_ssp(system: SystemManifest, destination: Path) -> Path:
             if type_name is None:
                 raise ValueError(f"SSP/FMI does not support port type: {port.data_type}")
             attributes = {"unit": port.unit} if port.unit and port.unit != "1" else {}
-            ElementTree.SubElement(connector, type_name, **attributes)
-    connections = ElementTree.SubElement(system_node, "Connections")
+            ElementTree.SubElement(connector, qualified(type_name), **attributes)
+    connections = ElementTree.SubElement(system_node, qualified("Connections"))
     for connection in system.connections:
         source_element, source_connector = connection.source.split(".", 1)
         target_element, target_connector = connection.target.split(".", 1)
         ElementTree.SubElement(
             connections,
-            "Connection",
+            qualified("Connection"),
             startElement=source_element,
             startConnector=source_connector,
             endElement=target_element,
