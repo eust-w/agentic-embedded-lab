@@ -134,11 +134,13 @@ class SubprocessAdapter(Adapter):
             if runtime is None:
                 raise RuntimeError("backend image configured but no OCI runtime is installed")
             workspace = Path(os.environ.get("AEL_WORKSPACE", Path.cwd())).resolve()
+            (workspace / ".ael" / "backend-runtime").mkdir(parents=True, exist_ok=True)
             self.launch_command = [
                 runtime,
                 "run",
                 "--rm",
                 "--interactive",
+                f"--user={os.getuid()}:{os.getgid()}",
                 "--read-only",
                 "--network=none",
                 "--cap-drop=ALL",

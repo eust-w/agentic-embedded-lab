@@ -45,9 +45,11 @@ def test_backend_container_places_writable_config_under_tmpfs(tmp_path: Path, mo
     adapter = SubprocessAdapter(BackendName.RENODE, "ael.backend_workers.renode", "1.16.1")
     adapter._start()
     assert "--read-only" in adapter.launch_command
+    assert f"--user={os.getuid()}:{os.getgid()}" in adapter.launch_command
     assert "--tmpfs=/tmp:rw,exec,nosuid,nodev,size=2g" in adapter.launch_command
     assert "--env=HOME=/tmp/ael-home" in adapter.launch_command
     assert "--env=XDG_CONFIG_HOME=/tmp/ael-config" in adapter.launch_command
+    assert (tmp_path / ".ael/backend-runtime").is_dir()
 
 
 def test_ngspice_process_adapter_executes_fixed_binary_protocol(

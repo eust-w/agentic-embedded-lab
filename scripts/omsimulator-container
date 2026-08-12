@@ -9,6 +9,7 @@ while IFS='=' read -r name value; do
   environment_args+=(--env "${name}=${value}")
 done < <(env | grep '^AEL_FMI_SOCKET_' || true)
 exec docker run --rm --network=none --read-only --cap-drop=ALL \
+  --user="$(id -u):$(id -g)" \
   --security-opt=no-new-privileges --pids-limit=512 --memory=4g --cpus="${cpus}" \
   --tmpfs=/tmp:rw,exec,nosuid,nodev,size=1g \
   --mount="type=bind,src=${workspace},dst=${workspace}" \
