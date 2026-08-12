@@ -50,7 +50,7 @@ jobs:
             --mount "type=bind,src=$PWD,dst=/workspace" \
             --workdir /workspace \
             --entrypoint=renode \
-            ael-renode:ci --disable-gui /workspace/scripts/renode-riscv-direct.resc \
+            ael-renode:ci --disable-gui --console /workspace/scripts/renode-riscv-direct.resc \
             >renode-direct.log 2>&1
           direct_status=$?
           set -e
