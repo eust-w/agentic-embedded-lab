@@ -9,6 +9,7 @@ from ael.adapters.subprocess_adapter import SubprocessAdapter
 from ael.backend_protocol import BackendOperation, BackendRequest, BackendResponse
 from ael.backend_workers.ngspice import NgspiceWorker
 from ael.backend_workers.ns3 import Ns3Worker
+from ael.backend_workers.openems import OpenEmsWorker
 from ael.contracts import BackendName, SystemComponent
 
 
@@ -96,6 +97,19 @@ def test_ns3_version_probe_accepts_image_build_attestation(tmp_path: Path, monke
     (tmp_path / ".ael-version").write_text("3.47\n", encoding="utf-8")
     monkeypatch.setenv("AEL_NS3_BIN", str(tool))
     assert Ns3Worker().detected_version == "3.47"
+
+
+def test_version_probe_prefers_pinned_semver_over_architecture_width(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "openEMS"
+    tool.write_text(
+        "#!/bin/sh\necho 'openEMS 64bit -- version v0.0.36'\n", encoding="utf-8"
+    )
+    tool.chmod(0o755)
+    monkeypatch.setenv("AEL_OPENEMS_BIN", str(tool))
+    worker = OpenEmsWorker()
+    assert worker.detected_version == "0.0.36"
 
 
 def test_ns3_worker_executes_matching_read_only_precompiled_model(

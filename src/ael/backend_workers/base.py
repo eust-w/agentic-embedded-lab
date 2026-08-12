@@ -270,7 +270,13 @@ class BackendWorker(ABC):
                 )
             except (OSError, subprocess.TimeoutExpired):
                 continue
-            match = VERSION_PATTERN.search(f"{result.stdout}\n{result.stderr}")
+            output = f"{result.stdout}\n{result.stderr}"
+            expected = re.search(
+                rf"(?<![0-9.]){re.escape(self.expected_version)}(?![0-9.])", output
+            )
+            if expected:
+                return self.expected_version
+            match = VERSION_PATTERN.search(output)
             if match:
                 return match.group(1)
         return None

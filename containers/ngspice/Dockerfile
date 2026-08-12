@@ -22,7 +22,7 @@ RUN curl -fL "https://github.com/imr/ngspice/archive/refs/tags/ngspice-${NGSPICE
 FROM ubuntu:24.04
 ARG NGSPICE_VERSION=46
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      libreadline8t64 python3 python3-pip \
+      libgomp1 libreadline8t64 python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /opt/ngspice /opt/ngspice
 RUN ln -s /opt/ngspice/bin/ngspice /usr/local/bin/ngspice \
