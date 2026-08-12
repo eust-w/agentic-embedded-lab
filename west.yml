@@ -9,6 +9,7 @@ manifest:
       import:
         name-allowlist:
           - cmsis
+          - cmsis_6
           - hal_stm32
           - hal_sifive
           - mbedtls

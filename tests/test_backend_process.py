@@ -22,6 +22,9 @@ if '--version' in sys.argv or '-v' in sys.argv:
     raise SystemExit(0)
 log = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
 raw = pathlib.Path(sys.argv[sys.argv.index('-r') + 1])
+deck = pathlib.Path(sys.argv[-1]).read_text().splitlines()
+assert deck[0] == 'AEL test deck'
+assert deck[1].startswith('.param AEL_fault_scale=')
 log.write_text('ael_failure = 0.000000e+00\\nAEL_EVENT circuit.ok {}\\n')
 raw.write_bytes(b'raw')
 """,
@@ -29,7 +32,7 @@ raw.write_bytes(b'raw')
     )
     tool.chmod(0o755)
     model = tmp_path / "model.cir"
-    model.write_text(".end\n", encoding="utf-8")
+    model.write_text("AEL test deck\n.end\n", encoding="utf-8")
     monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("AEL_NGSPICE_BIN", str(tool))
     adapter = SubprocessAdapter(BackendName.NGSPICE, "ael.backend_workers.ngspice", "46")

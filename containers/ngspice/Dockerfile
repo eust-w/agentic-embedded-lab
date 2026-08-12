@@ -10,9 +10,15 @@ RUN curl -fL "https://github.com/imr/ngspice/archive/refs/tags/ngspice-${NGSPICE
     && tar -xzf /tmp/ngspice.tar.gz -C /tmp \
     && cd "/tmp/ngspice-ngspice-${NGSPICE_VERSION}" \
     && ./autogen.sh \
-    && ./configure --prefix=/opt/ngspice --with-ngshared --enable-xspice --disable-debug \
+    && ./configure --prefix=/opt/ngspice --enable-xspice --disable-debug \
     && make -j"$(nproc)" \
-    && make install
+    && make install \
+    && make distclean \
+    && ./configure --prefix=/opt/ngspice-shared --with-ngshared --enable-xspice --disable-debug \
+    && make -j"$(nproc)" \
+    && make install \
+    && mkdir -p /opt/ngspice/lib \
+    && cp -a /opt/ngspice-shared/lib/. /opt/ngspice/lib/
 FROM ubuntu:24.04
 ARG NGSPICE_VERSION=46
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -25,5 +31,6 @@ WORKDIR /workspace
 COPY pyproject.toml README.md LICENSE /workspace/
 COPY src /workspace/src
 RUN python3 -m pip install --break-system-packages --no-cache-dir .
-ENV AEL_NGSPICE_BIN=/usr/local/bin/ngspice AEL_WORKSPACE=/workspace
+ENV AEL_NGSPICE_BIN=/usr/local/bin/ngspice AEL_WORKSPACE=/workspace \
+    LD_LIBRARY_PATH=/opt/ngspice/lib
 ENTRYPOINT ["python3", "-m", "ael.backend_workers.ngspice"]

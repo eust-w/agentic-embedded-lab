@@ -28,7 +28,14 @@ class NgspiceWorker(BackendWorker):
             f".param AEL_{name}={value}" for name, value in sorted(defaults.items())
         ]
         text = source.read_text(encoding="utf-8")
-        deck.write_text("\n".join(parameters) + "\n" + text, encoding="utf-8")
+        source_lines = text.splitlines()
+        if not source_lines:
+            raise ValueError("ngspice model is empty")
+        # SPICE always treats the first line as a title, even when it starts with a dot.
+        deck.write_text(
+            "\n".join([source_lines[0], *parameters, *source_lines[1:]]) + "\n",
+            encoding="utf-8",
+        )
         log = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.log"
         raw = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.raw"
         result = self.run_tool(

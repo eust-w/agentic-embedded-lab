@@ -8,7 +8,7 @@ RUN curl -fL "https://www.nsnam.org/releases/ns-allinone-${NS3_VERSION}.tar.bz2"
       -o /tmp/ns3.tar.bz2 \
     && tar -xjf /tmp/ns3.tar.bz2 -C /opt \
     && cd "/opt/ns-allinone-${NS3_VERSION}/ns-${NS3_VERSION}" \
-    && ./ns3 configure --enable-examples --disable-tests --build-profile=release \
+    && ./ns3 configure --disable-tests --build-profile=release --enable-modules=core \
     && ./ns3 build
 FROM ubuntu:24.04
 ARG NS3_VERSION=3.47
