@@ -28,13 +28,21 @@ class RenodeWorker(BackendWorker):
         input_registers = self.component.properties.get("input_registers", {})
         for name, value in sorted(self.inputs.items()):
             if name in input_registers:
-                lines.append(f"sysbus WriteDoubleWord {input_registers[name]} {int(value)}")
+                address = input_registers[name]
+                if not isinstance(address, int) or address < 0:
+                    raise ValueError(
+                        "Renode input register addresses must be non-negative integers"
+                    )
+                lines.append(f"sysbus WriteDoubleWord {address:#x} {int(value) & 0xFFFFFFFF:#x}")
         output_registers = self.component.properties.get("output_registers", {})
         sentinels = self.component.properties.get("output_sentinels", {})
         for name, value in sorted(sentinels.items()):
             if name not in output_registers:
                 raise ValueError(f"Renode output sentinel refers to unknown output {name!r}")
-            lines.append(f"sysbus WriteDoubleWord {output_registers[name]} {int(value)}")
+            address = output_registers[name]
+            if not isinstance(address, int) or address < 0:
+                raise ValueError("Renode output register addresses must be non-negative integers")
+            lines.append(f"sysbus WriteDoubleWord {address:#x} {int(value) & 0xFFFFFFFF:#x}")
         return lines
 
     def _initialization_lines(self) -> list[str]:
@@ -55,9 +63,7 @@ class RenodeWorker(BackendWorker):
                     "name",
                     "default",
                 }:
-                    raise ValueError(
-                        "Renode memory tag requires address, size, name, and default"
-                    )
+                    raise ValueError("Renode memory tag requires address, size, name, and default")
                 address, size, name, default = (
                     tag["address"],
                     tag["size"],
@@ -70,9 +76,7 @@ class RenodeWorker(BackendWorker):
                     raise ValueError("Renode memory tag has an invalid numeric range")
                 if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
                     raise ValueError("Renode memory tag name is not safe")
-                lines.append(
-                    f'sysbus Tag <{address:#x} {size}> "{name}" {default:#x}'
-                )
+                lines.append(f'sysbus Tag <{address:#x} {size}> "{name}" {default:#x}')
             performance_mips = self.component.properties.get("performance_mips")
             if performance_mips is not None:
                 if not isinstance(performance_mips, int) or not 1 <= performance_mips <= 100000:
@@ -112,17 +116,19 @@ class RenodeWorker(BackendWorker):
         output_registers = self.component.properties.get("output_registers", {})
         for name, address in sorted(output_registers.items()):
             lines.append(
-                f'python "print(\'AEL_REGISTER:{name}:%x\' % '
+                f"python \"print('AEL_REGISTER:{name}:%x' % "
                 f'self.Machine.SystemBus.ReadDoubleWord({address}))"'
             )
         lines.append("quit")
         script.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        result = self.run_tool(["--disable-gui", str(script)])
+        # Console mode makes Monitor parse errors part of the captured evidence.
+        # Without it, a failed startup script can leave the telnet Monitor alive
+        # until the outer timeout, hiding the actual command that failed.
+        result = self.run_tool(["--disable-gui", "--console", str(script)])
         combined = f"{result.stdout}\n{result.stderr}"
         metrics, events = self.parse_output(combined, self.virtual_time_us + step_us)
         outputs = {
-            match.group(1): int(match.group(2), 16)
-            for match in REGISTER_RESULT.finditer(combined)
+            match.group(1): int(match.group(2), 16) for match in REGISTER_RESULT.finditer(combined)
         }
         return outputs, metrics, events, {}
 
@@ -148,7 +154,7 @@ class RenodeWorker(BackendWorker):
                 lines.append(f'emulation RunFor "{run_us / 1_000_000:.9f}"')
             lines.extend([f"Save @{destination}", "quit"])
             script.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            self.run_tool(["--disable-gui", str(script)])
+            self.run_tool(["--disable-gui", "--console", str(script)])
             self.renode_snapshot = destination
             self.renode_snapshot_time_us = self.virtual_time_us
             return destination
