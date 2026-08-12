@@ -29,7 +29,8 @@ jobs:
       - run: scripts/build-firmware.sh
       - name: Build pinned backend images
         run: |
-          for backend in renode ngspice openmodelica ns3 openems; do
+          # Build the largest source image first while the runner has maximum headroom.
+          for backend in openems openmodelica ngspice renode ns3; do
             docker buildx build \
               --file "containers/${backend}/Dockerfile" \
               --tag "ael-${backend}:ci" \
