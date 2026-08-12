@@ -20,6 +20,17 @@ class BackendProtocolError(RuntimeError):
     pass
 
 
+def backend_cpu_limit() -> float:
+    raw = os.environ.get("AEL_BACKEND_CPUS", "2")
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise ValueError("AEL_BACKEND_CPUS must be numeric") from error
+    if not 0.01 <= value <= 64:
+        raise ValueError("AEL_BACKEND_CPUS must be between 0.01 and 64")
+    return value
+
+
 class SubprocessAdapter(Adapter):
     def __init__(
         self,
@@ -126,7 +137,7 @@ class SubprocessAdapter(Adapter):
                 "--security-opt=no-new-privileges",
                 "--pids-limit=512",
                 "--memory=4g",
-                "--cpus=4",
+                f"--cpus={backend_cpu_limit():g}",
                 "--tmpfs=/tmp:rw,nosuid,size=2g",
                 "--mount",
                 f"type=bind,src={workspace},dst=/workspace",

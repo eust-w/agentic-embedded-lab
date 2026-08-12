@@ -5,12 +5,24 @@ import os
 from io import StringIO
 from pathlib import Path
 
-from ael.adapters.subprocess_adapter import SubprocessAdapter
+import pytest
+
+from ael.adapters.subprocess_adapter import SubprocessAdapter, backend_cpu_limit
 from ael.backend_protocol import BackendOperation, BackendRequest, BackendResponse
 from ael.backend_workers.ngspice import NgspiceWorker
 from ael.backend_workers.ns3 import Ns3Worker
 from ael.backend_workers.openems import OpenEmsWorker
 from ael.contracts import BackendName, SystemComponent
+
+
+def test_backend_cpu_limit_is_runner_safe_and_validated(monkeypatch) -> None:
+    monkeypatch.delenv("AEL_BACKEND_CPUS", raising=False)
+    assert backend_cpu_limit() == 2
+    monkeypatch.setenv("AEL_BACKEND_CPUS", "0.5")
+    assert backend_cpu_limit() == 0.5
+    monkeypatch.setenv("AEL_BACKEND_CPUS", "65")
+    with pytest.raises(ValueError, match="between"):
+        backend_cpu_limit()
 
 
 def test_ngspice_process_adapter_executes_fixed_binary_protocol(
