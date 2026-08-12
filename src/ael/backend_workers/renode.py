@@ -45,6 +45,34 @@ class RenodeWorker(BackendWorker):
                 f'mach create "{self.component.id}"',
                 f"machine LoadPlatformDescription @{model}",
             ]
+            memory_tags = self.component.properties.get("memory_tags", [])
+            if not isinstance(memory_tags, list):
+                raise ValueError("Renode memory_tags must be a list")
+            for tag in memory_tags:
+                if not isinstance(tag, dict) or set(tag) != {
+                    "address",
+                    "size",
+                    "name",
+                    "default",
+                }:
+                    raise ValueError(
+                        "Renode memory tag requires address, size, name, and default"
+                    )
+                address, size, name, default = (
+                    tag["address"],
+                    tag["size"],
+                    tag["name"],
+                    tag["default"],
+                )
+                if not all(isinstance(value, int) for value in (address, size, default)):
+                    raise ValueError("Renode memory tag numeric fields must be integers")
+                if address < 0 or size not in {1, 2, 4, 8} or not 0 <= default < 1 << 64:
+                    raise ValueError("Renode memory tag has an invalid numeric range")
+                if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name):
+                    raise ValueError("Renode memory tag name is not safe")
+                lines.append(
+                    f'sysbus Tag <{address:#x} {size}> "{name}" {default:#x}'
+                )
             performance_mips = self.component.properties.get("performance_mips")
             if performance_mips is not None:
                 if not isinstance(performance_mips, int) or not 1 <= performance_mips <= 100000:

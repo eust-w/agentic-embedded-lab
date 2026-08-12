@@ -14,6 +14,9 @@ components:
     properties:
       firmware: firmware/zephyr/build-hifive1/zephyr/zephyr.elf
       model_state: conformance_validated
+      memory_tags:
+        - {address: 0x10008000, size: 4, name: PRCI_HFROSCCFG, default: 0xffffffff}
+        - {address: 0x10008008, size: 4, name: PRCI_PLLCFG, default: 0xffffffff}
       performance_mips: 320
       entry_symbol: __start
       input_registers: {case_id: 0x80003c00, fixed: 0x80003c04}

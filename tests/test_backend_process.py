@@ -275,6 +275,7 @@ def test_renode_worker_builds_network_independent_repl_script(
         "    raise SystemExit(0)\n"
         "script = pathlib.Path(sys.argv[-1]).read_text()\n"
         "assert 'machine LoadPlatformDescription @' in script\n"
+        "assert 'sysbus Tag <0x10008000 4> \"PRCI\" 0xffffffff' in script\n"
         "assert 'cpu PerformanceInMips 320' in script\n"
         "assert 'cpu PC `sysbus GetSymbolAddress \"__start\"`' in script\n"
         "assert 'include @' not in script\n",
@@ -298,6 +299,14 @@ def test_renode_worker_builds_network_independent_repl_script(
                 "performance_mips": 320,
                 "entry_symbol": "__start",
                 "firmware": "firmware.elf",
+                "memory_tags": [
+                    {
+                        "address": 0x10008000,
+                        "size": 4,
+                        "name": "PRCI",
+                        "default": 0xFFFFFFFF,
+                    }
+                ],
             },
         ),
         seed=1,

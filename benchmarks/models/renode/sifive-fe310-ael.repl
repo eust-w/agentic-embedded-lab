@@ -38,8 +38,3 @@ qspi0Xip: Memory.MappedMemory @ sysbus 0x20000000
 
 gpioInputs: GPIOPort.SiFive_GPIO @ sysbus 0x10012000
     [0-31] -> plic@[8-39]
-
-sysbus:
-    init:
-        Tag <0x10008000 4> "PRCI_HFROSCCFG" 0xFFFFFFFF
-        Tag <0x10008008 4> "PRCI_PLLCFG" 0xFFFFFFFF
