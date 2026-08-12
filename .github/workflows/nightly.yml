@@ -1,6 +1,8 @@
 name: nightly-simulation
 
 on:
+  push:
+    branches: ["codex/ael-full-platform"]
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:

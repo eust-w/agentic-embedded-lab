@@ -5,6 +5,8 @@ permissions:
   id-token: write
 
 on:
+  push:
+    branches: ["codex/ael-full-platform"]
   workflow_dispatch:
 
 jobs:

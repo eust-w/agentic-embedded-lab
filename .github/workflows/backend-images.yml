@@ -1,6 +1,12 @@
 name: backend-images
 
 on:
+  push:
+    branches: ["codex/ael-full-platform"]
+    paths:
+      - "containers/**"
+      - "src/ael/backend_workers/**"
+      - ".github/workflows/backend-images.yml"
   workflow_dispatch:
   pull_request:
     paths:
