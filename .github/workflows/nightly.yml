@@ -66,11 +66,6 @@ jobs:
           AEL_OPENEMS_IMAGE: ael-openems:ci
           AEL_OCI_RUNTIME: docker
         run: ael benchmark run --source-revision "$GITHUB_SHA"
-      - name: Boot RISC-V Zephyr reference in Renode
-        env:
-          AEL_RENODE_IMAGE: ael-renode:ci
-          AEL_OCI_RUNTIME: docker
-        run: ael run benchmarks/experiments/riscv-smoke.yaml
       - name: Execute FMI 2.0/SSP five-domain acceptance
         env:
           AEL_RENODE_IMAGE: ael-renode:ci
@@ -108,3 +103,30 @@ jobs:
             .ael/build/fmi/*.ssp
             production-gate.json
           retention-days: 30
+
+  riscv-smoke:
+    needs: firmware
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/download-artifact@v4
+        with:
+          name: zephyr-reference-firmware
+          path: firmware/zephyr
+      - run: python -m pip install -e .
+      - name: Load pinned Renode image
+        run: |
+          docker buildx build \
+            --file containers/renode/Dockerfile \
+            --tag ael-renode:ci \
+            --cache-from type=gha,scope=renode \
+            --load .
+      - name: Boot RISC-V Zephyr reference in Renode
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_OCI_RUNTIME: docker
+        run: ael run benchmarks/experiments/riscv-smoke.yaml
