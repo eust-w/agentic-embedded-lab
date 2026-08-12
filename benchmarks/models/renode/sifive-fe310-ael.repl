@@ -34,7 +34,10 @@ clint: IRQControllers.CoreLevelInterruptor @ sysbus 0x02000000
     frequency: 62000000
 
 qspi0Xip: Memory.MappedMemory @ sysbus 0x20000000
-    size: 0x20000000
+    // HiFive1 Rev B carries 32 MiB QSPI flash. The upstream generic FE310
+    // platform maps the complete 512 MiB XIP address window, which needlessly
+    // materializes that whole region in constrained container workers.
+    size: 0x02000000
 
 gpioInputs: GPIOPort.SiFive_GPIO @ sysbus 0x10012000
     [0-31] -> plic@[8-39]
