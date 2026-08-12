@@ -8,7 +8,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 RUN git clone --branch "v${OPENEMS_VERSION}" --depth 1 --recurse-submodules \
       https://github.com/thliebig/openEMS-Project.git /tmp/openEMS-Project \
     && cd /tmp/openEMS-Project \
-    && ./update_openEMS.sh --disable-GUI --njobs="$(nproc)" /opt/openems
+    && ./update_openEMS.sh /opt/openems --disable-GUI
 FROM ubuntu:24.04
 ARG OPENEMS_VERSION=0.0.36
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

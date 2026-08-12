@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from typing import Any
 
 from ael.contracts import Event
@@ -12,7 +13,24 @@ class Ns3Worker(BackendWorker):
     backend_name = "ns3"
     expected_version = "3.47"
     commands = ("ns3",)
-    version_arguments = ("--version", "version")
+
+    def _version(self) -> str | None:
+        if self.tool is None:
+            return None
+        for arguments in (("show", "version"), ("--version",)):
+            try:
+                result = subprocess.run(
+                    [str(self.tool), *arguments],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if self.expected_version in f"{result.stdout}\n{result.stderr}":
+                return self.expected_version
+        return None
 
     def step(
         self, step_us: int

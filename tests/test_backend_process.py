@@ -7,6 +7,7 @@ from pathlib import Path
 from ael.adapters.subprocess_adapter import SubprocessAdapter
 from ael.backend_protocol import BackendResponse
 from ael.backend_workers.ngspice import NgspiceWorker
+from ael.backend_workers.ns3 import Ns3Worker
 from ael.contracts import BackendName, SystemComponent
 
 
@@ -71,3 +72,17 @@ def test_backend_worker_rejects_wrong_protocol_without_crashing(monkeypatch) -> 
     assert response.api_version == "ael.dev/backend/v1"
     assert response.ok is False
     assert response.request_id == "bad"
+
+
+def test_ns3_version_probe_uses_the_wrapper_show_command(tmp_path: Path, monkeypatch) -> None:
+    tool = tmp_path / "ns3"
+    tool.write_text(
+        "#!/bin/sh\n"
+        "if [ \"$1 $2\" = \"show version\" ]; then echo 'ns-3.47'; exit 0; fi\n"
+        "echo ns3 >&2\nexit 2\n",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    monkeypatch.setenv("AEL_NS3_BIN", str(tool))
+    worker = Ns3Worker()
+    assert worker.detected_version == "3.47"
