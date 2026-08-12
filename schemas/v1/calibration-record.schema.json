@@ -1,0 +1,64 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "calibrated_at": {
+      "format": "date-time",
+      "title": "Calibrated At",
+      "type": "string"
+    },
+    "certificate_path": {
+      "title": "Certificate Path",
+      "type": "string"
+    },
+    "certificate_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Certificate Sha256",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "instrument_id": {
+      "title": "Instrument Id",
+      "type": "string"
+    },
+    "instrument_kind": {
+      "title": "Instrument Kind",
+      "type": "string"
+    },
+    "kind": {
+      "const": "CalibrationRecord",
+      "default": "CalibrationRecord",
+      "title": "Kind",
+      "type": "string"
+    },
+    "laboratory": {
+      "title": "Laboratory",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "instrument_id",
+    "instrument_kind",
+    "certificate_path",
+    "certificate_sha256",
+    "calibrated_at",
+    "expires_at",
+    "laboratory"
+  ],
+  "title": "CalibrationRecord",
+  "type": "object"
+}

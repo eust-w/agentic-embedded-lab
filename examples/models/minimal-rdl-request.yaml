@@ -1,0 +1,8 @@
+api_version: ael.dev/v1
+kind: ModelGenerationRequest
+id: minimal-rdl
+name: Minimal RDL Peripheral
+version: 0.1.0
+backend: renode
+systemrdl: examples/models/minimal.rdl
+generator: ael.systemrdl-importer/v1

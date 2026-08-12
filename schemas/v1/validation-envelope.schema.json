@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "MetricTolerance": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "relative_percent": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relative Percent"
+        }
+      },
+      "required": [
+        "metric"
+      ],
+      "title": "MetricTolerance",
+      "type": "object"
+    },
+    "UnitValue": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "UnitValue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "approved_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved By"
+    },
+    "calibration_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Calibration Ids",
+      "type": "array"
+    },
+    "conditions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/UnitValue"
+      },
+      "title": "Conditions",
+      "type": "object"
+    },
+    "hardware_revision": {
+      "title": "Hardware Revision",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "ValidationEnvelope",
+      "default": "ValidationEnvelope",
+      "title": "Kind",
+      "type": "string"
+    },
+    "model_id": {
+      "title": "Model Id",
+      "type": "string"
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "sample_count": {
+      "minimum": 1,
+      "title": "Sample Count",
+      "type": "integer"
+    },
+    "target": {
+      "title": "Target",
+      "type": "string"
+    },
+    "tolerances": {
+      "items": {
+        "$ref": "#/$defs/MetricTolerance"
+      },
+      "title": "Tolerances",
+      "type": "array"
+    },
+    "valid_from": {
+      "format": "date-time",
+      "title": "Valid From",
+      "type": "string"
+    },
+    "valid_until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Valid Until"
+    }
+  },
+  "required": [
+    "id",
+    "target",
+    "hardware_revision",
+    "model_id",
+    "model_version",
+    "conditions",
+    "tolerances",
+    "sample_count",
+    "valid_from"
+  ],
+  "title": "ValidationEnvelope",
+  "type": "object"
+}

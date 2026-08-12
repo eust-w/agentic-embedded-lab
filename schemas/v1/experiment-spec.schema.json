@@ -1,0 +1,251 @@
+{
+  "$defs": {
+    "Assertion": {
+      "additionalProperties": false,
+      "properties": {
+        "critical": {
+          "default": true,
+          "title": "Critical",
+          "type": "boolean"
+        },
+        "expected": {
+          "title": "Expected"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge",
+            "contains"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "metric",
+        "operator",
+        "expected"
+      ],
+      "title": "Assertion",
+      "type": "object"
+    },
+    "Fault": {
+      "additionalProperties": false,
+      "properties": {
+        "at_us": {
+          "minimum": 0,
+          "title": "At Us",
+          "type": "integer"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at_us",
+        "target",
+        "type"
+      ],
+      "title": "Fault",
+      "type": "object"
+    },
+    "ModelState": {
+      "enum": [
+        "draft",
+        "generated",
+        "static_validated",
+        "conformance_validated",
+        "hardware_validated",
+        "production_approved",
+        "deprecated"
+      ],
+      "title": "ModelState",
+      "type": "string"
+    },
+    "Stimulus": {
+      "additionalProperties": false,
+      "properties": {
+        "at_us": {
+          "minimum": 0,
+          "title": "At Us",
+          "type": "integer"
+        },
+        "target": {
+          "title": "Target",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "value": {
+          "title": "Value"
+        }
+      },
+      "required": [
+        "at_us",
+        "target",
+        "value"
+      ],
+      "title": "Stimulus",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "allowed_model_states": {
+      "items": {
+        "$ref": "#/$defs/ModelState"
+      },
+      "title": "Allowed Model States",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "assertions": {
+      "items": {
+        "$ref": "#/$defs/Assertion"
+      },
+      "title": "Assertions",
+      "type": "array"
+    },
+    "checkpoint_interval_us": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Checkpoint Interval Us"
+    },
+    "duration_us": {
+      "exclusiveMinimum": 0,
+      "maximum": 86400000000,
+      "title": "Duration Us",
+      "type": "integer"
+    },
+    "faults": {
+      "items": {
+        "$ref": "#/$defs/Fault"
+      },
+      "title": "Faults",
+      "type": "array"
+    },
+    "kind": {
+      "const": "ExperimentSpec",
+      "default": "ExperimentSpec",
+      "title": "Kind",
+      "type": "string"
+    },
+    "macro_step_us": {
+      "default": 1000,
+      "exclusiveMinimum": 0,
+      "title": "Macro Step Us",
+      "type": "integer"
+    },
+    "name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "observables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Observables",
+      "type": "array"
+    },
+    "requires_rollback": {
+      "default": false,
+      "title": "Requires Rollback",
+      "type": "boolean"
+    },
+    "seed": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "stimuli": {
+      "items": {
+        "$ref": "#/$defs/Stimulus"
+      },
+      "title": "Stimuli",
+      "type": "array"
+    },
+    "system": {
+      "title": "System",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "timeout_s": {
+      "default": 300,
+      "exclusiveMinimum": 0,
+      "maximum": 86400,
+      "title": "Timeout S",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "name",
+    "system",
+    "duration_us"
+  ],
+  "title": "ExperimentSpec",
+  "type": "object"
+}

@@ -1,0 +1,20 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: openmodelica-continuous-domain
+components:
+  - id: plant
+    type: thermal-battery-functional-model
+    backend: openmodelica
+    model: benchmarks/models/modelica/domain.mos
+    step_us: 1000
+    ports:
+      - {name: fault_scale, direction: input, data_type: real, unit: "1"}
+      - {name: input_power, direction: input, data_type: real, unit: W}
+      - {name: rf_retries, direction: input, data_type: real, unit: "1"}
+      - {name: failure, direction: output, data_type: real, unit: "1"}
+      - {name: temperature, direction: output, data_type: real, unit: Cel}
+      - {name: battery_hours, direction: output, data_type: real, unit: h}
+fidelity:
+  thermal: functional-lumped
+  battery: functional
+  hardware: unverified

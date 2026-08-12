@@ -1,0 +1,10 @@
+faultScale := {{fault_scale}};
+inputPower := {{input_power}};
+retryCount := {{rf_retries}};
+temperature := 25.0 + inputPower * (8.0 + 18.0 * faultScale) + retryCount * 0.15;
+batteryHours := 2400.0 / (1.0 + 11.0 * faultScale + retryCount * 0.2);
+failure := if temperature > 70.0 or batteryHours < 300.0 then 1.0 else 0.0;
+print("AEL_METRIC temperature=" + String(temperature) + "\n");
+print("AEL_METRIC battery_hours=" + String(batteryHours) + "\n");
+print("AEL_METRIC failure=" + String(failure) + "\n");
+print("AEL_EVENT modelica.domain {\"calibrated\":false}\n");

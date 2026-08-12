@@ -1,0 +1,40 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: synthetic-loop
+description: Deterministic control-plane test; not an embedded hardware model.
+components:
+  - id: source
+    type: test.signal
+    backend: synthetic
+    step_us: 1000
+    ports:
+      - name: output
+        direction: output
+        data_type: real
+        unit: V
+    properties:
+      gain: 2.0
+      initial:
+        input: 0.0
+  - id: sink
+    type: test.observer
+    backend: synthetic
+    step_us: 1000
+    ports:
+      - name: input
+        direction: input
+        data_type: real
+        unit: V
+      - name: output
+        direction: output
+        data_type: real
+        unit: V
+    properties:
+      gain: 1.0
+connections:
+  - source: source.output
+    target: sink.input
+    unit: V
+fidelity:
+  control_plane: deterministic synthetic test
+  hardware: unverified

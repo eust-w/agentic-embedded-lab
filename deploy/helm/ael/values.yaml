@@ -1,0 +1,18 @@
+image:
+  repository: ghcr.io/example/agentic-embedded-lab
+  tag: dev
+  pullPolicy: IfNotPresent
+replicas: 2
+database:
+  urlSecret: ael-server
+  urlKey: database-url
+s3:
+  bucket: ael-evidence
+  endpoint: https://s3.example.invalid
+oidc:
+  issuer: https://identity.example.invalid/
+  audience: ael
+workerFingerprints: ""
+resources:
+  requests: {cpu: 250m, memory: 256Mi}
+  limits: {cpu: "2", memory: 2Gi}

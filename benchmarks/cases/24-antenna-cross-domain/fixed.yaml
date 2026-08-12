@@ -1,0 +1,60 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: 24-antenna-cross-domain-fixed
+system: benchmarks/systems/five-domain.yaml
+duration_us: 6000
+macro_step_us: 1000
+timeout_s: 1800
+seed: 1024
+stimuli:
+- at_us: 0
+  target: mcu.case_id
+  value: 24
+- at_us: 0
+  target: mcu.fixed
+  value: 1
+- at_us: 0
+  target: circuit.fault_scale
+  value: 0.0
+- at_us: 0
+  target: circuit.load_microamp
+  value: 60000.0
+- at_us: 0
+  target: circuit.rf_retries
+  value: 0.0
+- at_us: 0
+  target: plant.fault_scale
+  value: 0.0
+- at_us: 0
+  target: plant.input_power
+  value: 0.2
+- at_us: 0
+  target: plant.rf_retries
+  value: 0.0
+- at_us: 0
+  target: network.fault_scale
+  value: 0.0
+- at_us: 0
+  target: network.rf_loss_db
+  value: 0.0
+- at_us: 0
+  target: mcu.network_retries
+  value: 0.0
+- at_us: 0
+  target: antenna.detune
+  value: 0.0
+assertions:
+- metric: mcu.failure
+  operator: eq
+  expected: 0
+  critical: true
+observables:
+- mcu.failure
+allowed_model_states:
+- conformance_validated
+- hardware_validated
+- production_approved
+tags:
+- benchmark
+- fixed
+- case-24

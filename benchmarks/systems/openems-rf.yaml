@@ -1,0 +1,19 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: openems-antenna-reference
+components:
+  - id: antenna
+    type: printed-monopole-functional-geometry
+    backend: openems
+    model: benchmarks/models/openems/antenna_detuning.m
+    event_driven: true
+    ports:
+      - {name: detune, direction: input, data_type: real, unit: mm}
+      - {name: failure, direction: output, data_type: real, unit: "1"}
+      - {name: rf_loss_db, direction: output, data_type: real, unit: dB}
+      - {name: resonance_hz, direction: output, data_type: real, unit: Hz}
+      - {name: s11_db, direction: output, data_type: real, unit: dB}
+fidelity:
+  electromagnetic: functional-geometry
+  fabrication_materials: unverified
+  hardware: unverified

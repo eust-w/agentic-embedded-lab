@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "agentic-embedded-lab": {
+      "command": "/absolute/path/to/agentic-embedded-lab/.venv/bin/ael-mcp",
+      "env": {
+        "AEL_WORKSPACE": "/absolute/path/to/agentic-embedded-lab"
+      }
+    }
+  }
+}

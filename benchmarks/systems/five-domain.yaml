@@ -1,0 +1,77 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: antenna-retry-power-thermal-five-domain
+description: Functional cross-domain chain; no calibrated hardware equivalence.
+components:
+  - id: antenna
+    type: printed-monopole-functional-geometry
+    backend: openems
+    model: benchmarks/models/openems/antenna_detuning.m
+    event_driven: true
+    ports:
+      - {name: detune, direction: input, data_type: real, unit: mm}
+      - {name: rf_loss_db, direction: output, data_type: real, unit: dB}
+  - id: network
+    type: deterministic-network-scenario
+    backend: ns3
+    model: benchmarks/models/ns3/ael-network.cc
+    step_us: 1000
+    ports:
+      - {name: rf_loss_db, direction: input, data_type: real, unit: dB}
+      - {name: fault_scale, direction: input, data_type: real, unit: "1"}
+      - {name: retries, direction: output, data_type: real, unit: "1"}
+      - {name: failure, direction: output, data_type: real, unit: "1"}
+    properties: {program: scratch/ael-network}
+  - id: mcu
+    type: stm32f4-zephyr-reference
+    backend: renode
+    model: benchmarks/models/renode/stm32f4_disco.resc
+    step_us: 1000
+    ports:
+      - {name: case_id, direction: input, data_type: integer}
+      - {name: fixed, direction: input, data_type: integer}
+      - {name: network_retries, direction: input, data_type: real, unit: "1"}
+      - {name: retries, direction: output, data_type: real, unit: "1"}
+      - {name: current, direction: output, data_type: real, unit: uA}
+      - {name: failure, direction: output, data_type: integer}
+    properties:
+      firmware: firmware/zephyr/build-stm32/zephyr/zephyr.elf
+      model_state: conformance_validated
+      input_registers: {case_id: 0x2001fc00, fixed: 0x2001fc04, network_retries: 0x2001fc14}
+      output_registers: {failure: 0x2001fc08, retries: 0x2001fc0c, current: 0x2001fc10}
+  - id: circuit
+    type: transient-power-path
+    backend: ngspice
+    model: benchmarks/models/ngspice/power_path.cir
+    step_us: 1000
+    ports:
+      - {name: load_microamp, direction: input, data_type: real, unit: uA}
+      - {name: rf_retries, direction: input, data_type: real, unit: "1"}
+      - {name: fault_scale, direction: input, data_type: real, unit: "1"}
+      - {name: power, direction: output, data_type: real, unit: W}
+      - {name: failure, direction: output, data_type: real, unit: "1"}
+  - id: plant
+    type: thermal-battery-functional-model
+    backend: openmodelica
+    model: benchmarks/models/modelica/domain.mos
+    step_us: 1000
+    ports:
+      - {name: input_power, direction: input, data_type: real, unit: W}
+      - {name: rf_retries, direction: input, data_type: real, unit: "1"}
+      - {name: fault_scale, direction: input, data_type: real, unit: "1"}
+      - {name: temperature, direction: output, data_type: real, unit: Cel}
+      - {name: failure, direction: output, data_type: real, unit: "1"}
+connections:
+  - {source: antenna.rf_loss_db, target: network.rf_loss_db, unit: dB}
+  - {source: network.retries, target: mcu.network_retries, unit: "1"}
+  - {source: mcu.current, target: circuit.load_microamp, unit: uA}
+  - {source: mcu.retries, target: circuit.rf_retries, unit: "1"}
+  - {source: mcu.retries, target: plant.rf_retries, unit: "1"}
+  - {source: circuit.power, target: plant.input_power, unit: W}
+fidelity:
+  digital: functional
+  circuit: functional-component-model
+  thermal: functional-lumped
+  network: functional-scenario
+  electromagnetic: functional-geometry
+  hardware: unverified

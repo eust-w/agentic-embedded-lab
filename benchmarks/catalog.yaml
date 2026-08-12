@@ -1,0 +1,448 @@
+version: 1.0-development
+cases:
+- id: 1
+  slug: kconfig-dependency
+  title: Kconfig dependency removes a feature from the build
+  category: configuration
+  backends:
+  - native
+  readiness: executable
+  fidelity_boundary: Build-system evidence only.
+  faulty_asset: benchmarks/cases/01-kconfig-dependency/faulty.yaml
+  fixed_asset: benchmarks/cases/01-kconfig-dependency/fixed.yaml
+  experiment: benchmarks/cases/01-kconfig-dependency/fixed.yaml
+  faulty_experiment: benchmarks/cases/01-kconfig-dependency/faulty.yaml
+  fixed_experiment: benchmarks/cases/01-kconfig-dependency/fixed.yaml
+  causal_chain:
+  - Kconfig dependency false
+  - feature object omitted
+  - requested behavior absent
+  seed: 1001
+- id: 2
+  slug: devicetree-mapping
+  title: Devicetree address, IRQ, or pin mapping error
+  category: configuration
+  backends:
+  - native
+  - renode
+  readiness: executable
+  fidelity_boundary: Requires a board-specific Renode model.
+  faulty_asset: benchmarks/cases/02-devicetree-mapping/faulty.yaml
+  fixed_asset: benchmarks/cases/02-devicetree-mapping/fixed.yaml
+  experiment: benchmarks/cases/02-devicetree-mapping/fixed.yaml
+  faulty_experiment: benchmarks/cases/02-devicetree-mapping/faulty.yaml
+  fixed_experiment: benchmarks/cases/02-devicetree-mapping/fixed.yaml
+  causal_chain:
+  - mapping mismatch
+  - driver binds wrong resource
+  - peripheral access fails
+  seed: 1002
+- id: 3
+  slug: linker-ram-overflow
+  title: Linker section and RAM overflow
+  category: memory
+  backends:
+  - native
+  readiness: executable
+  fidelity_boundary: Linker evidence does not establish runtime safety.
+  faulty_asset: benchmarks/cases/03-linker-ram-overflow/faulty.yaml
+  fixed_asset: benchmarks/cases/03-linker-ram-overflow/fixed.yaml
+  experiment: benchmarks/cases/03-linker-ram-overflow/fixed.yaml
+  faulty_experiment: benchmarks/cases/03-linker-ram-overflow/faulty.yaml
+  fixed_experiment: benchmarks/cases/03-linker-ram-overflow/fixed.yaml
+  causal_chain:
+  - section exceeds RAM
+  - linker rejects image
+  - firmware is not produced
+  seed: 1003
+- id: 4
+  slug: clock-boot-hang
+  title: Clock initialization causes a boot hang
+  category: boot
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Clock fidelity is model-dependent.
+  faulty_asset: benchmarks/cases/04-clock-boot-hang/faulty.yaml
+  fixed_asset: benchmarks/cases/04-clock-boot-hang/fixed.yaml
+  experiment: benchmarks/cases/04-clock-boot-hang/fixed.yaml
+  faulty_experiment: benchmarks/cases/04-clock-boot-hang/faulty.yaml
+  fixed_experiment: benchmarks/cases/04-clock-boot-hang/fixed.yaml
+  causal_chain:
+  - clock source never ready
+  - boot wait does not exit
+  - application does not start
+  seed: 1004
+- id: 5
+  slug: gpio-polarity-debounce
+  title: GPIO polarity or button debounce error
+  category: digital_io
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Electrical bounce waveform is not yet validated.
+  faulty_asset: benchmarks/cases/05-gpio-polarity-debounce/faulty.yaml
+  fixed_asset: benchmarks/cases/05-gpio-polarity-debounce/fixed.yaml
+  experiment: benchmarks/cases/05-gpio-polarity-debounce/fixed.yaml
+  faulty_experiment: benchmarks/cases/05-gpio-polarity-debounce/faulty.yaml
+  fixed_experiment: benchmarks/cases/05-gpio-polarity-debounce/fixed.yaml
+  causal_chain:
+  - polarity/debounce wrong
+  - edge is misclassified
+  - input action is incorrect
+  seed: 1005
+- id: 6
+  slug: timer-wrap
+  title: Timer counter wraparound
+  category: timing
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Functional virtual timing only.
+  faulty_asset: benchmarks/cases/06-timer-wrap/faulty.yaml
+  fixed_asset: benchmarks/cases/06-timer-wrap/fixed.yaml
+  experiment: benchmarks/cases/06-timer-wrap/fixed.yaml
+  faulty_experiment: benchmarks/cases/06-timer-wrap/faulty.yaml
+  fixed_experiment: benchmarks/cases/06-timer-wrap/fixed.yaml
+  causal_chain:
+  - counter wraps
+  - signed/branch elapsed math fails
+  - deadline is misclassified
+  seed: 1006
+- id: 7
+  slug: uart-framing
+  title: UART baud rate or frame mismatch
+  category: serial_bus
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Protocol behavior without analog signal integrity.
+  faulty_asset: benchmarks/cases/07-uart-framing/faulty.yaml
+  fixed_asset: benchmarks/cases/07-uart-framing/fixed.yaml
+  experiment: benchmarks/cases/07-uart-framing/fixed.yaml
+  faulty_experiment: benchmarks/cases/07-uart-framing/faulty.yaml
+  fixed_experiment: benchmarks/cases/07-uart-framing/fixed.yaml
+  causal_chain:
+  - baud/frame mismatch
+  - receiver framing fails
+  - UART assertion fails
+  seed: 1007
+- id: 8
+  slug: uart-isr-race
+  title: UART ring buffer ISR race and packet loss
+  category: interrupt
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Scheduler and interrupt models must be validated.
+  faulty_asset: benchmarks/cases/08-uart-isr-race/faulty.yaml
+  fixed_asset: benchmarks/cases/08-uart-isr-race/fixed.yaml
+  experiment: benchmarks/cases/08-uart-isr-race/fixed.yaml
+  faulty_experiment: benchmarks/cases/08-uart-isr-race/faulty.yaml
+  fixed_experiment: benchmarks/cases/08-uart-isr-race/fixed.yaml
+  causal_chain:
+  - ISR races ring head
+  - unread byte overwritten
+  - packet loss is observed
+  seed: 1008
+- id: 9
+  slug: irq-starvation
+  title: IRQ priority starvation
+  category: interrupt
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Interrupt timing is model-dependent.
+  faulty_asset: benchmarks/cases/09-irq-starvation/faulty.yaml
+  fixed_asset: benchmarks/cases/09-irq-starvation/fixed.yaml
+  experiment: benchmarks/cases/09-irq-starvation/fixed.yaml
+  faulty_experiment: benchmarks/cases/09-irq-starvation/faulty.yaml
+  fixed_experiment: benchmarks/cases/09-irq-starvation/fixed.yaml
+  causal_chain:
+  - IRQ priority unbounded
+  - control task starved
+  - deadline is missed
+  seed: 1009
+- id: 10
+  slug: dma-completion-race
+  title: DMA completion interrupt race
+  category: dma
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Requires peripheral and DMA conformance tests.
+  faulty_asset: benchmarks/cases/10-dma-completion-race/faulty.yaml
+  fixed_asset: benchmarks/cases/10-dma-completion-race/fixed.yaml
+  experiment: benchmarks/cases/10-dma-completion-race/fixed.yaml
+  faulty_experiment: benchmarks/cases/10-dma-completion-race/faulty.yaml
+  fixed_experiment: benchmarks/cases/10-dma-completion-race/fixed.yaml
+  causal_chain:
+  - DMA flag races consumer
+  - completion is lost
+  - transfer does not complete
+  seed: 1010
+- id: 11
+  slug: i2c-recovery
+  title: I2C NACK, bus busy, and recovery failure
+  category: serial_bus
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Digital protocol only; rise time is not represented.
+  faulty_asset: benchmarks/cases/11-i2c-recovery/faulty.yaml
+  fixed_asset: benchmarks/cases/11-i2c-recovery/fixed.yaml
+  experiment: benchmarks/cases/11-i2c-recovery/fixed.yaml
+  faulty_experiment: benchmarks/cases/11-i2c-recovery/faulty.yaml
+  fixed_experiment: benchmarks/cases/11-i2c-recovery/fixed.yaml
+  causal_chain:
+  - I2C NACK leaves bus busy
+  - recovery clocks omitted
+  - transaction retries exhaust
+  seed: 1011
+- id: 12
+  slug: spi-mode-crc
+  title: SPI mode or CRC mismatch
+  category: serial_bus
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Digital protocol only.
+  faulty_asset: benchmarks/cases/12-spi-mode-crc/faulty.yaml
+  fixed_asset: benchmarks/cases/12-spi-mode-crc/fixed.yaml
+  experiment: benchmarks/cases/12-spi-mode-crc/fixed.yaml
+  faulty_experiment: benchmarks/cases/12-spi-mode-crc/faulty.yaml
+  fixed_experiment: benchmarks/cases/12-spi-mode-crc/fixed.yaml
+  causal_chain:
+  - SPI mode/CRC differs
+  - frame verification fails
+  - sample is rejected
+  seed: 1012
+- id: 13
+  slug: rtos-deadlock
+  title: RTOS mutex deadlock
+  category: rtos
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: RTOS binary and virtual CPU behavior only.
+  faulty_asset: benchmarks/cases/13-rtos-deadlock/faulty.yaml
+  fixed_asset: benchmarks/cases/13-rtos-deadlock/fixed.yaml
+  experiment: benchmarks/cases/13-rtos-deadlock/fixed.yaml
+  faulty_experiment: benchmarks/cases/13-rtos-deadlock/faulty.yaml
+  fixed_experiment: benchmarks/cases/13-rtos-deadlock/fixed.yaml
+  causal_chain:
+  - mutex order ABBA
+  - tasks block cyclically
+  - forward progress stops
+  seed: 1013
+- id: 14
+  slug: priority-inversion
+  title: Priority inversion and deadline miss
+  category: rtos
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Deadline claims require calibrated time models.
+  faulty_asset: benchmarks/cases/14-priority-inversion/faulty.yaml
+  fixed_asset: benchmarks/cases/14-priority-inversion/fixed.yaml
+  experiment: benchmarks/cases/14-priority-inversion/fixed.yaml
+  faulty_experiment: benchmarks/cases/14-priority-inversion/faulty.yaml
+  fixed_experiment: benchmarks/cases/14-priority-inversion/fixed.yaml
+  causal_chain:
+  - low task holds lock
+  - high task waits
+  - medium task causes deadline miss
+  seed: 1014
+- id: 15
+  slug: stack-hardfault
+  title: Stack overflow, HardFault, and crash localization
+  category: memory
+  backends:
+  - native
+  - renode
+  readiness: executable
+  fidelity_boundary: Crash localization does not prove absence of other faults.
+  faulty_asset: benchmarks/cases/15-stack-hardfault/faulty.yaml
+  fixed_asset: benchmarks/cases/15-stack-hardfault/fixed.yaml
+  experiment: benchmarks/cases/15-stack-hardfault/fixed.yaml
+  faulty_experiment: benchmarks/cases/15-stack-hardfault/faulty.yaml
+  fixed_experiment: benchmarks/cases/15-stack-hardfault/fixed.yaml
+  causal_chain:
+  - stack allocation unbounded
+  - guard trips
+  - HardFault evidence is captured
+  seed: 1015
+- id: 16
+  slug: watchdog-loop
+  title: Watchdog reset loop
+  category: boot
+  backends:
+  - renode
+  readiness: executable
+  fidelity_boundary: Watchdog model conformance is required.
+  faulty_asset: benchmarks/cases/16-watchdog-loop/faulty.yaml
+  fixed_asset: benchmarks/cases/16-watchdog-loop/fixed.yaml
+  experiment: benchmarks/cases/16-watchdog-loop/fixed.yaml
+  faulty_experiment: benchmarks/cases/16-watchdog-loop/faulty.yaml
+  fixed_experiment: benchmarks/cases/16-watchdog-loop/fixed.yaml
+  causal_chain:
+  - health check never reaches feed
+  - watchdog resets
+  - boot loop repeats
+  seed: 1016
+- id: 17
+  slug: ota-power-loss
+  title: Signed OTA power-loss corruption and anti-rollback recovery
+  category: update
+  backends:
+  - renode
+  - ngspice
+  readiness: executable
+  fidelity_boundary: Storage and brownout models are both model-dependent.
+  faulty_asset: benchmarks/cases/17-ota-power-loss/faulty.yaml
+  fixed_asset: benchmarks/cases/17-ota-power-loss/fixed.yaml
+  experiment: benchmarks/cases/17-ota-power-loss/fixed.yaml
+  faulty_experiment: benchmarks/cases/17-ota-power-loss/faulty.yaml
+  fixed_experiment: benchmarks/cases/17-ota-power-loss/fixed.yaml
+  causal_chain:
+  - power loss interrupts OTA
+  - active image corrupts
+  - journal recovery determines boot
+  seed: 1017
+- id: 18
+  slug: ldo-dropout
+  title: LDO load-step dropout
+  category: analog
+  backends:
+  - ngspice
+  readiness: executable
+  fidelity_boundary: Valid only for the selected component model and conditions.
+  faulty_asset: benchmarks/cases/18-ldo-dropout/faulty.yaml
+  fixed_asset: benchmarks/cases/18-ldo-dropout/fixed.yaml
+  experiment: benchmarks/cases/18-ldo-dropout/fixed.yaml
+  faulty_experiment: benchmarks/cases/18-ldo-dropout/faulty.yaml
+  fixed_experiment: benchmarks/cases/18-ldo-dropout/fixed.yaml
+  causal_chain:
+  - load step exceeds headroom
+  - LDO enters dropout
+  - rail minimum crosses limit
+  seed: 1018
+- id: 19
+  slug: decoupling-brownout
+  title: Insufficient decoupling causes brownout reset
+  category: power
+  backends:
+  - ngspice
+  - renode
+  readiness: executable
+  fidelity_boundary: PCB parasitics remain unverified unless included and calibrated.
+  faulty_asset: benchmarks/cases/19-decoupling-brownout/faulty.yaml
+  fixed_asset: benchmarks/cases/19-decoupling-brownout/fixed.yaml
+  experiment: benchmarks/cases/19-decoupling-brownout/fixed.yaml
+  faulty_experiment: benchmarks/cases/19-decoupling-brownout/faulty.yaml
+  fixed_experiment: benchmarks/cases/19-decoupling-brownout/fixed.yaml
+  causal_chain:
+  - decoupling is insufficient
+  - rail transient crosses BOR
+  - MCU reset is requested
+  seed: 1019
+- id: 20
+  slug: sleep-battery-life
+  title: Sleep leakage and duty-cycle battery-life miss
+  category: power
+  backends:
+  - ngspice
+  - openmodelica
+  readiness: executable
+  fidelity_boundary: Battery and leakage models require hardware calibration.
+  faulty_asset: benchmarks/cases/20-sleep-battery-life/faulty.yaml
+  fixed_asset: benchmarks/cases/20-sleep-battery-life/fixed.yaml
+  experiment: benchmarks/cases/20-sleep-battery-life/fixed.yaml
+  faulty_experiment: benchmarks/cases/20-sleep-battery-life/faulty.yaml
+  fixed_experiment: benchmarks/cases/20-sleep-battery-life/fixed.yaml
+  causal_chain:
+  - sleep leakage is high
+  - average current rises
+  - battery-life target is missed
+  seed: 1020
+- id: 21
+  slug: thermal-protection
+  title: Heating causes throttling, drift, or protection
+  category: thermal
+  backends:
+  - openmodelica
+  - renode
+  readiness: executable
+  fidelity_boundary: Thermal geometry and material envelope required.
+  faulty_asset: benchmarks/cases/21-thermal-protection/faulty.yaml
+  fixed_asset: benchmarks/cases/21-thermal-protection/fixed.yaml
+  experiment: benchmarks/cases/21-thermal-protection/fixed.yaml
+  faulty_experiment: benchmarks/cases/21-thermal-protection/faulty.yaml
+  fixed_experiment: benchmarks/cases/21-thermal-protection/fixed.yaml
+  causal_chain:
+  - thermal resistance is high
+  - temperature rises
+  - protection/throttling is late
+  seed: 1021
+- id: 22
+  slug: 802154-interference
+  title: 802.15.4 interference raises retry, loss, and energy
+  category: network
+  backends:
+  - ns3
+  - openmodelica
+  readiness: executable
+  fidelity_boundary: Channel and radio energy models are scenario-specific.
+  faulty_asset: benchmarks/cases/22-802154-interference/faulty.yaml
+  fixed_asset: benchmarks/cases/22-802154-interference/fixed.yaml
+  experiment: benchmarks/cases/22-802154-interference/fixed.yaml
+  faulty_experiment: benchmarks/cases/22-802154-interference/faulty.yaml
+  fixed_experiment: benchmarks/cases/22-802154-interference/fixed.yaml
+  causal_chain:
+  - 802.15.4 interference rises
+  - retry count increases
+  - loss and energy rise
+  seed: 1022
+- id: 23
+  slug: wifi-reconnect
+  title: Wi-Fi latency, partition, and reconnect policy
+  category: network
+  backends:
+  - ns3
+  - renode
+  readiness: executable
+  fidelity_boundary: RF front-end and external infrastructure are not implied.
+  faulty_asset: benchmarks/cases/23-wifi-reconnect/faulty.yaml
+  fixed_asset: benchmarks/cases/23-wifi-reconnect/fixed.yaml
+  experiment: benchmarks/cases/23-wifi-reconnect/fixed.yaml
+  faulty_experiment: benchmarks/cases/23-wifi-reconnect/faulty.yaml
+  fixed_experiment: benchmarks/cases/23-wifi-reconnect/fixed.yaml
+  causal_chain:
+  - network partition occurs
+  - reconnect retries are unbounded
+  - policy assertion fails
+  seed: 1023
+- id: 24
+  slug: antenna-cross-domain
+  title: Antenna detuning drives retries, power, and heat
+  category: electromagnetic
+  backends:
+  - openems
+  - ns3
+  - renode
+  - ngspice
+  - openmodelica
+  readiness: executable
+  fidelity_boundary: Five-backend production evidence and hardware calibration are
+    required.
+  faulty_asset: benchmarks/cases/24-antenna-cross-domain/faulty.yaml
+  fixed_asset: benchmarks/cases/24-antenna-cross-domain/fixed.yaml
+  experiment: benchmarks/cases/24-antenna-cross-domain/fixed.yaml
+  faulty_experiment: benchmarks/cases/24-antenna-cross-domain/faulty.yaml
+  fixed_experiment: benchmarks/cases/24-antenna-cross-domain/fixed.yaml
+  causal_chain:
+  - antenna geometry detunes
+  - RF loss raises network retries
+  - firmware retry policy raises current
+  - supply and thermal loads rise
+  seed: 1024

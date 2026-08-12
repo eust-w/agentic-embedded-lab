@@ -1,0 +1,61 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "fidelity_ref": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fidelity Ref"
+    },
+    "parent_sequence": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Sequence"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "sequence": {
+      "minimum": 0,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "virtual_time_us": {
+      "minimum": 0,
+      "title": "Virtual Time Us",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "sequence",
+    "virtual_time_us",
+    "source",
+    "type"
+  ],
+  "title": "Event",
+  "type": "object"
+}

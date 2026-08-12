@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "BackendName": {
+      "enum": [
+        "native",
+        "renode",
+        "ngspice",
+        "openmodelica",
+        "omsimulator",
+        "ns3",
+        "openems",
+        "hardware",
+        "synthetic"
+      ],
+      "title": "BackendName",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "backend": {
+      "$ref": "#/$defs/BackendName"
+    },
+    "datasheets": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Datasheets",
+      "type": "array"
+    },
+    "drivers": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Drivers",
+      "type": "array"
+    },
+    "generator": {
+      "default": "ael.svd-importer/v1",
+      "title": "Generator",
+      "type": "string"
+    },
+    "hardware_traces": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Hardware Traces",
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "ModelGenerationRequest",
+      "default": "ModelGenerationRequest",
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "reference_models": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reference Models",
+      "type": "array"
+    },
+    "svd": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Svd"
+    },
+    "systemrdl": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Systemrdl"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "version",
+    "backend"
+  ],
+  "title": "ModelGenerationRequest",
+  "type": "object"
+}

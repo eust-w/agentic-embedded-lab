@@ -1,0 +1,13 @@
+AEL functional power-path transient model
+.param source_resistance='0.1 + AEL_fault_scale*8'
+.param capacitance='47u/(1 + AEL_fault_scale*20)'
+Vsource source 0 3.3
+Rsource source rail {source_resistance}
+Cdec rail 0 {capacitance} ic=3.3
+Iload rail 0 PWL(0 0.002 100u {AEL_load_microamp*1u+AEL_rf_retries*0.004} 3m {AEL_load_microamp*1u+AEL_rf_retries*0.004})
+.tran 2u 4m uic
+.measure tran ael_supply_voltage MIN v(rail) FROM=100u TO=4m
+.measure tran ael_peak_current MAX i(Vsource) FROM=100u TO=4m
+.measure tran ael_power AVG par('-v(source)*i(Vsource)') FROM=100u TO=4m
+.measure tran ael_failure PARAM='ael_supply_voltage < 2.7'
+.end

@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentic-embedded-lab"
+version = "0.1.0.dev0"
+description = "Agent-native experimentation and validation control plane for embedded systems"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Agentic Embedded Lab contributors" }]
+dependencies = [
+  "pydantic>=2.12,<3",
+  "PyYAML>=6.0.2,<7",
+  "typer>=0.16,<1",
+]
+
+[project.optional-dependencies]
+server = [
+  "boto3>=1.40,<2",
+  "fastapi>=0.116,<1",
+  "psycopg[binary]>=3.2,<4",
+  "PyJWT[crypto]>=2.10,<3",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn>=0.35,<1",
+]
+mcp = ["mcp>=1.12,<2"]
+worker = ["httpx>=0.28,<1", "pyvisa>=1.15,<2", "joulescope>=1.3,<2"]
+modeling = ["systemrdl-compiler>=1.30,<2"]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+ael = "ael.cli:app"
+ael-api = "ael.api:main"
+ael-mcp = "ael.mcp_server:main"
+ael-worker = "ael.worker:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ael"]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.coverage.run]
+source = ["ael"]
+omit = [
+  "src/ael/__main__.py",
+  "src/ael/cli.py",
+  "src/ael/schemas.py",
+  "src/ael/worker.py",
+  "src/ael/lab.py",
+  "src/ael/storage_server.py",
+  "src/ael/adapters/process.py",
+  "src/ael/backend_workers/*",
+]
+
+[tool.coverage.report]
+fail_under = 75
+show_missing = true

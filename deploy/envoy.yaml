@@ -1,0 +1,46 @@
+static_resources:
+  listeners:
+    - name: ael_mtls
+      address: {socket_address: {address: 0.0.0.0, port_value: 8443}}
+      filter_chains:
+        - transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              require_client_certificate: true
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain: {filename: /certs/server.crt}
+                    private_key: {filename: /certs/server.key}
+                validation_context: {trusted_ca: {filename: /certs/worker-ca.crt}}
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ael
+                route_config:
+                  name: local
+                  virtual_hosts:
+                    - name: ael
+                      domains: ["*"]
+                      routes:
+                        - match: {prefix: "/"}
+                          route: {cluster: control_plane}
+                request_headers_to_add:
+                  - header:
+                      key: X-Client-Cert-SHA256
+                      value: "%DOWNSTREAM_PEER_FINGERPRINT_256%"
+                    append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config: {"@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router}
+  clusters:
+    - name: control_plane
+      connect_timeout: 2s
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: control_plane
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address: {socket_address: {address: control-plane, port_value: 8765}}

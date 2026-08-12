@@ -1,0 +1,92 @@
+name: release-candidate-software-gates
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  workflow_dispatch:
+
+jobs:
+  server-worker-security:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_DB: ael
+          POSTGRES_USER: ael
+          POSTGRES_PASSWORD: test-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ael"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
+      - name: Start S3-compatible evidence store
+        run: |
+          docker run -d --name ael-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=test-only \
+            -e MINIO_ROOT_PASSWORD=test-only-secret \
+            quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:9000/minio/health/live && break
+            sleep 1
+          done
+          docker run --rm --network host --entrypoint sh \
+            quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z \
+            sh -c 'mc alias set local http://127.0.0.1:9000 test-only test-only-secret && mc mb local/ael-test'
+      - run: pytest tests/test_worker.py tests/test_server_storage.py tests/test_security.py tests/test_api.py
+      - name: PostgreSQL/S3 semantic experiment
+        env:
+          AEL_DATABASE_URL: postgresql+psycopg://ael:test-only@127.0.0.1:5432/ael
+          AEL_S3_BUCKET: ael-test
+          AEL_S3_ENDPOINT: http://127.0.0.1:9000
+          AWS_ACCESS_KEY_ID: test-only
+          AWS_SECRET_ACCESS_KEY: test-only-secret
+        run: ael run examples/experiments/synthetic-smoke.yaml
+      - name: Validate compose and Helm rendering
+        run: |
+          docker compose -f deploy/compose.yaml config >/dev/null
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm lint deploy/helm/ael
+          helm template ael deploy/helm/ael >/tmp/ael-manifests.yaml
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: ael-sbom.cdx.json
+      - name: Generate Python license inventory
+        run: |
+          python -m pip install pip-licenses
+          pip-licenses --format=json --with-urls --with-license-file \
+            >python-licenses.json
+      - uses: sigstore/cosign-installer@v3
+      - name: Keyless sign and verify the SBOM
+        run: |
+          cosign sign-blob --yes --bundle ael-sbom.sigstore.json ael-sbom.cdx.json
+          cosign verify-blob \
+            --bundle ael-sbom.sigstore.json \
+            --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml@refs/heads/.*" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            ael-sbom.cdx.json
+      - name: Verify production remains blocked
+        run: |
+          if ael release check --profile production >production-gate.json; then
+            exit 1
+          fi
+          grep -F "instrument calibration" production-gate.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-software-evidence
+          path: |
+            ael-sbom.cdx.json
+            ael-sbom.sigstore.json
+            python-licenses.json
+            production-gate.json
+            /tmp/ael-manifests.yaml
+          retention-days: 30

@@ -1,0 +1,22 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: ns3-network-reference
+components:
+  - id: network
+    type: deterministic-network-scenario
+    backend: ns3
+    model: benchmarks/models/ns3/ael-network.cc
+    step_us: 1000
+    ports:
+      - {name: fault_scale, direction: input, data_type: real, unit: "1"}
+      - {name: rf_loss_db, direction: input, data_type: real, unit: dB}
+      - {name: failure, direction: output, data_type: real, unit: "1"}
+      - {name: packet_loss, direction: output, data_type: real, unit: "1"}
+      - {name: retries, direction: output, data_type: real, unit: "1"}
+      - {name: latency_ms, direction: output, data_type: real, unit: ms}
+    properties:
+      program: scratch/ael-network
+fidelity:
+  network: functional-scenario
+  radio_channel: uncalibrated
+  hardware: unverified

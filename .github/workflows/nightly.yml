@@ -1,0 +1,79 @@
+name: nightly-simulation
+
+on:
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  simulation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          toolchains: arm-zephyr-eabi:riscv64-zephyr-elf
+          sdk-version: 1.0.1
+      - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
+      - run: scripts/build-firmware.sh
+      - name: Build pinned backend images
+        run: |
+          for backend in renode ngspice openmodelica ns3 openems; do
+            docker build --file "containers/${backend}/Dockerfile" --tag "ael-${backend}:ci" .
+          done
+      - name: Execute 24 faulty/fixed pairs
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_NGSPICE_IMAGE: ael-ngspice:ci
+          AEL_OPENMODELICA_IMAGE: ael-openmodelica:ci
+          AEL_OMSIMULATOR_IMAGE: ael-openmodelica:ci
+          AEL_NS3_IMAGE: ael-ns3:ci
+          AEL_OPENEMS_IMAGE: ael-openems:ci
+          AEL_OCI_RUNTIME: docker
+        run: ael benchmark run --source-revision "$GITHUB_SHA"
+      - name: Boot RISC-V Zephyr reference in Renode
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_OCI_RUNTIME: docker
+        run: ael run benchmarks/experiments/riscv-smoke.yaml
+      - name: Execute FMI 2.0/SSP five-domain acceptance
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_NGSPICE_IMAGE: ael-ngspice:ci
+          AEL_OPENMODELICA_IMAGE: ael-openmodelica:ci
+          AEL_NS3_IMAGE: ael-ns3:ci
+          AEL_OPENEMS_IMAGE: ael-openems:ci
+          AEL_OCI_RUNTIME: docker
+        run: |
+          docker run --rm --entrypoint=OMSimulator ael-openmodelica:ci --version
+          scripts/run-fmi-acceptance.py --om-simulator scripts/omsimulator-container
+      - name: Check 20-run deterministic trace
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_NGSPICE_IMAGE: ael-ngspice:ci
+          AEL_OPENMODELICA_IMAGE: ael-openmodelica:ci
+          AEL_NS3_IMAGE: ael-ns3:ci
+          AEL_OPENEMS_IMAGE: ael-openems:ci
+          AEL_OCI_RUNTIME: docker
+        run: scripts/check-determinism.py benchmarks/cases/24-antenna-cross-domain/fixed.yaml --warmup --repeats 20
+      - run: ael release check --profile simulation
+      - name: Production gate must remain blocked
+        run: |
+          if ael release check --profile production >production-gate.json; then
+            exit 1
+          fi
+          grep -F "hardware differential" production-gate.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-simulation-evidence
+          path: |
+            acceptance/
+            runs/
+            .ael/build/fmi/*.fmu
+            .ael/build/fmi/*.ssp
+            production-gate.json
+          retention-days: 30

@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "WorkerCapability": {
+      "additionalProperties": false,
+      "properties": {
+        "fidelity": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Fidelity",
+          "type": "object"
+        },
+        "kind": {
+          "enum": [
+            "backend",
+            "board",
+            "instrument",
+            "service"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "labels": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Labels",
+          "type": "object"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "kind"
+      ],
+      "title": "WorkerCapability",
+      "type": "object"
+    },
+    "WorkerKind": {
+      "enum": [
+        "simulation",
+        "lab"
+      ],
+      "title": "WorkerKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "agent_version": {
+      "title": "Agent Version",
+      "type": "string"
+    },
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "capabilities": {
+      "items": {
+        "$ref": "#/$defs/WorkerCapability"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "certificate_fingerprint": {
+      "pattern": "^[a-fA-F0-9]{64}$",
+      "title": "Certificate Fingerprint",
+      "type": "string"
+    },
+    "kind": {
+      "const": "WorkerRegistration",
+      "default": "WorkerRegistration",
+      "title": "Kind",
+      "type": "string"
+    },
+    "worker_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$",
+      "title": "Worker Id",
+      "type": "string"
+    },
+    "worker_kind": {
+      "$ref": "#/$defs/WorkerKind"
+    }
+  },
+  "required": [
+    "worker_id",
+    "worker_kind",
+    "capabilities",
+    "agent_version",
+    "certificate_fingerprint"
+  ],
+  "title": "WorkerRegistration",
+  "type": "object"
+}

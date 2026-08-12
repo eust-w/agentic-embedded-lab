@@ -1,0 +1,39 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: 17-ota-power-loss-faulty
+system: benchmarks/systems/power-renode.yaml
+duration_us: 6000
+macro_step_us: 1000
+timeout_s: 300
+seed: 1017
+stimuli:
+- at_us: 0
+  target: mcu.case_id
+  value: 17
+- at_us: 0
+  target: mcu.fixed
+  value: 0
+- at_us: 0
+  target: circuit.fault_scale
+  value: 1.0
+- at_us: 0
+  target: circuit.load_microamp
+  value: 60000.0
+- at_us: 0
+  target: circuit.rf_retries
+  value: 0.0
+assertions:
+- metric: mcu.failure
+  operator: eq
+  expected: 0
+  critical: true
+observables:
+- mcu.failure
+allowed_model_states:
+- conformance_validated
+- hardware_validated
+- production_approved
+tags:
+- benchmark
+- faulty
+- case-17

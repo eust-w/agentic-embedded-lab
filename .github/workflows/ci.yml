@@ -1,0 +1,42 @@
+name: foundation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  foundation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
+      - run: ruff check .
+      - run: pytest --cov=ael --cov-report=term-missing
+      - name: Build FMI 2.0 proxies
+        run: |
+          cmake -S native/fmi-proxies -B .ael/build/fmi -DCMAKE_BUILD_TYPE=Release
+          cmake --build .ael/build/fmi --parallel
+      - run: ael schema export schemas/v1
+      - run: git diff --exit-code -- schemas/v1
+      - run: ael validate examples/experiments/synthetic-smoke.yaml
+      - run: ael run examples/experiments/synthetic-smoke.yaml
+      - run: ael benchmark run --case-id 1 --case-id 2 --case-id 3 --source-revision "$GITHUB_SHA"
+      - run: ael release check --profile foundation
+      - name: Production gate must remain blocked without a Lab
+        run: |
+          if ael release check --profile production >production-gate.json; then
+            echo "production gate unexpectedly passed" >&2
+            exit 1
+          fi
+          grep -F "five reference platforms" production-gate.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: foundation-evidence
+          path: |
+            acceptance/
+            runs/
+            production-gate.json
+          retention-days: 14

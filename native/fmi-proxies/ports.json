@@ -1,0 +1,4 @@
+[
+  {"name": "input0", "direction": "input", "data_type": "real", "unit": "1"},
+  {"name": "output0", "direction": "output", "data_type": "real", "unit": "1"}
+]

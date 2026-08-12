@@ -1,0 +1,193 @@
+{
+  "$defs": {
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_paths": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Paths",
+          "type": "array"
+        },
+        "hardware_validated": {
+          "default": false,
+          "title": "Hardware Validated",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "statement": {
+          "title": "Statement",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ClaimStatus"
+        },
+        "validation_envelope_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Validation Envelope Id"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "status",
+        "evidence_paths"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "ClaimStatus": {
+      "enum": [
+        "unverified",
+        "model_dependent",
+        "simulation_validated",
+        "hardware_validated",
+        "production_approved"
+      ],
+      "title": "ClaimStatus",
+      "type": "string"
+    },
+    "RunStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "passed",
+        "failed",
+        "blocked",
+        "cancelled"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "artifact_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Artifact Hashes",
+      "type": "object"
+    },
+    "assertion_results": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Assertion Results",
+      "type": "array"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "event_count": {
+      "minimum": 0,
+      "title": "Event Count",
+      "type": "integer"
+    },
+    "experiment_hash": {
+      "title": "Experiment Hash",
+      "type": "string"
+    },
+    "fidelity_boundaries": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Fidelity Boundaries",
+      "type": "array"
+    },
+    "kind": {
+      "const": "EvidenceBundle",
+      "default": "EvidenceBundle",
+      "title": "Kind",
+      "type": "string"
+    },
+    "model_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Model Hashes",
+      "type": "object"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "signature": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signature"
+    },
+    "status": {
+      "$ref": "#/$defs/RunStatus"
+    },
+    "system_hash": {
+      "title": "System Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "status",
+    "created_at",
+    "experiment_hash",
+    "system_hash",
+    "event_count"
+  ],
+  "title": "EvidenceBundle",
+  "type": "object"
+}

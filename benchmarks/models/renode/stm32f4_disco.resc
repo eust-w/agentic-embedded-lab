@@ -1,0 +1,3 @@
+using sysbus
+mach create "ael-stm32f4"
+machine LoadPlatformDescription @platforms/boards/stm32f4_discovery.repl
