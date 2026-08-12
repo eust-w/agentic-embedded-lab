@@ -26,6 +26,14 @@ is fixed by administrator configuration. A request cannot supply an executable
 or shell command. OCI execution is read-only, capability-free, network-off and
 resource-bounded; the workspace supplies explicit model and evidence paths.
 
+Renode communication steps do not implicitly serialize a machine snapshot.
+Without an explicit checkpoint the batch worker deterministically replays from
+reset to the requested virtual time, which keeps large XIP mappings out of the
+fast path. `ExperimentSpec.checkpoint_interval_us` creates an explicit Renode
+snapshot at a synchronization boundary and subsequent steps resume from it.
+Reference platform descriptions are vendored without runtime URL fetches so
+the same path works under the mandatory network-off sandbox.
+
 The synthetic adapter exists to test the control plane. It is never eligible
 for simulation-validated, hardware-validated, or production-approved claims.
 

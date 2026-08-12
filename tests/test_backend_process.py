@@ -275,12 +275,14 @@ def test_renode_worker_builds_network_independent_repl_script(
         "script = pathlib.Path(sys.argv[-1]).read_text()\n"
         "assert 'machine LoadPlatformDescription @' in script\n"
         "assert 'cpu PerformanceInMips 320' in script\n"
+        "assert 'cpu PC `sysbus GetSymbolAddress \"__start\"`' in script\n"
         "assert 'include @' not in script\n",
         encoding="utf-8",
     )
     tool.chmod(0o755)
     model = tmp_path / "platform.repl"
     model.write_text("cpu: CPU.RiscV32 @ sysbus\n", encoding="utf-8")
+    (tmp_path / "firmware.elf").write_bytes(b"ELF")
     monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("AEL_RENODE_BIN", str(tool))
     adapter = SubprocessAdapter(BackendName.RENODE, "ael.backend_workers.renode", "1.16.1")
@@ -291,7 +293,11 @@ def test_renode_worker_builds_network_independent_repl_script(
             backend=BackendName.RENODE,
             model="platform.repl",
             step_us=1000,
-            properties={"setup_commands": ["cpu PerformanceInMips 320"]},
+            properties={
+                "setup_commands": ["cpu PerformanceInMips 320"],
+                "post_firmware_commands": ['cpu PC `sysbus GetSymbolAddress "__start"`'],
+                "firmware": "firmware.elf",
+            },
         ),
         seed=1,
     )

@@ -21,6 +21,21 @@ class RenodeWorker(BackendWorker):
     def __init__(self) -> None:
         super().__init__()
         self.renode_snapshot: Path | None = None
+        self.renode_snapshot_time_us = 0
+
+    def _register_io_lines(self) -> list[str]:
+        lines: list[str] = []
+        input_registers = self.component.properties.get("input_registers", {})
+        for name, value in sorted(self.inputs.items()):
+            if name in input_registers:
+                lines.append(f"sysbus WriteDoubleWord {input_registers[name]} {int(value)}")
+        output_registers = self.component.properties.get("output_registers", {})
+        sentinels = self.component.properties.get("output_sentinels", {})
+        for name, value in sorted(sentinels.items()):
+            if name not in output_registers:
+                raise ValueError(f"Renode output sentinel refers to unknown output {name!r}")
+            lines.append(f"sysbus WriteDoubleWord {output_registers[name]} {int(value)}")
+        return lines
 
     def _initialization_lines(self) -> list[str]:
         model = self.model_path()
@@ -41,16 +56,15 @@ class RenodeWorker(BackendWorker):
         firmware = self.property_path("firmware")
         if firmware:
             lines.append(f"sysbus LoadELF @{firmware}")
-        input_registers = self.component.properties.get("input_registers", {})
-        for name, value in sorted(self.inputs.items()):
-            if name in input_registers:
-                lines.append(f"sysbus WriteDoubleWord {input_registers[name]} {int(value)}")
-        output_registers = self.component.properties.get("output_registers", {})
-        sentinels = self.component.properties.get("output_sentinels", {})
-        for name, value in sorted(sentinels.items()):
-            if name not in output_registers:
-                raise ValueError(f"Renode output sentinel refers to unknown output {name!r}")
-            lines.append(f"sysbus WriteDoubleWord {output_registers[name]} {int(value)}")
+            post_firmware_commands = self.component.properties.get(
+                "post_firmware_commands", []
+            )
+            if not isinstance(post_firmware_commands, list) or not all(
+                isinstance(command, str) for command in post_firmware_commands
+            ):
+                raise ValueError("Renode post_firmware_commands must be a list of strings")
+            lines.extend(post_firmware_commands)
+        lines.extend(self._register_io_lines())
         return lines
 
     def step(
@@ -60,7 +74,8 @@ class RenodeWorker(BackendWorker):
         lines: list[str]
         if self.renode_snapshot and self.renode_snapshot.exists():
             lines = [f"Load @{self.renode_snapshot}"]
-            run_us = step_us
+            lines.extend(self._register_io_lines())
+            run_us = self.virtual_time_us + step_us - self.renode_snapshot_time_us
         else:
             # A batch-mode step replays deterministically from reset when no explicit
             # checkpoint exists. This avoids silently checkpointing large mapped
@@ -86,20 +101,30 @@ class RenodeWorker(BackendWorker):
         return outputs, metrics, events, {}
 
     def snapshot(self, destination: Path) -> Path:
-        if self.renode_snapshot and self.renode_snapshot.exists():
+        if (
+            self.renode_snapshot
+            and self.renode_snapshot.exists()
+            and self.renode_snapshot_time_us == self.virtual_time_us
+        ):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(self.renode_snapshot, destination)
             return destination
         if destination.suffix == ".snapshot":
             destination.parent.mkdir(parents=True, exist_ok=True)
             script = self.runtime_dir / "ael-checkpoint.resc"
-            lines = self._initialization_lines()
-            if self.virtual_time_us:
-                lines.append(f'emulation RunFor "{self.virtual_time_us / 1_000_000:.9f}"')
+            if self.renode_snapshot and self.renode_snapshot.exists():
+                lines = [f"Load @{self.renode_snapshot}", *self._register_io_lines()]
+                run_us = self.virtual_time_us - self.renode_snapshot_time_us
+            else:
+                lines = self._initialization_lines()
+                run_us = self.virtual_time_us
+            if run_us:
+                lines.append(f'emulation RunFor "{run_us / 1_000_000:.9f}"')
             lines.extend([f"Save @{destination}", "quit"])
             script.write_text("\n".join(lines) + "\n", encoding="utf-8")
             self.run_tool(["--disable-gui", str(script)])
             self.renode_snapshot = destination
+            self.renode_snapshot_time_us = self.virtual_time_us
             return destination
         return super().snapshot(destination)
 
