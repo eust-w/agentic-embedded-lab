@@ -31,7 +31,23 @@ class RenodeWorker(BackendWorker):
         if self.renode_snapshot and self.renode_snapshot.exists():
             lines.append(f"Load @{self.renode_snapshot}")
         else:
-            lines.append(f"include @{self.model_path()}")
+            model = self.model_path()
+            if model.suffix == ".repl":
+                lines.extend(
+                    [
+                        "using sysbus",
+                        f'mach create "{self.component.id}"',
+                        f"machine LoadPlatformDescription @{model}",
+                    ]
+                )
+                setup_commands = self.component.properties.get("setup_commands", [])
+                if not isinstance(setup_commands, list) or not all(
+                    isinstance(command, str) for command in setup_commands
+                ):
+                    raise ValueError("Renode setup_commands must be a list of strings")
+                lines.extend(setup_commands)
+            else:
+                lines.append(f"include @{model}")
             firmware = self.property_path("firmware")
             if firmware:
                 lines.append(f"sysbus LoadELF @{firmware}")

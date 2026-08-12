@@ -1,6 +1,0 @@
-using sysbus
-mach create "ael-hifive1"
-machine LoadPlatformDescription @platforms/cpus/sifive-fe310.repl
-sysbus Tag <0x10008000 4> "PRCI_HFROSCCFG" 0xFFFFFFFF
-sysbus Tag <0x10008008 4> "PRCI_PLLCFG" 0xFFFFFFFF
-cpu PerformanceInMips 320

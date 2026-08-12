@@ -259,3 +259,42 @@ def test_renode_adapter_uses_agent_readable_register_output(
         assert result.outputs["failure"] == 1
     finally:
         adapter.shutdown()
+
+
+def test_renode_worker_builds_network_independent_repl_script(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "renode"
+    tool.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib, sys\n"
+        "if '-v' in sys.argv or '--version' in sys.argv:\n"
+        "    print('Renode 1.16.1')\n"
+        "    raise SystemExit(0)\n"
+        "script = pathlib.Path(sys.argv[-1]).read_text()\n"
+        "assert 'machine LoadPlatformDescription @' in script\n"
+        "assert 'cpu PerformanceInMips 320' in script\n"
+        "assert 'include @' not in script\n",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    model = tmp_path / "platform.repl"
+    model.write_text("cpu: CPU.RiscV32 @ sysbus\n", encoding="utf-8")
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_RENODE_BIN", str(tool))
+    adapter = SubprocessAdapter(BackendName.RENODE, "ael.backend_workers.renode", "1.16.1")
+    adapter.prepare(
+        SystemComponent(
+            id="mcu",
+            type="test",
+            backend=BackendName.RENODE,
+            model="platform.repl",
+            step_us=1000,
+            properties={"setup_commands": ["cpu PerformanceInMips 320"]},
+        ),
+        seed=1,
+    )
+    try:
+        adapter.step(0, 1000)
+    finally:
+        adapter.shutdown()
