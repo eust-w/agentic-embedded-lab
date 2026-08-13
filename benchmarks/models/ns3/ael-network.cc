@@ -15,9 +15,15 @@ using namespace ns3::lrwpan;
 namespace {
 uint32_t g_received = 0;
 uint32_t g_phyTx = 0;
+uint32_t g_phyRxBegin = 0;
+uint32_t g_phyRxDrop = 0;
+uint32_t g_macRxDrop = 0;
 
 void RxTrace(Ptr<const Packet>) { ++g_received; }
 void TxTrace(Ptr<const Packet>) { ++g_phyTx; }
+void PhyRxBeginTrace(Ptr<const Packet>) { ++g_phyRxBegin; }
+void PhyRxDropTrace(Ptr<const Packet>) { ++g_phyRxDrop; }
+void MacRxDropTrace(Ptr<const Packet>) { ++g_macRxDrop; }
 
 void SendPacket(Ptr<NetDevice> source, Address destination)
 {
@@ -94,6 +100,10 @@ int main(int argc, char* argv[])
         interfererMac->SetPanId(0x1234);
         sourceMac->TraceConnectWithoutContext("MacTx", MakeCallback(&TxTrace));
         receiverMac->SetMcpsDataIndicationCallback(MakeCallback(&DataIndication));
+        receiverMac->TraceConnectWithoutContext("MacRxDrop", MakeCallback(&MacRxDropTrace));
+        auto receiverPhy = DynamicCast<LrWpanNetDevice>(devices.Get(1))->GetPhy();
+        receiverPhy->TraceConnectWithoutContext("PhyRxBegin", MakeCallback(&PhyRxBeginTrace));
+        receiverPhy->TraceConnectWithoutContext("PhyRxDrop", MakeCallback(&PhyRxDropTrace));
         BasicEnergySourceHelper energy;
         energy.Set("BasicEnergySourceInitialEnergyJ", DoubleValue(100.0));
         energy::EnergySourceContainer sources = energy.Install(nodes);
@@ -173,6 +183,9 @@ int main(int argc, char* argv[])
     std::cout << "AEL_EVENT ns3.protocol {\"protocol\":\""
               << (protocol == 0 ? "802.15.4" : "wifi")
               << "\",\"received\":" << g_received << ",\"phy_tx\":" << g_phyTx
+              << ",\"phy_rx_begin\":" << g_phyRxBegin
+              << ",\"phy_rx_drop\":" << g_phyRxDrop
+              << ",\"mac_rx_drop\":" << g_macRxDrop
               << ",\"calibrated\":false}\n";
     Simulator::Destroy();
     return 0;
