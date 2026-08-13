@@ -57,8 +57,8 @@ docker run --rm \
   scripts/build-firmware.sh
 
 .venv/bin/ael benchmark run --source-revision "${revision}"
-scripts/run-fmi-acceptance.py --om-simulator scripts/omsimulator-container
-scripts/check-determinism.py \
+.venv/bin/python scripts/run-fmi-acceptance.py --om-simulator scripts/omsimulator-container
+.venv/bin/python scripts/check-determinism.py \
   benchmarks/cases/24-antenna-cross-domain/fixed.yaml --warmup --repeats 20
 .venv/bin/ael release check --profile simulation
 
@@ -66,8 +66,8 @@ scripts/run-compose-acceptance.sh
 .venv/bin/pytest \
   tests/test_worker.py tests/test_server_storage.py tests/test_security.py \
   tests/test_api.py tests/test_release.py --junitxml=.ael/software-tests.xml
-scripts/build-local-supply-chain-evidence.py --workspace "${workspace}"
-scripts/build-software-acceptance.py \
+.venv/bin/python scripts/build-local-supply-chain-evidence.py --workspace "${workspace}"
+.venv/bin/python scripts/build-software-acceptance.py \
   --workspace "${workspace}" \
   --compose-report .ael/compose-acceptance/report.json \
   --junit .ael/software-tests.xml \
