@@ -66,6 +66,10 @@ int main(int argc, char* argv[])
         LrWpanHelper helper;
         devices = helper.Install(nodes);
         helper.CreateAssociatedPan(devices, 0x1234);
+        auto sourceMac = DynamicCast<LrWpanNetDevice>(devices.Get(0))->GetMac();
+        auto receiverMac = DynamicCast<LrWpanNetDevice>(devices.Get(1))->GetMac();
+        sourceMac->TraceConnectWithoutContext("MacTx", MakeCallback(&TxTrace));
+        receiverMac->TraceConnectWithoutContext("MacRx", MakeCallback(&RxTrace));
         BasicEnergySourceHelper energy;
         energy.Set("BasicEnergySourceInitialEnergyJ", DoubleValue(100.0));
         energy::EnergySourceContainer sources = energy.Install(nodes);
@@ -89,10 +93,11 @@ int main(int argc, char* argv[])
         WifiMacHelper mac;
         mac.SetType("ns3::AdhocWifiMac");
         devices = wifi.Install(phy, mac, nodes);
+        auto sourceMac = DynamicCast<WifiNetDevice>(devices.Get(0))->GetMac();
+        auto receiverMac = DynamicCast<WifiNetDevice>(devices.Get(1))->GetMac();
+        sourceMac->TraceConnectWithoutContext("MacTx", MakeCallback(&TxTrace));
+        receiverMac->TraceConnectWithoutContext("MacRx", MakeCallback(&RxTrace));
     }
-
-    devices.Get(1)->TraceConnectWithoutContext("MacRx", MakeCallback(&RxTrace));
-    devices.Get(0)->TraceConnectWithoutContext("MacTx", MakeCallback(&TxTrace));
     constexpr uint32_t packets = 20;
     for (uint32_t index = 0; index < packets; ++index)
     {

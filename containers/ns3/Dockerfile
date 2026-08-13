@@ -37,7 +37,8 @@ ENV AEL_NS3_BIN=/usr/local/bin/ns3 AEL_WORKSPACE=/workspace \
     AEL_NS3_PRECOMPILED=/opt/ael-bin/ael-network \
     AEL_NS3_MODEL_SHA256=/opt/ael-bin/ael-network.sha256 \
     LD_LIBRARY_PATH=/opt/ns-${NS3_VERSION}/build/lib
-RUN /opt/ael-bin/ael-network --stopUs=1000 --protocol=0 \
-      --interference_dbm=-95 --partition_ms=0 --retry_limit=8 \
-      | grep -F "AEL_METRIC failure=0"
+RUN output="$(/opt/ael-bin/ael-network --stopUs=1000 --protocol=0 \
+      --interference_dbm=-95 --partition_ms=0 --retry_limit=8)" \
+    && printf '%s\n' "${output}" \
+    && printf '%s\n' "${output}" | grep -F "AEL_METRIC failure=0"
 ENTRYPOINT ["python3", "-m", "ael.backend_workers.ns3"]
