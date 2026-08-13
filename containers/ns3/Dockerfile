@@ -2,9 +2,19 @@
 FROM ubuntu:24.04 AS build
 ARG NS3_VERSION=3.47
 ARG AEL_DOWNLOAD_PROXY
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      build-essential bzip2 ca-certificates cmake curl ninja-build python3 \
-    && rm -rf /var/lib/apt/lists/*
+ARG AEL_APT_MIRROR=http://ports.ubuntu.com/ubuntu-ports
+RUN sed -i "s|http://ports.ubuntu.com/ubuntu-ports|${AEL_APT_MIRROR}|g" \
+      /etc/apt/sources.list.d/ubuntu.sources
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get -o Acquire::Retries=8 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get \
+      -o Acquire::Retries=8 \
+      -o Acquire::http::Timeout=60 \
+      -o Acquire::https::Timeout=60 \
+      -o Binary::apt::APT::Keep-Downloaded-Packages=true \
+      install -y --no-install-recommends \
+        build-essential bzip2 ca-certificates cmake curl ninja-build python3
 RUN if [ -n "${AEL_DOWNLOAD_PROXY}" ]; then export HTTPS_PROXY="${AEL_DOWNLOAD_PROXY}"; fi \
     && curl --fail --location --retry 6 --retry-all-errors --retry-delay 5 \
       --connect-timeout 20 --max-time 600 \
@@ -26,9 +36,18 @@ RUN root="/opt/ns-allinone-${NS3_VERSION}/ns-${NS3_VERSION}" \
     && sha256sum /tmp/ael-network.cc | cut -d' ' -f1 > /opt/ael-bin/ael-network.sha256
 FROM ubuntu:24.04
 ARG NS3_VERSION=3.47
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      libstdc++6 python3 python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+ARG AEL_APT_MIRROR=http://ports.ubuntu.com/ubuntu-ports
+RUN sed -i "s|http://ports.ubuntu.com/ubuntu-ports|${AEL_APT_MIRROR}|g" \
+      /etc/apt/sources.list.d/ubuntu.sources
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get -o Acquire::Retries=8 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get \
+      -o Acquire::Retries=8 \
+      -o Acquire::http::Timeout=60 \
+      -o Acquire::https::Timeout=60 \
+      -o Binary::apt::APT::Keep-Downloaded-Packages=true \
+      install -y --no-install-recommends libstdc++6 python3 python3-pip
 COPY --from=build "/opt/ns-allinone-${NS3_VERSION}/ns-${NS3_VERSION}" "/opt/ns-${NS3_VERSION}"
 COPY --from=build /opt/ael-bin /opt/ael-bin
 RUN printf '%s\n' "${NS3_VERSION}" > "/opt/ns-${NS3_VERSION}/.ael-version" \

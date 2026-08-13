@@ -22,23 +22,24 @@ export AEL_OPENEMS_IMAGE=ael-openems:local
 
 docker_build_args=()
 docker_build_proxy="${AEL_DOCKER_BUILD_PROXY:-}"
-if [[ -z "${docker_build_proxy}" ]] && command -v colima >/dev/null 2>&1; then
-  docker_build_proxy="$(colima ssh -- printenv HTTPS_PROXY 2>/dev/null || true)"
-fi
+docker_apt_mirror="${AEL_DOCKER_APT_MIRROR:-http://mirrors.aliyun.com/ubuntu-ports}"
 if [[ -n "${docker_build_proxy}" ]]; then
   docker_build_args+=(
     --build-arg "HTTP_PROXY=${docker_build_proxy}"
     --build-arg "HTTPS_PROXY=${docker_build_proxy}"
   )
 fi
+docker_build_args+=(--build-arg "AEL_APT_MIRROR=${docker_apt_mirror}")
 
-for backend in zephyr renode ngspice openmodelica ns3 openems; do
-  docker build \
-    "${docker_build_args[@]}" \
-    --file "containers/${backend}/Dockerfile" \
-    --tag "ael-${backend}:local" \
-    .
-done
+if [[ "${AEL_SKIP_IMAGE_BUILD:-0}" != "1" ]]; then
+  for backend in zephyr renode ngspice openmodelica ns3 openems; do
+    docker build \
+      "${docker_build_args[@]}" \
+      --file "containers/${backend}/Dockerfile" \
+      --tag "ael-${backend}:local" \
+      .
+  done
+fi
 
 docker run --rm \
   --user="$(id -u):$(id -g)" \
