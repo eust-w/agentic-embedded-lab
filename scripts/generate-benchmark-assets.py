@@ -348,7 +348,13 @@ def render_experiment(case: dict[str, object], fixed: bool) -> dict[str, object]
         "kind": "ExperimentSpec",
         "name": f"{case_id:02d}-{case['slug']}-{'fixed' if fixed else 'faulty'}",
         "system": system_for(case_id, fixed),
-        "duration_us": 6000 if case_id in {17, 19, 21, 23, 24} else 3000,
+        "duration_us": (
+            1000
+            if case_id in {1, 2, 3}
+            else 6000
+            if case_id in {17, 19, 21, 23, 24}
+            else 3000
+        ),
         "macro_step_us": 1000,
         "timeout_s": 1800 if case_id == 24 else 300,
         "seed": 1000 + case_id,

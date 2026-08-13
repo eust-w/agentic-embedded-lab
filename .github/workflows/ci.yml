@@ -51,7 +51,16 @@ jobs:
       - run: git diff --exit-code -- schemas/v1
       - run: ael validate examples/experiments/synthetic-smoke.yaml
       - run: ael run examples/experiments/synthetic-smoke.yaml
-      - run: ael benchmark run --case-id 1 --case-id 2 --case-id 3 --source-revision "$GITHUB_SHA"
+      - name: Run real build-mechanism benchmark subset
+        run: |
+          if ! ael benchmark run --case-id 1 --case-id 2 --case-id 3 \
+            --source-revision "$GITHUB_SHA"; then
+            for evidence in acceptance/evidence/0{1,2,3}-*.json; do
+              echo "=== ${evidence} ==="
+              cat "${evidence}"
+            done
+            exit 1
+          fi
       - run: ael release check --profile foundation
       - name: Production gate must remain blocked without a Lab
         run: |
@@ -61,6 +70,7 @@ jobs:
           fi
           grep -F "five reference platforms" production-gate.json
       - uses: actions/upload-artifact@v6
+        if: always()
         with:
           name: foundation-evidence
           path: |
