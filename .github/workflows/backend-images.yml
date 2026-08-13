@@ -27,7 +27,7 @@ jobs:
       matrix:
         backend: [renode, ngspice, openmodelica, ns3, openems]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - uses: docker/build-push-action@v7
         with:
@@ -77,7 +77,7 @@ jobs:
           assert step["metrics"]["battery_hours"] > 5000.0, step
           PY
           fi
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ${{ matrix.backend }}-probe
