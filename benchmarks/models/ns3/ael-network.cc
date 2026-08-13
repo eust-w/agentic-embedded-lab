@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <vector>
 
 using namespace ns3;
 
@@ -59,18 +60,23 @@ int main(int argc, char* argv[])
     SetPosition(nodes.Get(2), interferenceDbm > -60.0 ? 0.5 : 500.0);
 
     NetDeviceContainer devices;
+    std::vector<Ptr<energy::SimpleDeviceEnergyModel>> energyModels;
     if (protocol == 0)
     {
         LrWpanHelper helper;
         devices = helper.Install(nodes);
-        helper.AssociateToPan(devices, 0x1234);
+        helper.CreateAssociatedPan(devices, 0x1234);
         BasicEnergySourceHelper energy;
         energy.Set("BasicEnergySourceInitialEnergyJ", DoubleValue(100.0));
-        EnergySourceContainer sources = energy.Install(nodes);
-        LrWpanRadioEnergyModelHelper radio;
+        energy::EnergySourceContainer sources = energy.Install(nodes);
         for (uint32_t index = 0; index < devices.GetN(); ++index)
         {
-            radio.Install(devices.Get(index), sources.Get(index));
+            auto model = CreateObject<energy::SimpleDeviceEnergyModel>();
+            model->SetEnergySource(sources.Get(index));
+            model->SetNode(nodes.Get(index));
+            model->SetCurrentA(index == 2 ? 0.020 : 0.012);
+            sources.Get(index)->AppendDeviceEnergyModel(model);
+            energyModels.push_back(model);
         }
     }
     else
@@ -108,9 +114,15 @@ int main(int argc, char* argv[])
     const uint32_t retries = g_phyTx > packets ? g_phyTx - packets : packets - g_received;
     const double latencyMs = partitionMs > 0.0 ? partitionMs + 10.0 : 10.0 + retries;
     const double failure = (g_received < packets || retries > retryLimit) ? 1.0 : 0.0;
+    double energyJ = 0.0;
+    for (const auto& model : energyModels)
+    {
+        energyJ += model->GetTotalEnergyConsumption();
+    }
     std::cout << "AEL_METRIC packet_loss=" << std::clamp(packetLoss, 0.0, 1.0) << "\n";
     std::cout << "AEL_METRIC retries=" << retries << "\n";
     std::cout << "AEL_METRIC latency_ms=" << latencyMs << "\n";
+    std::cout << "AEL_METRIC energy_j=" << energyJ << "\n";
     std::cout << "AEL_METRIC failure=" << failure << "\n";
     std::cout << "AEL_EVENT ns3.protocol {\"protocol\":\""
               << (protocol == 0 ? "802.15.4" : "wifi")
