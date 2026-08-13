@@ -103,7 +103,10 @@ int main(int argc, char* argv[])
     {
         const Time at = MilliSeconds(10 + index * 10);
         Simulator::Schedule(at, &SendPacket, devices.Get(0), devices.Get(1)->GetAddress());
-        Simulator::Schedule(at, &SendPacket, devices.Get(2), devices.Get(0)->GetAddress());
+        if (interferenceDbm > -90.0)
+        {
+            Simulator::Schedule(at, &SendPacket, devices.Get(2), devices.Get(0)->GetAddress());
+        }
     }
     if (partitionMs > 0.0)
     {

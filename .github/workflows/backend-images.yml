@@ -45,7 +45,18 @@ jobs:
           response=$(printf '%s\n' "$request" | docker run --rm -i "ael-${BACKEND}:ci")
           printf '%s\n' "$response" | tee "${BACKEND}-probe.json"
           python -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["outputs"]["available"]' <<<"$response"
+          if [ "$BACKEND" = ns3 ]; then
+            output=$(docker run --rm --entrypoint /opt/ael-bin/ael-network ael-ns3:ci \
+              --stopUs=1000 --protocol=0 --interference_dbm=-95 \
+              --partition_ms=0 --retry_limit=8)
+            printf '%s\n' "$output" | tee ns3-runtime-smoke.log
+            grep -F "AEL_METRIC failure=0" <<<"$output"
+          fi
       - uses: actions/upload-artifact@v6
+        if: always()
         with:
           name: ${{ matrix.backend }}-probe
-          path: ${{ matrix.backend }}-probe.json
+          path: |
+            ${{ matrix.backend }}-probe.json
+            ${{ matrix.backend }}-runtime-smoke.log
+          if-no-files-found: ignore
