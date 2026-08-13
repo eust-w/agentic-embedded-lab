@@ -10,6 +10,7 @@
 #include <vector>
 
 using namespace ns3;
+using namespace ns3::lrwpan;
 
 namespace {
 uint32_t g_received = 0;
@@ -22,6 +23,20 @@ void SendPacket(Ptr<NetDevice> source, Address destination)
 {
     source->Send(Create<Packet>(48), destination, 0x0800);
 }
+
+void SendLrWpanPacket(Ptr<LrWpanMac> source, Mac16Address destination)
+{
+    McpsDataRequestParams request;
+    request.m_dstPanId = 0x1234;
+    request.m_srcAddrMode = SHORT_ADDR;
+    request.m_dstAddrMode = SHORT_ADDR;
+    request.m_dstAddr = destination;
+    request.m_msduHandle = 0;
+    request.m_txOptions = TX_OPTION_ACK;
+    source->McpsDataRequest(request, Create<Packet>(48));
+}
+
+void DataIndication(McpsDataIndicationParams, Ptr<Packet>) { ++g_received; }
 
 void SetPosition(Ptr<Node> node, double x)
 {
@@ -66,10 +81,10 @@ int main(int argc, char* argv[])
         LrWpanHelper helper;
         devices = helper.Install(nodes);
         helper.CreateAssociatedPan(devices, 0x1234);
-        auto sourceMac = DynamicCast<lrwpan::LrWpanNetDevice>(devices.Get(0))->GetMac();
-        auto receiverMac = DynamicCast<lrwpan::LrWpanNetDevice>(devices.Get(1))->GetMac();
+        auto sourceMac = DynamicCast<LrWpanNetDevice>(devices.Get(0))->GetMac();
+        auto receiverMac = DynamicCast<LrWpanNetDevice>(devices.Get(1))->GetMac();
         sourceMac->TraceConnectWithoutContext("MacTx", MakeCallback(&TxTrace));
-        receiverMac->TraceConnectWithoutContext("MacRx", MakeCallback(&RxTrace));
+        receiverMac->SetMcpsDataIndicationCallback(MakeCallback(&DataIndication));
         BasicEnergySourceHelper energy;
         energy.Set("BasicEnergySourceInitialEnergyJ", DoubleValue(100.0));
         energy::EnergySourceContainer sources = energy.Install(nodes);
@@ -102,10 +117,24 @@ int main(int argc, char* argv[])
     for (uint32_t index = 0; index < packets; ++index)
     {
         const Time at = MilliSeconds(10 + index * 10);
-        Simulator::Schedule(at, &SendPacket, devices.Get(0), devices.Get(1)->GetAddress());
-        if (interferenceDbm > -90.0)
+        if (protocol == 0)
         {
-            Simulator::Schedule(at, &SendPacket, devices.Get(2), devices.Get(0)->GetAddress());
+            auto sourceMac = DynamicCast<LrWpanNetDevice>(devices.Get(0))->GetMac();
+            auto interfererMac = DynamicCast<LrWpanNetDevice>(devices.Get(2))->GetMac();
+            Simulator::Schedule(at, &SendLrWpanPacket, sourceMac, Mac16Address("00:02"));
+            if (interferenceDbm > -90.0)
+            {
+                Simulator::Schedule(
+                    at, &SendLrWpanPacket, interfererMac, Mac16Address("00:01"));
+            }
+        }
+        else
+        {
+            Simulator::Schedule(at, &SendPacket, devices.Get(0), devices.Get(1)->GetAddress());
+            if (interferenceDbm > -90.0)
+            {
+                Simulator::Schedule(at, &SendPacket, devices.Get(2), devices.Get(0)->GetAddress());
+            }
         }
     }
     if (partitionMs > 0.0)
