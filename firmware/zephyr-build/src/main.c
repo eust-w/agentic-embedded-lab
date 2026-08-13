@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 #include <stdint.h>
-#include <zephyr/devicetree.h>
 #include <zephyr/kernel.h>
 
 #if defined(CONFIG_AEL_FEATURE)
@@ -13,10 +12,13 @@ volatile uint8_t ael_linker_pressure[256 * 1024];
 volatile uint8_t ael_linker_pressure[1024];
 #endif
 
-const uint32_t ael_probe_address = DT_PROP(DT_PATH(chosen), ael_probe_address);
-
 int main(void)
 {
-    ael_linker_pressure[0] = (uint8_t)ael_probe_address;
+    /*
+     * Keep the linker fixture independent from the devicetree fixture.  The
+     * case-2 oracle inspects Zephyr's generated DTS directly, so referencing
+     * its synthetic property here would make unrelated cases depend on it.
+     */
+    ael_linker_pressure[0] = 0;
     return 0;
 }
