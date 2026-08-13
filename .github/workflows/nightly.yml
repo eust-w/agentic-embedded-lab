@@ -50,7 +50,10 @@ jobs:
       - uses: actions/download-artifact@v6
         with:
           name: zephyr-reference-firmware
-          path: .
+          # upload-artifact stores paths relative to their common
+          # firmware/zephyr ancestor; restore that ancestor explicitly so
+          # manifests keep workspace-relative firmware paths stable.
+          path: firmware/zephyr
       - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
       - name: Build pinned backend images
         run: |
@@ -156,7 +159,7 @@ jobs:
       - uses: actions/download-artifact@v6
         with:
           name: zephyr-reference-firmware
-          path: .
+          path: firmware/zephyr
       - run: python -m pip install -e .
       - name: Load pinned Renode image
         run: |
