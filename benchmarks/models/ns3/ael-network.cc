@@ -66,8 +66,8 @@ int main(int argc, char* argv[])
         LrWpanHelper helper;
         devices = helper.Install(nodes);
         helper.CreateAssociatedPan(devices, 0x1234);
-        auto sourceMac = DynamicCast<LrWpanNetDevice>(devices.Get(0))->GetMac();
-        auto receiverMac = DynamicCast<LrWpanNetDevice>(devices.Get(1))->GetMac();
+        auto sourceMac = DynamicCast<lrwpan::LrWpanNetDevice>(devices.Get(0))->GetMac();
+        auto receiverMac = DynamicCast<lrwpan::LrWpanNetDevice>(devices.Get(1))->GetMac();
         sourceMac->TraceConnectWithoutContext("MacTx", MakeCallback(&TxTrace));
         receiverMac->TraceConnectWithoutContext("MacRx", MakeCallback(&RxTrace));
         BasicEnergySourceHelper energy;
