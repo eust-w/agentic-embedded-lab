@@ -80,9 +80,18 @@ int main(int argc, char* argv[])
     {
         LrWpanHelper helper;
         devices = helper.Install(nodes);
-        helper.CreateAssociatedPan(devices, 0x1234);
         auto sourceMac = DynamicCast<LrWpanNetDevice>(devices.Get(0))->GetMac();
         auto receiverMac = DynamicCast<LrWpanNetDevice>(devices.Get(1))->GetMac();
+        auto interfererMac = DynamicCast<LrWpanNetDevice>(devices.Get(2))->GetMac();
+        sourceMac->SetExtendedAddress(Mac64Address("00:00:00:00:00:00:00:01"));
+        receiverMac->SetExtendedAddress(Mac64Address("00:00:00:00:00:00:00:02"));
+        interfererMac->SetExtendedAddress(Mac64Address("00:00:00:00:00:00:00:03"));
+        sourceMac->SetShortAddress(Mac16Address("00:01"));
+        receiverMac->SetShortAddress(Mac16Address("00:02"));
+        interfererMac->SetShortAddress(Mac16Address("00:03"));
+        sourceMac->SetPanId(0x1234);
+        receiverMac->SetPanId(0x1234);
+        interfererMac->SetPanId(0x1234);
         sourceMac->TraceConnectWithoutContext("MacTx", MakeCallback(&TxTrace));
         receiverMac->SetMcpsDataIndicationCallback(MakeCallback(&DataIndication));
         BasicEnergySourceHelper energy;
