@@ -12,6 +12,7 @@ from xml.etree import ElementTree
 
 from ael.contracts import AcceptanceEntry, AcceptanceManifest, ReleaseProfile
 from ael.io import sha256_file, write_json
+from ael.provenance import detect_platform
 
 
 def load_json(path: Path) -> object:
@@ -139,7 +140,7 @@ def main() -> None:
     manifest = AcceptanceManifest(
         profile=ReleaseProfile.SOFTWARE,
         source_revision=args.source_revision,
-        platform="Ubuntu 24.04 x86_64",
+        platform=detect_platform(),
         entries=entries,
         created_at=datetime.now(UTC),
     )

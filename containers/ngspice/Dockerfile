@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 FROM ubuntu:24.04 AS build
 ARG NGSPICE_VERSION=46
+ARG AEL_DOWNLOAD_PROXY
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       autoconf automake bison build-essential ca-certificates curl flex libtool \
       libreadline-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fL "https://github.com/imr/ngspice/archive/refs/tags/ngspice-${NGSPICE_VERSION}.tar.gz" \
+RUN if [ -n "${AEL_DOWNLOAD_PROXY}" ]; then export HTTPS_PROXY="${AEL_DOWNLOAD_PROXY}"; fi \
+    && curl -fL "https://github.com/imr/ngspice/archive/refs/tags/ngspice-${NGSPICE_VERSION}.tar.gz" \
       -o /tmp/ngspice.tar.gz \
     && tar -xzf /tmp/ngspice.tar.gz -C /tmp \
     && cd "/tmp/ngspice-ngspice-${NGSPICE_VERSION}" \

@@ -5,6 +5,7 @@ import argparse
 import csv
 import ctypes
 import json
+import os
 import platform
 import subprocess
 from pathlib import Path
@@ -70,6 +71,103 @@ def validate_proxy_exports(library: Path) -> None:
         raise RuntimeError(f"{library.name} is missing FMI 2.0 exports: {', '.join(missing)}")
 
 
+def uses_container_coordinator(command: str) -> bool:
+    return Path(command).name == "omsimulator-container"
+
+
+def container_fmu_platform_tag() -> str:
+    # OMSimulator 2.1.3 predates the FMI 3.0 aarch64 platform tuple. Its Linux
+    # runtime selects the legacy linux32 directory on aarch64 even though the
+    # process and proxy library are both 64-bit. Keep this compatibility quirk
+    # isolated to local arm64 container acceptance; Ubuntu x86_64 uses linux64.
+    if platform.machine().lower() in {"arm64", "aarch64"}:
+        return "linux32"
+    return "linux64"
+
+
+def configure_container_bridge_host() -> None:
+    if os.environ.get("AEL_FMI_CONTAINER_HOST"):
+        return
+    completed = subprocess.run(
+        ["colima", "ssh", "--", "getent", "hosts", "host.lima.internal"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0 or not completed.stdout.strip():
+        raise RuntimeError(
+            "containerized FMI on macOS requires AEL_FMI_CONTAINER_HOST or a running Colima VM"
+        )
+    os.environ["AEL_FMI_CONTAINER_HOST"] = completed.stdout.split()[0]
+
+
+def build_linux_proxies_in_container(workspace: Path, build_dir: Path) -> None:
+    image = os.environ.get("AEL_OMSIMULATOR_IMAGE", "ael-openmodelica:ci")
+    relative_source = (workspace / "native/fmi-proxies").relative_to(workspace)
+    relative_build = build_dir.relative_to(workspace)
+    command = (
+        f"cmake -S {relative_source} -B {relative_build} "
+        f"&& cmake --build {relative_build} --parallel"
+    )
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network=none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--pids-limit=512",
+            "--memory=4g",
+            "--cpus=2",
+            "--tmpfs=/tmp:rw,exec,nosuid,nodev,size=1g",
+            f"--user={os.getuid()}:{os.getgid()}",
+            f"--mount=type=bind,src={workspace},dst={workspace}",
+            "--env=HOME=/tmp",
+            "--env=XDG_CONFIG_HOME=/tmp",
+            f"--workdir={workspace}",
+            "--entrypoint=sh",
+            image,
+            "-c",
+            command,
+        ],
+        check=True,
+    )
+
+
+def validate_linux_proxy_exports_in_container(workspace: Path, library: Path) -> None:
+    image = os.environ.get("AEL_OMSIMULATOR_IMAGE", "ael-openmodelica:ci")
+    relative_library = library.relative_to(workspace)
+    validation = (
+        "import ctypes; "
+        f"p=ctypes.CDLL({str(relative_library)!r}); "
+        f"missing=[n for n in {FMI2_CS_EXPORTS!r} if not hasattr(p,n)]; "
+        "assert not missing, 'missing FMI 2.0 exports: '+', '.join(missing)"
+    )
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network=none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            f"--user={os.getuid()}:{os.getgid()}",
+            f"--mount=type=bind,src={workspace},dst={workspace},readonly",
+            "--env=HOME=/tmp",
+            "--env=XDG_CONFIG_HOME=/tmp",
+            f"--workdir={workspace}",
+            "--entrypoint=python3",
+            image,
+            "-c",
+            validation,
+        ],
+        check=True,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -80,23 +178,50 @@ def main() -> None:
     workspace = arguments.workspace.resolve()
     system = load_document(arguments.system, SystemManifest, workspace)
     build_dir = (workspace / arguments.build_dir).resolve()
-    subprocess.run(
-        ["cmake", "-S", str(workspace / "native/fmi-proxies"), "-B", str(build_dir)],
-        check=True,
+    container_linux = platform.system() == "Darwin" and uses_container_coordinator(
+        arguments.om_simulator
     )
-    subprocess.run(["cmake", "--build", str(build_dir), "--parallel"], check=True)
+    if container_linux:
+        configure_container_bridge_host()
+    container_platform = container_fmu_platform_tag() if container_linux else None
+    proxy_build_dir = build_dir / "linux64" if container_linux else build_dir
+    if container_linux:
+        build_linux_proxies_in_container(workspace, proxy_build_dir)
+    else:
+        subprocess.run(
+            [
+                "cmake",
+                "-S",
+                str(workspace / "native/fmi-proxies"),
+                "-B",
+                str(proxy_build_dir),
+            ],
+            check=True,
+        )
+        subprocess.run(
+            ["cmake", "--build", str(proxy_build_dir), "--parallel"], check=True
+        )
     fmus: dict[str, Path] = {}
     for component in system.components:
         proxy = FMI_PROXY_NAMES[component.backend]
-        library = build_dir / f"{proxy}{library_suffix()}"
-        validate_proxy_exports(library)
+        library = proxy_build_dir / f"{proxy}{'.so' if container_linux else library_suffix()}"
+        if container_linux:
+            validate_linux_proxy_exports_in_container(workspace, library)
+        else:
+            validate_proxy_exports(library)
         ports = build_dir / f"{component.id}-ports.json"
         ports.write_text(
             json.dumps([port.model_dump(mode="json") for port in component.ports], indent=2),
             encoding="utf-8",
         )
         fmu = build_dir / f"{component.id}.fmu"
-        package(proxy, library, ports, fmu)
+        package(
+            proxy,
+            library,
+            ports,
+            fmu,
+            platform_tag=container_platform,
+        )
         read_model_description(fmu, validate=True)
         fmus[component.id] = fmu
     ssp = export_ssp_package(system, build_dir / "five-domain.ssp", fmus)

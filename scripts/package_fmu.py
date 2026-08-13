@@ -52,7 +52,14 @@ def scalar_variable(parent, port: dict[str, object], reference: int) -> None:
         type_node.set("unit", str(port["unit"]))
 
 
-def package(proxy: str, library: Path, ports_path: Path, destination: Path) -> None:
+def package(
+    proxy: str,
+    library: Path,
+    ports_path: Path,
+    destination: Path,
+    *,
+    platform_tag: str | None = None,
+) -> None:
     ports = json.loads(ports_path.read_text(encoding="utf-8"))
     guid = "{" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"ael.dev/fmu/{proxy}")) + "}"
     root = ElementTree.Element(
@@ -93,7 +100,7 @@ def package(proxy: str, library: Path, ports_path: Path, destination: Path) -> N
     staging = destination.parent / f".{destination.stem}-staging"
     if staging.exists():
         shutil.rmtree(staging)
-    binary_directory = staging / "binaries" / platform_directory()
+    binary_directory = staging / "binaries" / (platform_tag or platform_directory())
     binary_directory.mkdir(parents=True)
     extension = library.suffix
     shutil.copy2(library, binary_directory / f"{proxy}{extension}")
@@ -114,8 +121,15 @@ def main() -> None:
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--ports", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--platform-tag")
     arguments = parser.parse_args()
-    package(arguments.proxy, arguments.library, arguments.ports, arguments.output)
+    package(
+        arguments.proxy,
+        arguments.library,
+        arguments.ports,
+        arguments.output,
+        platform_tag=arguments.platform_tag,
+    )
 
 
 if __name__ == "__main__":

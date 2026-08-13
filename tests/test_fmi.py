@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -161,6 +162,46 @@ def test_fmi_bridge_rejects_nonterminal_component_match() -> None:
     bridge.adapters = {}
     with pytest.raises(ValueError, match="unknown FMI component instance"):
         bridge.exchange("STEP /workspace/mcu/temp/other 0 0.001")
+
+
+def test_fmi_bridge_can_publish_a_scoped_container_tcp_endpoint(
+    tmp_path, monkeypatch
+) -> None:
+    class FakeAdapter:
+        def prepare(self, component, seed):
+            pass
+
+        def inject(self, target, value, virtual_time_us):
+            return []
+
+        def step(self, virtual_time_us, step_us):
+            return AdapterStepResult(outputs={"output": 7.0}, metrics={}, events=[])
+
+        def shutdown(self):
+            pass
+
+    class FakeCatalog:
+        def create(self, backend):
+            return FakeAdapter()
+
+    monkeypatch.setenv("AEL_FMI_CONTAINER_HOST", "127.0.0.1")
+    bridge = FmiBridgeServer(
+        BackendName.RENODE,
+        [component("mcu")],
+        tmp_path / "unused.sock",
+        FakeCatalog(),
+        1,
+    )
+    bridge.start()
+    try:
+        assert bridge.endpoint.startswith("tcp://127.0.0.1:")
+        port = int(bridge.endpoint.rsplit(":", 1)[1])
+        with socket.create_connection(("127.0.0.1", port), timeout=1) as connection:
+            connection.sendall(b"STEP mcu 0 0.001\n")
+            response = connection.recv(1024).decode()
+        assert response == "OK r2=7.0\n"
+    finally:
+        bridge.close()
 
 
 def test_fmi_orchestrator_fails_closed_on_coordinator_log_error(tmp_path, monkeypatch) -> None:

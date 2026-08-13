@@ -19,6 +19,7 @@ from .contracts import (
     SystemManifest,
 )
 from .io import load_document, sha256_file, write_json
+from .provenance import detect_platform
 from .security import resolve_workspace_path
 
 if TYPE_CHECKING:
@@ -259,7 +260,7 @@ class BenchmarkRunner:
         manifest = AcceptanceManifest(
             profile=ReleaseProfile.SIMULATION,
             source_revision=source_revision,
-            platform="Ubuntu 24.04 x86_64",
+            platform=detect_platform(),
             entries=entries,
             created_at=datetime.now(UTC),
         )

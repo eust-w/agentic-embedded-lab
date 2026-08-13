@@ -253,7 +253,17 @@ class FmiBridgeServer:
             adapter = catalog.create(backend)
             adapter.prepare(component, seed)
             self.adapters[component.id] = adapter
-        self.server = socketserver.ThreadingUnixStreamServer(str(socket_path), _FmiRequestHandler)
+        container_host = os.environ.get("AEL_FMI_CONTAINER_HOST")
+        if container_host:
+            self.server = socketserver.ThreadingTCPServer(("0.0.0.0", 0), _FmiRequestHandler)
+            self.server.allow_reuse_address = True
+            port = self.server.server_address[1]
+            self.endpoint = f"tcp://{container_host}:{port}"
+        else:
+            self.server = socketserver.ThreadingUnixStreamServer(
+                str(socket_path), _FmiRequestHandler
+            )
+            self.endpoint = str(socket_path)
         self.server.bridge = self  # type: ignore[attr-defined]
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
@@ -364,7 +374,7 @@ class FmiOrchestrator:
                     server.start()
                     servers.append(server)
                     variable = f"AEL_FMI_SOCKET_{backend.value.upper().replace('-', '_')}"
-                    environment[variable] = str(socket_path)
+                    environment[variable] = getattr(server, "endpoint", str(socket_path))
                 result_file = ssp.parent / f"{ssp.stem}-result.csv"
                 log_file = ssp.parent / f"{ssp.stem}-omsimulator.log"
                 completed = subprocess.run(

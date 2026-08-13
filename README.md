@@ -64,8 +64,9 @@ to a hardware-equivalence claim.
 ## Execution environments
 
 macOS ARM64 supports the Python control plane, schemas, model import, C++ proxy
-compilation and the local Compose topology through Colima. Ubuntu 24.04 x86_64 Actions
-is the authoritative five-backend platform. It builds pinned images and
+compilation, all five backend containers, containerized Linux FMU/OMSimulator
+acceptance, and the local Compose topology through Colima. Ubuntu 24.04 x86_64 Actions
+remains the authoritative five-backend release platform. It builds pinned images and
 Zephyr 4.4.2 ARM/RISC-V firmware with SDK 1.0.1, then publishes ignored
 `acceptance/` and `runs/` artifacts. Missing tools block; no mock substitution
 is allowed.

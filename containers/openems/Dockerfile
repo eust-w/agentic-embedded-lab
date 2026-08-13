@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 FROM ubuntu:24.04 AS build
 ARG OPENEMS_VERSION=0.0.36
+ARG AEL_DOWNLOAD_PROXY
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       build-essential ca-certificates cmake git libboost-all-dev libcgal-dev libeigen3-dev libhdf5-dev \
       libtinyxml-dev libvtk9-dev octave octave-dev python3 qtbase5-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN git clone --branch "v${OPENEMS_VERSION}" --depth 1 --recurse-submodules \
+RUN if [ -n "${AEL_DOWNLOAD_PROXY}" ]; then export HTTPS_PROXY="${AEL_DOWNLOAD_PROXY}"; fi \
+    && git clone --branch "v${OPENEMS_VERSION}" --depth 1 --recurse-submodules \
       https://github.com/thliebig/openEMS-Project.git /tmp/openEMS-Project \
     && cd /tmp/openEMS-Project \
     && { ./update_openEMS.sh /opt/openems --disable-GUI \

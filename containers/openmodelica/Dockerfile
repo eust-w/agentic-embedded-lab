@@ -9,7 +9,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && echo "deb [signed-by=/usr/share/keyrings/openmodelica.gpg] https://build.openmodelica.org/apt noble stable" \
        > /etc/apt/sources.list.d/openmodelica.list \
     && apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openmodelica omsimulator \
+    # The `openmodelica` metapackage pulls the desktop IDE, notebook and large
+    # geospatial/GUI stacks. AEL's headless backend requires only the compiler
+    # and FMI coordinator, keeping both CI and local acceptance bounded.
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends omc omsimulator \
     && rm -rf /var/lib/apt/lists/* \
     && omc --version | grep -F "${OPENMODELICA_VERSION}" \
     && OMSimulator --version | grep -F "${OMSIMULATOR_VERSION}"

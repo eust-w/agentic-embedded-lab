@@ -8,6 +8,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <netdb.h>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -60,6 +61,66 @@ std::string socketEnvironmentName() {
     return name;
 }
 
+int connectEndpoint(const char* endpoint, std::string& error) {
+    const std::string value(endpoint);
+    if (value.rfind("tcp://", 0) == 0) {
+        const auto delimiter = value.rfind(':');
+        if (delimiter == std::string::npos || delimiter <= 6 || delimiter + 1 >= value.size()) {
+            error = "invalid TCP FMI endpoint";
+            return -1;
+        }
+        const auto host = value.substr(6, delimiter - 6);
+        const auto port = value.substr(delimiter + 1);
+        addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        addrinfo* addresses = nullptr;
+        const auto lookup = ::getaddrinfo(host.c_str(), port.c_str(), &hints, &addresses);
+        if (lookup != 0) {
+            error = ::gai_strerror(lookup);
+            return -1;
+        }
+        int connected = -1;
+        for (auto* address = addresses; address; address = address->ai_next) {
+            const int candidate = ::socket(
+                address->ai_family, address->ai_socktype, address->ai_protocol);
+            if (candidate < 0) {
+                continue;
+            }
+            if (::connect(candidate, address->ai_addr, address->ai_addrlen) == 0) {
+                connected = candidate;
+                break;
+            }
+            ::close(candidate);
+        }
+        ::freeaddrinfo(addresses);
+        if (connected < 0) {
+            error = std::strerror(errno);
+        }
+        return connected;
+    }
+
+    const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        error = std::strerror(errno);
+        return -1;
+    }
+    sockaddr_un address{};
+    address.sun_family = AF_UNIX;
+    if (value.size() >= sizeof(address.sun_path)) {
+        ::close(fd);
+        error = "UNIX socket path is too long";
+        return -1;
+    }
+    std::strncpy(address.sun_path, value.c_str(), sizeof(address.sun_path) - 1);
+    if (::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
+        error = std::strerror(errno);
+        ::close(fd);
+        return -1;
+    }
+    return fd;
+}
+
 bool exchange(State* state, double current, double step) {
     const auto variable = socketEnvironmentName();
     const char* path = std::getenv(variable.c_str());
@@ -67,23 +128,10 @@ bool exchange(State* state, double current, double step) {
         log(state, fmi2Error, "transport", variable + " is not configured");
         return false;
     }
-    const int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+    std::string transportError;
+    const int fd = connectEndpoint(path, transportError);
     if (fd < 0) {
-        log(state, fmi2Error, "transport", std::strerror(errno));
-        return false;
-    }
-    sockaddr_un address{};
-    address.sun_family = AF_UNIX;
-    if (std::strlen(path) >= sizeof(address.sun_path)) {
-        ::close(fd);
-        log(state, fmi2Error, "transport", "UNIX socket path is too long");
-        return false;
-    }
-    std::strncpy(address.sun_path, path, sizeof(address.sun_path) - 1);
-    if (::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
-        const std::string message = std::strerror(errno);
-        ::close(fd);
-        log(state, fmi2Error, "transport", message);
+        log(state, fmi2Error, "transport", transportError);
         return false;
     }
     std::ostringstream request;

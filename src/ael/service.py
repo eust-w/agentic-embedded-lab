@@ -30,6 +30,7 @@ from .contracts import (
 from .fmi import build_schedule, validate_fmi_topology
 from .io import load_document
 from .modeling import ModelRegistry
+from .provenance import AUTHORITATIVE_SIMULATION_PLATFORM
 from .router import classify_problem
 from .scheduler import DeterministicScheduler, RunResult
 from .security import resolve_workspace_path
@@ -72,7 +73,7 @@ class AelService:
             "workspace": str(self.layout.root),
             "python": sys.version.split()[0],
             "platform": platform.platform(),
-            "authoritative_platform": "Ubuntu 24.04 x86_64",
+            "authoritative_platform": AUTHORITATIVE_SIMULATION_PLATFORM,
             "tools": [
                 {
                     "backend": probe.backend,
@@ -141,7 +142,7 @@ class AelService:
                 acceptance = load_document(acceptance_path, AcceptanceManifest, self.layout.root)
                 if acceptance.profile != ReleaseProfile.SIMULATION:
                     failures.append("simulation acceptance has the wrong profile")
-                if acceptance.platform != "Ubuntu 24.04 x86_64":
+                if acceptance.platform != AUTHORITATIVE_SIMULATION_PLATFORM:
                     failures.append("simulation acceptance is not from the authoritative platform")
                 expected = {f"benchmark:{case.id:02d}-{case.slug}" for case in benchmark.cases}
                 expected.update(
@@ -169,6 +170,8 @@ class AelService:
                 software = load_document(software_path, AcceptanceManifest, self.layout.root)
                 if software.profile != ReleaseProfile.SOFTWARE:
                     failures.append("software acceptance has the wrong profile")
+                if software.platform != AUTHORITATIVE_SIMULATION_PLATFORM:
+                    failures.append("software acceptance is not from the authoritative platform")
                 software_expected = {
                     "deployment:compose",
                     "storage:postgres-s3",

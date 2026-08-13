@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 FROM ubuntu:24.04 AS build
 ARG NS3_VERSION=3.47
+ARG AEL_DOWNLOAD_PROXY
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       build-essential bzip2 ca-certificates cmake curl ninja-build python3 \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fL "https://www.nsnam.org/releases/ns-allinone-${NS3_VERSION}.tar.bz2" \
+RUN if [ -n "${AEL_DOWNLOAD_PROXY}" ]; then export HTTPS_PROXY="${AEL_DOWNLOAD_PROXY}"; fi \
+    && curl --fail --location --retry 6 --retry-all-errors --retry-delay 5 \
+      --connect-timeout 20 --max-time 600 \
+      "https://www.nsnam.org/releases/ns-allinone-${NS3_VERSION}.tar.bz2" \
       -o /tmp/ns3.tar.bz2 \
     && tar -xjf /tmp/ns3.tar.bz2 -C /opt \
     && cd "/opt/ns-allinone-${NS3_VERSION}/ns-${NS3_VERSION}" \

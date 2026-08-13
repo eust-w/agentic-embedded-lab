@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import zipfile
 from pathlib import Path
 
 from fmpy import read_model_description
@@ -48,3 +49,21 @@ def test_generated_fmu_is_schema_valid_and_dimensionless_units_are_omitted(tmp_p
     )
     assert input_variable.start == "0.0"
     assert input_variable.unit is None
+
+
+def test_generated_fmu_can_target_a_container_platform(tmp_path) -> None:
+    library = tmp_path / "TestFmu.so"
+    library.write_bytes(b"linux-shared-object")
+    ports = tmp_path / "ports.json"
+    ports.write_text(
+        '[{"name":"value","direction":"output","data_type":"real","unit":"V"}]',
+        encoding="utf-8",
+    )
+    output = tmp_path / "TestFmu.fmu"
+
+    load_packager().package(
+        "TestFmu", library, ports, output, platform_tag="linux64"
+    )
+
+    with zipfile.ZipFile(output) as archive:
+        assert "binaries/linux64/TestFmu.so" in archive.namelist()

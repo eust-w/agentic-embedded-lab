@@ -58,8 +58,9 @@ def test_backend_container_places_writable_config_under_tmpfs(tmp_path: Path, mo
     assert "--read-only" in adapter.launch_command
     assert f"--user={os.getuid()}:{os.getgid()}" in adapter.launch_command
     assert "--tmpfs=/tmp:rw,exec,nosuid,nodev,size=2g" in adapter.launch_command
-    assert "--env=HOME=/tmp/ael-home" in adapter.launch_command
-    assert "--env=XDG_CONFIG_HOME=/tmp/ael-config" in adapter.launch_command
+    assert "--env=HOME=/tmp" in adapter.launch_command
+    assert "--env=XDG_CONFIG_HOME=/tmp" in adapter.launch_command
+    assert "--env=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/tmp" in adapter.launch_command
     assert (tmp_path / ".ael/backend-runtime").is_dir()
 
 
