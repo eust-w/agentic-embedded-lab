@@ -18,6 +18,17 @@ class ZephyrBuildWorker(BackendWorker):
 
     def _version(self) -> str | None:
         base = os.environ.get("ZEPHYR_BASE")
+        if not base and self.tool is not None:
+            result = subprocess.run(
+                [str(self.tool), "list", "-f", "{abspath}", "zephyr"],
+                cwd=self.workspace,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            if result.returncode == 0:
+                base = result.stdout.strip()
         if not base:
             return None
         version_file = Path(base) / "VERSION"
