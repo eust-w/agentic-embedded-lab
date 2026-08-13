@@ -13,6 +13,17 @@ class NgspiceWorker(BackendWorker):
     commands = ("ngspice",)
     version_arguments = ("--version", "-v")
 
+    def __init__(self) -> None:
+        super().__init__()
+        # A BOR observation is an event, not merely the value at the final
+        # co-simulation communication point.  Preserve it for the duration of
+        # the run so a later load reduction cannot erase the causal evidence.
+        self.brownout_observed = False
+
+    def prepare(self) -> None:
+        super().prepare()
+        self.brownout_observed = False
+
     def step(
         self, step_us: int
     ) -> tuple[dict[str, Any], dict[str, Any], list[Event], dict[str, str]]:
@@ -51,7 +62,20 @@ class NgspiceWorker(BackendWorker):
             # ngspice does not portably support a .measure PARAM expression
             # referencing another transient measurement. Derive the discrete
             # assertion signal from the measured rail minimum instead.
-            metrics["failure"] = float(supply_voltage < 2.7)
+            threshold_crossed = not self.brownout_observed and supply_voltage < 2.7
+            self.brownout_observed = self.brownout_observed or threshold_crossed
+            metrics["failure"] = float(self.brownout_observed)
+            if threshold_crossed:
+                events.append(
+                    Event(
+                        sequence=0,
+                        virtual_time_us=self.virtual_time_us + step_us,
+                        source=self.component.id,
+                        type="power.brownout_threshold_crossed",
+                        payload={"rail_voltage_V": supply_voltage, "bor_threshold_V": 2.7},
+                        fidelity_ref="ngspice:tool-executed",
+                    )
+                )
         return (
             metrics.copy(),
             metrics,

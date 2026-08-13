@@ -52,6 +52,30 @@ jobs:
             printf '%s\n' "$output" | tee ns3-runtime-smoke.log
             grep -F "AEL_METRIC failure=0" <<<"$output"
           fi
+          if [ "$BACKEND" = openmodelica ]; then
+            mkdir -p .ael/backend-runtime
+            cat > openmodelica-requests.jsonl <<'EOF'
+          {"api_version":"ael.dev/backend/v1","request_id":"prepare","operation":"prepare","payload":{"component":{"id":"plant","type":"thermal-battery-functional-model","backend":"openmodelica","model":"benchmarks/models/modelica/domain.mos","step_us":1000,"ports":[],"properties":{}},"seed":1020}}
+          {"api_version":"ael.dev/backend/v1","request_id":"r","operation":"inject","virtual_time_us":0,"payload":{"target":"plant.thermal_resistance_K_per_W","value":18.0}}
+          {"api_version":"ael.dev/backend/v1","request_id":"s","operation":"inject","virtual_time_us":0,"payload":{"target":"plant.sleep_current_A","value":0.000008}}
+          {"api_version":"ael.dev/backend/v1","request_id":"d","operation":"inject","virtual_time_us":0,"payload":{"target":"plant.duty_cycle","value":0.01}}
+          {"api_version":"ael.dev/backend/v1","request_id":"p","operation":"inject","virtual_time_us":0,"payload":{"target":"plant.input_power","value":0.18}}
+          {"api_version":"ael.dev/backend/v1","request_id":"retry","operation":"inject","virtual_time_us":0,"payload":{"target":"plant.rf_retries","value":0}}
+          {"api_version":"ael.dev/backend/v1","request_id":"step","operation":"step","virtual_time_us":0,"payload":{"step_us":1000}}
+          EOF
+            docker run --rm -i -v "$PWD:/workspace" ael-openmodelica:ci \
+              < openmodelica-requests.jsonl | tee openmodelica-runtime-smoke.jsonl
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          responses = [json.loads(line) for line in Path("openmodelica-runtime-smoke.jsonl").read_text().splitlines()]
+          step = next(item for item in responses if item["request_id"] == "step")
+          assert step["ok"], step
+          assert step["metrics"]["failure"] == 0.0, step
+          assert 28.0 < step["metrics"]["temperature"] < 29.0, step
+          assert step["metrics"]["battery_hours"] > 5000.0, step
+          PY
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -59,4 +83,5 @@ jobs:
           path: |
             ${{ matrix.backend }}-probe.json
             ${{ matrix.backend }}-runtime-smoke.log
+            ${{ matrix.backend }}-runtime-smoke.jsonl
           if-no-files-found: ignore

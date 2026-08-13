@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from io import StringIO
 from pathlib import Path
@@ -9,6 +10,8 @@ import pytest
 
 from ael.adapters.subprocess_adapter import SubprocessAdapter, backend_cpu_limit
 from ael.backend_protocol import BackendOperation, BackendRequest, BackendResponse
+from ael.backend_workers.base import BackendWorker
+from ael.backend_workers.modelica import ModelicaWorker
 from ael.backend_workers.ngspice import NgspiceWorker
 from ael.backend_workers.ns3 import Ns3Worker
 from ael.backend_workers.openems import OpenEmsWorker
@@ -106,6 +109,112 @@ if '-r' in sys.argv:
         os.environ.pop("AEL_NGSPICE_BIN", None)
 
 
+def test_ngspice_worker_latches_a_transient_brownout(tmp_path: Path, monkeypatch) -> None:
+    tool = tmp_path / "fake-ngspice"
+    invocation = tmp_path / "invocation"
+    tool.write_text(
+        """#!/usr/bin/env python3
+import pathlib, sys
+if '--version' in sys.argv or '-v' in sys.argv:
+    print('ngspice-46')
+    raise SystemExit(0)
+counter = pathlib.Path(sys.argv[0]).with_name('invocation')
+value = int(counter.read_text()) if counter.exists() else 0
+if '-o' in sys.argv:
+    counter.write_text(str(value + 1))
+    log = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
+    voltage = 2.5 if value == 0 else 3.3
+    log.write_text(f'ael_supply_voltage = {voltage}\\n')
+if '-r' in sys.argv:
+    pathlib.Path(sys.argv[sys.argv.index('-r') + 1]).write_bytes(b'raw')
+""",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    model = tmp_path / "model.cir"
+    model.write_text("AEL test deck\n.end\n", encoding="utf-8")
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_NGSPICE_BIN", str(tool))
+    worker = NgspiceWorker()
+    component = SystemComponent(
+        id="circuit",
+        type="test",
+        backend=BackendName.NGSPICE,
+        model="model.cir",
+        step_us=1000,
+    )
+    worker.handle(
+        BackendRequest(
+            request_id="prepare",
+            operation=BackendOperation.PREPARE,
+            payload={"component": component.model_dump(mode="json"), "seed": 3},
+        )
+    )
+    _, first, events, _ = worker.step(1000)
+    _, second, _, _ = worker.step(1000)
+    assert invocation.read_text() == "2"
+    assert first["failure"] == 1.0
+    assert second["supply_voltage"] == 3.3
+    assert second["failure"] == 1.0
+    assert events[-1].type == "power.brownout_threshold_crossed"
+
+
+def test_modelica_worker_separates_model_source_from_omc_script(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "fake-omc"
+    tool.write_text(
+        """#!/usr/bin/env python3
+import pathlib, sys
+if '--version' in sys.argv:
+    print('OpenModelica 1.27.0')
+    raise SystemExit(0)
+script = pathlib.Path(sys.argv[-1])
+text = script.read_text()
+assert text.startswith('loadFile("AelDomain.mo");')
+model = script.with_name('AelDomain.mo').read_text()
+assert model.startswith('model AelDomain')
+assert model.rstrip().endswith('end AelDomain;')
+assert 'simulate(AelDomain' not in model
+print('AEL_METRIC temperature=28.2')
+print('AEL_METRIC battery_hours=5900')
+print('AEL_METRIC failure=0')
+print('AEL_EVENT modelica.rc_thermal_battery {"calibrated":false}')
+""",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    model = tmp_path / "domain.mos"
+    model.write_text(
+        "model AelDomain\n"
+        "  parameter Real inputPower = {{input_power}};\n"
+        "end AelDomain;\n"
+        "result := simulate(AelDomain, stopTime=1.0);\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_OPENMODELICA_BIN", str(tool))
+    worker = ModelicaWorker()
+    component = SystemComponent(
+        id="plant",
+        type="test",
+        backend=BackendName.MODELICA,
+        model="domain.mos",
+        step_us=1000,
+    )
+    worker.handle(
+        BackendRequest(
+            request_id="prepare",
+            operation=BackendOperation.PREPARE,
+            payload={"component": component.model_dump(mode="json"), "seed": 5},
+        )
+    )
+    _, metrics, events, artifacts = worker.step(1000)
+    assert metrics == {"temperature": 28.2, "battery_hours": 5900.0, "failure": 0.0}
+    assert events[-1].type == "modelica.rc_thermal_battery"
+    assert (tmp_path / artifacts["log"]).is_file()
+
+
 def test_backend_worker_rejects_wrong_protocol_without_crashing(monkeypatch) -> None:
     monkeypatch.setenv("AEL_NGSPICE_BIN", "/does/not/exist")
     output = StringIO()
@@ -119,6 +228,12 @@ def test_backend_worker_rejects_wrong_protocol_without_crashing(monkeypatch) -> 
     assert response.api_version == "ael.dev/backend/v1"
     assert response.ok is False
     assert response.request_id == "bad"
+
+
+def test_backend_worker_rejects_non_finite_tool_results() -> None:
+    for value in (math.nan, math.inf, -math.inf):
+        with pytest.raises(FloatingPointError, match="non-finite backend metric"):
+            BackendWorker._reject_non_finite({"temperature": value}, "metric")
 
 
 def test_ns3_version_probe_uses_the_wrapper_show_command(tmp_path: Path, monkeypatch) -> None:

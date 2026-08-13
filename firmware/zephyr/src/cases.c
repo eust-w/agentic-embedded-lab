@@ -49,20 +49,24 @@ static uint8_t crc8(const uint8_t *data, size_t length)
 static uint32_t debounce_failure(void)
 {
     static const uint8_t active_low_bounce[] = {1, 0, 1, 0, 0, 0, 0};
-    uint8_t stable = 1;
+    size_t first_detection = ARRAY_SIZE(active_low_bounce);
     unsigned consecutive = 0;
     for (size_t index = 0; index < ARRAY_SIZE(active_low_bounce); ++index) {
         uint8_t pressed = FAULTY ? active_low_bounce[index] : !active_low_bounce[index];
         if (pressed) {
             ++consecutive;
-            if (FAULTY || consecutive >= 3U) {
-                stable = 0;
+            unsigned threshold = FAULTY ? 1U : 3U;
+            if (consecutive >= threshold && first_detection == ARRAY_SIZE(active_low_bounce)) {
+                first_detection = index;
             }
         } else {
             consecutive = 0;
         }
     }
-    return stable != 0U;
+    /* The real press is stable only after samples 3..5 are low.  Treating an
+     * active-low input as active-high reports the initial idle level as a press;
+     * the fixed build accepts the edge only after three stable samples. */
+    return first_detection != 5U;
 }
 
 static uint32_t uart_frame_failure(void)

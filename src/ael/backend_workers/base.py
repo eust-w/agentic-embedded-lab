@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -115,6 +116,8 @@ class BackendWorker(ABC):
             step_us = int(request.payload["step_us"])
             self.virtual_time_us = request.virtual_time_us or self.virtual_time_us
             outputs, metrics, events, artifacts = self.step(step_us)
+            self._reject_non_finite(outputs, "output")
+            self._reject_non_finite(metrics, "metric")
             self.virtual_time_us += step_us
             return BackendResponse(
                 request_id=request.request_id,
@@ -265,6 +268,12 @@ class BackendWorker(ABC):
             if measurement:
                 metrics[measurement.group(1)] = float(measurement.group(2))
         return metrics, events
+
+    @staticmethod
+    def _reject_non_finite(values: dict[str, Any], kind: str) -> None:
+        for name, value in values.items():
+            if isinstance(value, float) and not math.isfinite(value):
+                raise FloatingPointError(f"non-finite backend {kind} {name}: {value}")
 
     def _resolve_tool(self) -> Path | None:
         override = os.environ.get(f"AEL_{self.backend_name.upper()}_BIN")

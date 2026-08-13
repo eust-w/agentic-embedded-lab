@@ -19,9 +19,9 @@ equation
 end AelDomain;
 
 result := simulate(AelDomain, stopTime=300.0, numberOfIntervals=300,
-                   outputFormat="csv", fileNamePrefix="ael_domain_res");
-temperature := val(AelDomain.temperature, 300.0, result.resultFile);
-batteryHours := val(AelDomain.batteryHours, 300.0, result.resultFile);
+                   outputFormat="mat", fileNamePrefix="ael_domain_res");
+temperature := val(temperature, 300.0, "ael_domain_res_res.mat");
+batteryHours := val(batteryHours, 300.0, "ael_domain_res_res.mat");
 failure := if temperature > 70.0 or batteryHours < 300.0 then 1.0 else 0.0;
 print("AEL_METRIC temperature=" + String(temperature) + "\n");
 print("AEL_METRIC battery_hours=" + String(batteryHours) + "\n");
