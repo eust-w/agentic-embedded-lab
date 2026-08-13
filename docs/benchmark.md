@@ -3,7 +3,7 @@
 `benchmarks/catalog.yaml` is the canonical 24-case inventory. All entries name
 checked-in faulty/fixed assets, assertions, a fixed seed, structured causal
 chain and fidelity boundary. `executable` describes those runnable contracts;
-it does not say Actions or physical hardware passed them.
+it does not say CI or physical hardware passed them.
 
 For a case to change to `executable`, the catalog must name:
 
@@ -15,11 +15,11 @@ For a case to change to `executable`, the catalog must name:
 6. a fixed-seed evidence bundle;
 7. an explicit fidelity and non-claim boundary.
 
-Pull requests execute actual Kconfig, Devicetree and linker mechanisms plus the
-unit/security suite. Nightly builds both Zephyr
-architectures and all independently licensed backend images, then runs 24
-pairs, FMI/SSP, a 20-run deterministic hash and the simulation gate. Evidence
-is an Actions artifact, never source-controlled. Production adds real
+The qualified software acceptance builds Zephyr and all independently licensed
+backend images, then runs 24 pairs, FMI/SSP, a 20-run deterministic hash and the
+simulation gate. It may run locally in Linux containers or in CI; the gate
+validates the source, image, tool and evidence identities instead of the CI
+provider. Evidence is generated outside source control. Production adds real
 differential evidence and therefore remains blocked in this repository.
 
 `native` is restricted to control-plane tests and is rejected as a formal

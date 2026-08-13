@@ -74,6 +74,7 @@ class ZephyrBuildWorker(BackendWorker):
             "-d",
             str(build),
             "--",
+            f"-DUSER_CACHE_DIR={self.runtime_dir / 'zephyr-cache'}",
             f"-DEXTRA_CONF_FILE={config}",
             f"-DDTC_OVERLAY_FILE={overlay}",
         ]

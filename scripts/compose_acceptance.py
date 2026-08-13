@@ -92,7 +92,21 @@ def main() -> None:
         timeout=30,
         trust_env=False,
     )
-    report: dict[str, Any] = {"profile": "software", "checks": {}}
+    docker_info = subprocess.run(
+        ["docker", "info", "--format", "{{json .}}"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    docker_payload = json.loads(docker_info.stdout)
+    report: dict[str, Any] = {
+        "profile": "software",
+        "execution_os": docker_payload.get("OSType"),
+        "execution_architecture": docker_payload.get("Architecture"),
+        "container_runtime_version": docker_payload.get("ServerVersion"),
+        "checks": {},
+    }
 
     anonymous = anonymous_user.get("/v1/project")
     report["checks"]["oidc_rejects_anonymous"] = anonymous.status_code == 401

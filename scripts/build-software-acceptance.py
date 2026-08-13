@@ -12,7 +12,7 @@ from xml.etree import ElementTree
 
 from ael.contracts import AcceptanceEntry, AcceptanceManifest, ReleaseProfile
 from ael.io import sha256_file, write_json
-from ael.provenance import detect_platform
+from ael.provenance import RELEASE_AUTHORITY_POLICY, detect_platform
 
 
 def load_json(path: Path) -> object:
@@ -81,12 +81,35 @@ def main() -> None:
     licenses = load_json(sources[4])
     if not isinstance(sbom, dict) or sbom.get("bomFormat") != "CycloneDX":
         raise ValueError("software SBOM is not CycloneDX JSON")
-    if not isinstance(signature, dict) or not signature:
-        raise ValueError("Sigstore bundle is empty")
+    if (
+        not isinstance(signature, dict)
+        or signature.get("cryptographic_signature_verified") is not True
+    ):
+        raise ValueError("software SBOM signature is not cryptographically verified")
     if not isinstance(licenses, list) or not licenses:
         raise ValueError("license inventory is empty")
     checks = compose["checks"]
     entries = [
+        write_entry(
+            workspace,
+            "environment:qualified",
+            sources[0],
+            {
+                "policy": RELEASE_AUTHORITY_POLICY,
+                "qualified": True,
+                "ci_required": False,
+                "source_revision": args.source_revision,
+                "control_platform": detect_platform(),
+                "execution_targets": {
+                    "compose": {
+                        "mode": "oci",
+                        "os": "linux",
+                        "architecture": compose.get("execution_architecture", "unknown"),
+                    }
+                },
+                "hardware_validated": False,
+            },
+        ),
         write_entry(
             workspace,
             "deployment:compose",

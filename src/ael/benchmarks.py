@@ -19,7 +19,7 @@ from .contracts import (
     SystemManifest,
 )
 from .io import load_document, sha256_file, write_json
-from .provenance import detect_platform
+from .provenance import capture_execution_environment, detect_platform
 from .security import resolve_workspace_path
 
 if TYPE_CHECKING:
@@ -218,6 +218,7 @@ class BenchmarkRunner:
             )
         if case_ids is None:
             entry_by_name = {entry.name: entry for entry in entries}
+            entries.append(self._run_architecture_acceptance())
             for backend in (
                 BackendName.ZEPHYR_BUILD,
                 BackendName.RENODE,
@@ -257,6 +258,36 @@ class BenchmarkRunner:
                         limitations=["Backend conformance; no hardware equivalence."],
                     )
                 )
+            probes = [
+                probe
+                for probe in self.service.doctor()["tools"]
+                if probe["backend"]
+                in {
+                    BackendName.ZEPHYR_BUILD,
+                    BackendName.RENODE,
+                    BackendName.NGSPICE,
+                    BackendName.MODELICA,
+                    BackendName.OMSIMULATOR,
+                    BackendName.NS3,
+                    BackendName.OPENEMS,
+                }
+            ]
+            environment = capture_execution_environment(
+                probes, source_revision=source_revision
+            )
+            environment_path = self.workspace / "acceptance/evidence/environment-simulation.json"
+            write_json(environment_path, environment)
+            entries.append(
+                AcceptanceEntry(
+                    name="environment:qualified",
+                    status="passed" if environment["qualified"] else "failed",
+                    evidence_path=str(environment_path.relative_to(self.workspace)),
+                    evidence_sha256=sha256_file(environment_path),
+                    limitations=[
+                        "Execution-environment qualification only; no hardware equivalence."
+                    ],
+                )
+            )
         manifest = AcceptanceManifest(
             profile=ReleaseProfile.SIMULATION,
             source_revision=source_revision,
@@ -267,6 +298,47 @@ class BenchmarkRunner:
         destination = self.workspace / "acceptance" / "simulation.json"
         write_json(destination, manifest)
         return manifest
+
+    def _run_architecture_acceptance(self) -> AcceptanceEntry:
+        evidence_path = self.workspace / "acceptance/evidence/firmware-arm-riscv.json"
+        firmware = {
+            "cortex_m": self.workspace
+            / "firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf",
+            "riscv": self.workspace / "firmware/zephyr/build-hifive1/zephyr/zephyr.elf",
+        }
+        missing = [name for name, path in firmware.items() if not path.is_file()]
+        smoke: dict[str, Any] = {"status": "not-run", "run_id": None}
+        if not missing:
+            result = self.service.run_experiment(
+                self.workspace / "benchmarks/experiments/riscv-smoke.yaml"
+            )
+            smoke = {
+                "status": result.status,
+                "run_id": result.run_id,
+                "evidence_dir": str(result.evidence_dir.relative_to(self.workspace)),
+            }
+        passed = not missing and smoke["status"] == RunStatus.PASSED
+        payload = {
+            "zephyr_version": "4.4.2",
+            "zephyr_sdk_version": "1.0.1",
+            "firmware_sha256": {
+                name: sha256_file(path) for name, path in firmware.items() if path.is_file()
+            },
+            "missing": missing,
+            "riscv_renode_smoke": smoke,
+            "status": "passed" if passed else "failed",
+            "hardware_validated": False,
+        }
+        write_json(evidence_path, payload)
+        return AcceptanceEntry(
+            name="firmware:arm-riscv",
+            status=payload["status"],
+            evidence_path=str(evidence_path.relative_to(self.workspace)),
+            evidence_sha256=sha256_file(evidence_path),
+            limitations=[
+                "Cross-compilation and virtual boot only; no physical CPU equivalence."
+            ],
+        )
 
 
 def validate_acceptance_manifest(

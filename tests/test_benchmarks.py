@@ -23,7 +23,7 @@ def test_catalog_has_complete_executable_asset_contracts(workspace: Path) -> Non
     assert failures == []
 
 
-def test_simulation_gate_requires_actions_acceptance_evidence(workspace: Path) -> None:
+def test_simulation_gate_requires_qualified_acceptance_evidence(workspace: Path) -> None:
     result = AelService(workspace).release_check(ReleaseProfile.SIMULATION)
     assert result["ready"] is False
     assert "simulation acceptance manifest is missing" in result["failures"]

@@ -52,7 +52,7 @@ ael validate examples/experiments/synthetic-smoke.yaml
 ael run examples/experiments/synthetic-smoke.yaml
 ael benchmark run --case-id 1 --case-id 2 --case-id 3  # needs pinned Zephyr toolchain
 ael release check --profile foundation
-ael release check --profile software    # requires authoritative simulation + RC evidence
+ael release check --profile software    # requires qualified simulation + software evidence
 ael release check --profile production  # must fail without real Lab evidence
 pytest
 ```
@@ -65,18 +65,30 @@ to a hardware-equivalence claim.
 
 macOS ARM64 supports the Python control plane, schemas, model import, C++ proxy
 compilation, all five backend containers, containerized Linux FMU/OMSimulator
-acceptance, and the local Compose topology through Colima. Ubuntu 24.04 x86_64 Actions
-remains the authoritative five-backend release platform. It builds pinned images and
-Zephyr 4.4.2 ARM/RISC-V firmware with SDK 1.0.1, then publishes ignored
-`acceptance/` and `runs/` artifacts. Missing tools block; no mock substitution
-is allowed.
+acceptance, and the local Compose topology through Colima. Release authority is
+evidence-based rather than CI-provider-based: a native or containerized Linux
+environment qualifies when it records immutable source identity, inspected image
+identity, pinned tool probes, complete mechanism evidence, and reproducible traces.
+GitHub Actions is an optional remote reproduction environment, not a release-gate
+dependency. Missing tools block; no mock substitution is allowed.
+
+Run the complete local software acceptance with:
+
+```bash
+scripts/run-local-software-acceptance.sh
+```
+
+The script builds Zephyr 4.4.2 with SDK 1.0.1 and all five backend images, runs
+all 24 pairs, FMI/SSP, 20-run determinism, the Compose recovery topology, and the
+`simulation` and `software` gates. Generated evidence remains ignored.
 
 ## Release gates
 
 - `foundation`: contracts, core tests, schemas and C++ proxies.
 - `simulation`: 24 hashed mechanism pairs, Zephyr plus five backend aggregates,
   the five-domain chain,
-  FMI/SSP acceptance, and deterministic traces on Ubuntu Actions.
+  FMI/SSP acceptance, deterministic traces, and a qualified Linux execution
+  environment.
 - `software`: simulation plus the PostgreSQL/S3, OIDC/mTLS, Worker recovery,
   migration/rollback, SBOM, signature and license machine evidence.
 - `production`: software plus five-board differential bundles, current
@@ -89,8 +101,9 @@ have passed. No tag or release workflow is provided before that production gate.
 
 Run `scripts/run-compose-acceptance.sh` to exercise the local software topology;
 it generates ephemeral development certificates, removes project volumes after
-the check, and never creates hardware evidence. The authoritative Software RC
-consumes a successful Nightly run ID through `workflow_dispatch`.
+the check, and never creates hardware evidence. CI workflows may repeat the same
+checks remotely, but do not grant stronger simulation authority merely by running
+on GitHub-hosted infrastructure.
 
 See [docs/architecture.md](docs/architecture.md), [docs/benchmark.md](docs/benchmark.md)
 and [docs/production-readiness.md](docs/production-readiness.md) for exact boundaries.

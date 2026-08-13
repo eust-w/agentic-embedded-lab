@@ -30,7 +30,7 @@ from .contracts import (
 from .fmi import build_schedule, validate_fmi_topology
 from .io import load_document
 from .modeling import ModelRegistry
-from .provenance import AUTHORITATIVE_SIMULATION_PLATFORM
+from .provenance import RELEASE_AUTHORITY_POLICY, validate_execution_environment
 from .router import classify_problem
 from .scheduler import DeterministicScheduler, RunResult
 from .security import resolve_workspace_path
@@ -73,7 +73,7 @@ class AelService:
             "workspace": str(self.layout.root),
             "python": sys.version.split()[0],
             "platform": platform.platform(),
-            "authoritative_platform": AUTHORITATIVE_SIMULATION_PLATFORM,
+            "release_authority_policy": RELEASE_AUTHORITY_POLICY,
             "tools": [
                 {
                     "backend": probe.backend,
@@ -142,11 +142,11 @@ class AelService:
                 acceptance = load_document(acceptance_path, AcceptanceManifest, self.layout.root)
                 if acceptance.profile != ReleaseProfile.SIMULATION:
                     failures.append("simulation acceptance has the wrong profile")
-                if acceptance.platform != AUTHORITATIVE_SIMULATION_PLATFORM:
-                    failures.append("simulation acceptance is not from the authoritative platform")
                 expected = {f"benchmark:{case.id:02d}-{case.slug}" for case in benchmark.cases}
                 expected.update(
                     {
+                        "environment:qualified",
+                        "firmware:arm-riscv",
                         "cross-domain:five-backend",
                         "fmi:five-domain",
                         "backend:zephyr_build",
@@ -160,6 +160,7 @@ class AelService:
                 failures.extend(
                     validate_acceptance_manifest(self.layout.root, acceptance, expected)
                 )
+                failures.extend(self._validate_environment_entry(acceptance))
         if profile in {ReleaseProfile.SOFTWARE, ReleaseProfile.PRODUCTION}:
             from .contracts import AcceptanceManifest
 
@@ -170,9 +171,8 @@ class AelService:
                 software = load_document(software_path, AcceptanceManifest, self.layout.root)
                 if software.profile != ReleaseProfile.SOFTWARE:
                     failures.append("software acceptance has the wrong profile")
-                if software.platform != AUTHORITATIVE_SIMULATION_PLATFORM:
-                    failures.append("software acceptance is not from the authoritative platform")
                 software_expected = {
+                    "environment:qualified",
                     "deployment:compose",
                     "storage:postgres-s3",
                     "security:oidc-mtls",
@@ -182,6 +182,7 @@ class AelService:
                 failures.extend(
                     validate_acceptance_manifest(self.layout.root, software, software_expected)
                 )
+                failures.extend(self._validate_environment_entry(software))
         if profile == ReleaseProfile.PRODUCTION:
             production_models = self.store.count_models(ModelState.PRODUCTION_APPROVED)
             if production_models < 5:
@@ -224,6 +225,20 @@ class AelService:
             "failures": failures,
             "boundary": "This check never infers hardware validation from simulation results.",
         }
+
+    def _validate_environment_entry(self, acceptance: Any) -> list[str]:
+        entry = next(
+            (item for item in acceptance.entries if item.name == "environment:qualified"),
+            None,
+        )
+        if entry is None or not entry.evidence_path:
+            return []  # the generic manifest validator reports the missing entry
+        try:
+            path = resolve_workspace_path(self.layout.root, entry.evidence_path, must_exist=True)
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, PermissionError, ValueError, json.JSONDecodeError) as error:
+            return [f"execution environment evidence is unavailable: {error}"]
+        return validate_execution_environment(payload, acceptance.source_revision)
 
     def run_benchmarks(
         self, case_ids: set[int] | None = None, source_revision: str = "working-tree"
