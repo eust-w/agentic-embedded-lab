@@ -19,6 +19,14 @@ from ael.backend_workers.renode import RenodeWorker
 from ael.contracts import BackendName, SystemComponent
 
 
+def test_openems_cross_domain_metric_is_relative_to_a_tool_solved_nominal() -> None:
+    source = Path("benchmarks/models/openems/antenna_detuning.m").read_text(encoding="utf-8")
+    assert "for solve_index = 1:2" in source
+    assert "requested_loss_db - nominal_loss_db" in source
+    assert "nominal_mismatch_loss_db" in source
+    assert "requested_mismatch_loss_db" in source
+
+
 def test_backend_cpu_limit_is_runner_safe_and_validated(monkeypatch) -> None:
     monkeypatch.delenv("AEL_BACKEND_CPUS", raising=False)
     assert backend_cpu_limit() == 2

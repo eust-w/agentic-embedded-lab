@@ -77,6 +77,38 @@ jobs:
           assert step["metrics"]["battery_hours"] > 5000.0, step
           PY
           fi
+          if [ "$BACKEND" = openems ]; then
+            mkdir -p .ael/backend-runtime
+            for scenario in nominal detuned; do
+              if [ "$scenario" = nominal ]; then detune=0; else detune=18; fi
+              cat > "openems-${scenario}-requests.jsonl" <<EOF
+          {"api_version":"ael.dev/backend/v1","request_id":"prepare","operation":"prepare","payload":{"component":{"id":"antenna","type":"printed-monopole-functional-geometry","backend":"openems","model":"benchmarks/models/openems/antenna_detuning.m","event_driven":true,"ports":[],"properties":{}},"seed":1024}}
+          {"api_version":"ael.dev/backend/v1","request_id":"inject","operation":"inject","virtual_time_us":0,"payload":{"target":"antenna.detune","value":${detune}}}
+          {"api_version":"ael.dev/backend/v1","request_id":"step","operation":"step","virtual_time_us":0,"payload":{"step_us":1000}}
+          EOF
+              docker run --rm -i -v "$PWD:/workspace" ael-openems:ci \
+                < "openems-${scenario}-requests.jsonl" | tee "openems-${scenario}-runtime-smoke.jsonl"
+            done
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          def step(name):
+              responses = [json.loads(line) for line in Path(name).read_text().splitlines()]
+              result = next(item for item in responses if item["request_id"] == "step")
+              assert result["ok"], result
+              return result["metrics"]
+
+          nominal = step("openems-nominal-runtime-smoke.jsonl")
+          detuned = step("openems-detuned-runtime-smoke.jsonl")
+          assert nominal["failure"] == 0.0, nominal
+          assert abs(nominal["rf_loss_db"]) < 1e-9, nominal
+          assert detuned["failure"] == 1.0, detuned
+          assert detuned["rf_loss_db"] > 20.0, detuned
+          assert nominal["nominal_mismatch_loss_db"] > 0.0, nominal
+          assert detuned["requested_mismatch_loss_db"] > nominal["nominal_mismatch_loss_db"], detuned
+          PY
+          fi
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -85,4 +117,5 @@ jobs:
             ${{ matrix.backend }}-probe.json
             ${{ matrix.backend }}-runtime-smoke.log
             ${{ matrix.backend }}-runtime-smoke.jsonl
+            openems-*-runtime-smoke.jsonl
           if-no-files-found: ignore
