@@ -2,6 +2,7 @@
   "$defs": {
     "BackendName": {
       "enum": [
+        "zephyr_build",
         "native",
         "renode",
         "ngspice",
@@ -14,6 +15,44 @@
       ],
       "title": "BackendName",
       "type": "string"
+    },
+    "ModelGenerationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "default": 2,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_template_version": {
+          "default": "ael-hardware-ir/v1",
+          "minLength": 1,
+          "title": "Prompt Template Version",
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "title": "ModelGenerationConfig",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -40,6 +79,17 @@
       },
       "title": "Drivers",
       "type": "array"
+    },
+    "generation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelGenerationConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "generator": {
       "default": "ael.svd-importer/v1",

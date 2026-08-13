@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import os
 import socket
+import ssl
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -36,12 +37,14 @@ class OutboundWorker:
         self.control_plane = control_plane.rstrip("/")
         self.registration = registration
         self.poll_seconds = poll_seconds
+        tls_context = ssl.create_default_context(cafile=ca_bundle)
+        tls_context.load_cert_chain(*certificate)
         self.client = httpx.Client(
             base_url=self.control_plane,
-            cert=certificate,
-            verify=ca_bundle,
+            verify=tls_context,
             timeout=30,
             headers={"X-Client-Cert-SHA256": registration.certificate_fingerprint},
+            trust_env=False,
         )
 
     def register(self) -> None:
@@ -51,10 +54,21 @@ class OutboundWorker:
         response.raise_for_status()
 
     def run_forever(self) -> None:
-        self.register()
         while True:
-            response = self.client.post(f"/v1/workers/{self.registration.worker_id}/lease")
-            response.raise_for_status()
+            try:
+                self.register()
+                break
+            except httpx.HTTPError:
+                time.sleep(self.poll_seconds)
+        while True:
+            try:
+                response = self.client.post(
+                    f"/v1/workers/{self.registration.worker_id}/lease"
+                )
+                response.raise_for_status()
+            except httpx.HTTPError:
+                time.sleep(self.poll_seconds)
+                continue
             payload = response.json()
             if payload is None:
                 time.sleep(self.poll_seconds)
@@ -119,9 +133,7 @@ class OutboundWorker:
         )
         response.raise_for_status()
 
-    def _dispatch(
-        self, task: WorkerTask, cancel_event: threading.Event
-    ) -> dict[str, Any]:
+    def _dispatch(self, task: WorkerTask, cancel_event: threading.Event) -> dict[str, Any]:
         if self.registration.worker_kind == WorkerKind.LAB:
             if cancel_event.is_set():
                 raise RuntimeError("lab task cancelled before dispatch")
@@ -173,8 +185,6 @@ class OutboundWorker:
 
 
 def _certificate_sha256(path: Path) -> str:
-    import ssl
-
     pem = path.read_text(encoding="utf-8")
     der = ssl.PEM_cert_to_DER_cert(pem)
     return hashlib.sha256(der).hexdigest()
@@ -210,3 +220,7 @@ def main() -> None:
         certificate=(arguments.cert, arguments.key),
         ca_bundle=arguments.ca,
     ).run_forever()
+
+
+if __name__ == "__main__":
+    main()

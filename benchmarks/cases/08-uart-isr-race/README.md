@@ -1,7 +1,9 @@
 # 08 - UART ring buffer ISR race and packet loss
 
-Causal chain: ISR races ring head -> unread byte overwritten -> packet loss is observed.
+Mechanism: RX producer fills ring.
+
+Causal chain: RX producer fills ring -> ISR push meets full-buffer policy -> byte preservation oracle runs.
 
 Fidelity boundary: Scheduler and interrupt models must be validated.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

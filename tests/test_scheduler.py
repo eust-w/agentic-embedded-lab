@@ -81,9 +81,7 @@ def test_backend_artifact_is_copied_and_content_addressed(workspace: Path) -> No
     source.parent.mkdir(parents=True)
     source.write_text("authoritative backend output\n", encoding="utf-8")
     recorder = EvidenceRecorder(WorkspaceLayout(workspace), "artifact-test", experiment, system)
-    recorder.add_artifacts(
-        "plant", 1000, {"log": ".ael/backend-runtime/tool.log"}
-    )
+    recorder.add_artifacts("plant", 1000, {"log": ".ael/backend-runtime/tool.log"})
     bundle = recorder.finalize(RunStatus.PASSED)
     relative = "artifacts/plant/0000000000001000/log/tool.log"
     assert (recorder.run_dir / relative).read_text(encoding="utf-8") == (

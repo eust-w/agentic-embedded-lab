@@ -8,11 +8,20 @@ timeout_s: 300
 seed: 1020
 stimuli:
 - at_us: 0
-  target: plant.fault_scale
-  value: 0.0
+  target: plant.thermal_resistance_K_per_W
+  value: 18.0
+  unit: K/W
+- at_us: 0
+  target: plant.sleep_current_A
+  value: 8.0e-06
+  unit: A
+- at_us: 0
+  target: plant.duty_cycle
+  value: 0.01
 - at_us: 0
   target: plant.input_power
-  value: 0.2
+  value: 0.18
+  unit: W
 - at_us: 0
   target: plant.rf_retries
   value: 0.0
@@ -29,5 +38,6 @@ allowed_model_states:
 - production_approved
 tags:
 - benchmark
+- mechanism-backed
 - fixed
 - case-20

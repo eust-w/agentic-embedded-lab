@@ -60,6 +60,7 @@
       "enum": [
         "foundation",
         "simulation",
+        "software",
         "production"
       ],
       "title": "ReleaseProfile",

@@ -593,6 +593,16 @@
       "title": "Fmi Ports",
       "type": "array"
     },
+    "grounding": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Grounding",
+      "type": "object"
+    },
     "interrupts": {
       "items": {
         "$ref": "#/$defs/InterruptBehavior"

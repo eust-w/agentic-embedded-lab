@@ -1,7 +1,9 @@
 # 17 - Signed OTA power-loss corruption and anti-rollback recovery
 
-Causal chain: power loss interrupts OTA -> active image corrupts -> journal recovery determines boot.
+Mechanism: power loss interrupts candidate commit.
+
+Causal chain: power loss interrupts candidate commit -> boot journal selects a slot -> rollback oracle checks committed image.
 
 Fidelity boundary: Storage and brownout models are both model-dependent.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

@@ -6,10 +6,11 @@ concurrency:
 
 on:
   push:
-    branches: ["codex/ael-full-platform"]
+    branches: ["codex/ael-0.2-real-mechanisms"]
     paths:
       - "containers/**"
       - "src/ael/backend_workers/**"
+      - "benchmarks/models/**"
       - ".github/workflows/backend-images.yml"
   workflow_dispatch:
   pull_request:
@@ -26,9 +27,9 @@ jobs:
       matrix:
         backend: [renode, ngspice, openmodelica, ns3, openems]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: containers/${{ matrix.backend }}/Dockerfile
@@ -44,7 +45,7 @@ jobs:
           response=$(printf '%s\n' "$request" | docker run --rm -i "ael-${BACKEND}:ci")
           printf '%s\n' "$response" | tee "${BACKEND}-probe.json"
           python -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["outputs"]["available"]' <<<"$response"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.backend }}-probe
           path: ${{ matrix.backend }}-probe.json

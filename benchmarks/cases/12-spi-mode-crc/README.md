@@ -1,7 +1,9 @@
 # 12 - SPI mode or CRC mismatch
 
-Causal chain: SPI mode/CRC differs -> frame verification fails -> sample is rejected.
+Mechanism: SPI frame and CRC are produced.
+
+Causal chain: SPI frame and CRC are produced -> target verifies CRC -> sample is accepted or rejected.
 
 Fidelity boundary: Digital protocol only.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

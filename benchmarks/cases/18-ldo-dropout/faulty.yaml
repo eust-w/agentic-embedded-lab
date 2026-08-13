@@ -8,11 +8,17 @@ timeout_s: 300
 seed: 1018
 stimuli:
 - at_us: 0
-  target: circuit.fault_scale
-  value: 1.0
+  target: circuit.source_resistance_ohm
+  value: 12.0
+  unit: Ohm
+- at_us: 0
+  target: circuit.capacitance_uF
+  value: 2.2
+  unit: uF
 - at_us: 0
   target: circuit.load_microamp
-  value: 60000.0
+  value: 160000.0
+  unit: uA
 - at_us: 0
   target: circuit.rf_retries
   value: 0.0
@@ -29,5 +35,6 @@ allowed_model_states:
 - production_approved
 tags:
 - benchmark
+- mechanism-backed
 - faulty
 - case-18

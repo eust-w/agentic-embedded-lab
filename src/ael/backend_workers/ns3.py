@@ -49,9 +49,7 @@ class Ns3Worker(BackendWorker):
             assert ns3_root
         else:
             ns3_root = self.tool.resolve().parent
-        arguments = [
-            f"--{name}={value}" for name, value in sorted(self.inputs.items())
-        ]
+        arguments = [f"--{name}={value}" for name, value in sorted(self.inputs.items())]
         arguments.extend(
             [
                 f"--seed={self.seed}",
@@ -78,17 +76,14 @@ class Ns3Worker(BackendWorker):
             )
             if result.returncode != 0:
                 raise RuntimeError(
-                    f"ns3 exited {result.returncode}: "
-                    f"{(result.stderr or result.stdout)[-4000:]}"
+                    f"ns3 exited {result.returncode}: {(result.stderr or result.stdout)[-4000:]}"
                 )
         else:
             program = str(self.component.properties.get("program", "scratch/ael-network"))
             scratch = ns3_root / "scratch" / f"{program.rsplit('/', 1)[-1]}.cc"
             scratch.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, scratch)
-            result = self.run_tool(
-                ["run", f"{program} {' '.join(arguments)}"], cwd=ns3_root
-            )
+            result = self.run_tool(["run", f"{program} {' '.join(arguments)}"], cwd=ns3_root)
         combined = f"{result.stdout}\n{result.stderr}"
         log = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.log"
         log.write_text(combined, encoding="utf-8")

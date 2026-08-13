@@ -37,6 +37,7 @@ class ProblemCategory(StrEnum):
 
 
 class BackendName(StrEnum):
+    ZEPHYR_BUILD = "zephyr_build"
     NATIVE = "native"
     RENODE = "renode"
     NGSPICE = "ngspice"
@@ -93,6 +94,7 @@ class TaskStatus(StrEnum):
 class ReleaseProfile(StrEnum):
     FOUNDATION = "foundation"
     SIMULATION = "simulation"
+    SOFTWARE = "software"
     PRODUCTION = "production"
 
 
@@ -296,9 +298,7 @@ class ExperimentSpec(StrictModel):
                 raise ValueError("stimulus/fault falls outside experiment duration")
         if self.duration_us % self.macro_step_us:
             raise ValueError("duration_us must be divisible by macro_step_us")
-        if self.checkpoint_interval_us and (
-            self.checkpoint_interval_us % self.macro_step_us
-        ):
+        if self.checkpoint_interval_us and (self.checkpoint_interval_us % self.macro_step_us):
             raise ValueError("checkpoint_interval_us must align to macro_step_us")
         return self
 
@@ -403,6 +403,7 @@ class HardwareBehaviorIR(StrictModel):
     timing: dict[str, UnitValue] = Field(default_factory=dict)
     power_states: list[PowerStateBehavior] = Field(default_factory=list)
     fmi_ports: list[Port] = Field(default_factory=list)
+    grounding: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_register_layout(self) -> HardwareBehaviorIR:
@@ -434,6 +435,35 @@ class HardwareBehaviorIR(StrictModel):
         return self
 
 
+class ModelGenerationConfig(StrictModel):
+    provider: Literal["openai", "anthropic"]
+    model: str = Field(min_length=1, max_length=128)
+    prompt_template_version: str = Field(default="ael-hardware-ir/v1", min_length=1)
+    max_attempts: int = Field(default=2, ge=1, le=4)
+
+
+class GroundingReference(StrictModel):
+    source_path: str
+    source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    locator: str
+    purpose: str
+
+
+class GroundingManifest(StrictModel):
+    sources: list[GroundingReference] = Field(min_length=1)
+
+
+class GenerationReceipt(StrictModel):
+    provider: Literal["deterministic", "openai", "anthropic"]
+    model: str
+    prompt_template_version: str
+    request_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    response_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    provider_request_id: str | None = None
+    attempts: int = Field(ge=1, le=4)
+    recorded: bool = False
+
+
 class ModelGenerationRequest(StrictModel):
     api_version: Literal["ael.dev/v1"] = API_VERSION
     kind: Literal["ModelGenerationRequest"] = "ModelGenerationRequest"
@@ -448,6 +478,7 @@ class ModelGenerationRequest(StrictModel):
     reference_models: list[str] = Field(default_factory=list)
     hardware_traces: list[str] = Field(default_factory=list)
     generator: str = "ael.svd-importer/v1"
+    generation: ModelGenerationConfig | None = None
 
     @model_validator(mode="after")
     def require_grounding(self) -> ModelGenerationRequest:
@@ -481,7 +512,26 @@ class ModelPackage(StrictModel):
     validation_evidence: list[str] = Field(default_factory=list)
     signature: str | None = None
     generated_by: str | None = None
+    grounding_manifest_path: str | None = None
+    generation_receipt_path: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class ModelConformanceEvidence(StrictModel):
+    api_version: Literal["ael.dev/v1"] = API_VERSION
+    kind: Literal["ModelConformanceEvidence"] = "ModelConformanceEvidence"
+    model_id: str
+    validator: str = Field(min_length=1)
+    source_independent: bool
+    register_layout_passed: bool
+    compile_passed: bool
+    driver_tests_passed: bool
+    property_tests_passed: bool
+    reference_trace_passed: bool
+    generated_tests_are_only_evidence: bool = False
+    sandbox_network: Literal["none"]
+    sandbox_read_only: bool
+    artifact_hashes: dict[str, str] = Field(min_length=1)
 
 
 class MetricTolerance(StrictModel):
@@ -544,6 +594,7 @@ class WorkerTask(StrictModel):
     lease_token: str | None = None
     lease_expires_at: datetime | None = None
     attempts: int = Field(default=0, ge=0)
+    result: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -684,4 +735,5 @@ class EvidenceBundle(StrictModel):
     assertion_results: list[dict[str, Any]] = Field(default_factory=list)
     claims: list[Claim] = Field(default_factory=list)
     fidelity_boundaries: list[str] = Field(default_factory=list)
+    mechanism_evidence: list[dict[str, Any]] = Field(default_factory=list)
     signature: str | None = None

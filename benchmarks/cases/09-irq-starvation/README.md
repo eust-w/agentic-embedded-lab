@@ -1,7 +1,9 @@
 # 09 - IRQ priority starvation
 
-Causal chain: IRQ priority unbounded -> control task starved -> deadline is missed.
+Mechanism: IRQ consumes control budget.
+
+Causal chain: IRQ consumes control budget -> 1 kHz deadline is evaluated -> starvation is recorded.
 
 Fidelity boundary: Interrupt timing is model-dependent.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

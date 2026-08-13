@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .benchmarks import BenchmarkCatalog, BenchmarkMechanism
 from .contracts import (
     AcceptanceManifest,
     CalibrationRecord,
@@ -12,6 +13,7 @@ from .contracts import (
     HardwareBehaviorIR,
     InstrumentEvidence,
     InstrumentOperationRequest,
+    ModelConformanceEvidence,
     ModelGenerationRequest,
     ModelPackage,
     ProblemSpec,
@@ -26,6 +28,8 @@ from .io import write_json
 
 SCHEMA_TYPES = {
     "acceptance-manifest": AcceptanceManifest,
+    "benchmark-catalog": BenchmarkCatalog,
+    "benchmark-mechanism": BenchmarkMechanism,
     "calibration-record": CalibrationRecord,
     "instrument-evidence": InstrumentEvidence,
     "instrument-operation-request": InstrumentOperationRequest,
@@ -34,6 +38,7 @@ SCHEMA_TYPES = {
     "experiment-spec": ExperimentSpec,
     "hardware-behavior-ir": HardwareBehaviorIR,
     "model-generation-request": ModelGenerationRequest,
+    "model-conformance-evidence": ModelConformanceEvidence,
     "model-package": ModelPackage,
     "validation-envelope": ValidationEnvelope,
     "event": Event,

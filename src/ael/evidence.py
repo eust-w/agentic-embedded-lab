@@ -5,6 +5,7 @@ import shutil
 from datetime import UTC, datetime
 from xml.etree import ElementTree
 
+from . import __version__
 from .constants import TOOL_VERSIONS
 from .contracts import (
     Assertion,
@@ -70,11 +71,7 @@ class EvidenceRecorder:
                 raise ValueError(f"unsafe backend artifact label: {label!r}")
             source = resolve_workspace_path(self.layout.root, reference, must_exist=True)
             destination = (
-                self.run_dir
-                / "artifacts"
-                / component_id
-                / f"{virtual_time_us:016d}"
-                / label
+                self.run_dir / "artifacts" / component_id / f"{virtual_time_us:016d}" / label
             )
             destination.parent.mkdir(parents=True, exist_ok=True)
             if source.is_dir():
@@ -92,7 +89,7 @@ class EvidenceRecorder:
         provenance = {
             "created_at": self.started_at.isoformat(),
             "completed_at": datetime.now(UTC).isoformat(),
-            "ael_version": "0.1.0.dev0",
+            "ael_version": __version__,
             "tools_expected": {tool.name: tool.version for tool in TOOL_VERSIONS},
             "source_tree_dirty": True,
             "error": error,
@@ -146,6 +143,22 @@ class EvidenceRecorder:
                 "Simulation results are not hardware validation.",
                 "Synthetic components are test-only and cannot support production claims.",
                 *[f"{key}: {value}" for key, value in sorted(self.system.fidelity.items())],
+            ],
+            mechanism_evidence=[
+                {
+                    "kind": "tool_event",
+                    "sequence": event.sequence,
+                    "source": event.source,
+                    "event_type": event.type,
+                    "fidelity_ref": event.fidelity_ref,
+                }
+                for event in self.events
+                if event.fidelity_ref and ":tool-executed" in event.fidelity_ref
+            ]
+            + [
+                {"kind": "artifact", "path": path, "sha256": digest}
+                for path, digest in sorted(artifact_hashes.items())
+                if path.startswith("artifacts/")
             ],
         )
         write_json(self.run_dir / "bundle.json", bundle)

@@ -64,7 +64,8 @@ if '--version' in sys.argv or '-v' in sys.argv:
     raise SystemExit(0)
 deck = pathlib.Path(sys.argv[-1]).read_text().splitlines()
 assert deck[0] == 'AEL test deck'
-assert deck[1].startswith('.param AEL_fault_scale=')
+assert deck[1].startswith('.param AEL_capacitance_uF=')
+assert any(line.startswith('.param AEL_source_resistance_ohm=') for line in deck)
 if '-o' in sys.argv:
     log = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
     log.write_text('ael_supply_voltage = 3.290000e+00\\nAEL_EVENT circuit.ok {}\\n')

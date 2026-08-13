@@ -114,6 +114,18 @@ def model_validate(model_id: str, workspace: WorkspaceOption = DEFAULT_WORKSPACE
     emit(updated)
 
 
+@model_app.command("conformance")
+def model_conformance(
+    model_id: str,
+    evidence: Annotated[list[str], typer.Option("--evidence")],
+    workspace: WorkspaceOption = DEFAULT_WORKSPACE,
+) -> None:
+    updated = service(workspace).models.conformance_validate(
+        model_id, actor="cli", evidence=evidence
+    )
+    emit(updated)
+
+
 @model_app.command("promote")
 def model_promote(
     model_id: str,

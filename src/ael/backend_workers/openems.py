@@ -53,9 +53,12 @@ class OpenEmsWorker(BackendWorker):
                 payload={"cache_key": cache_key},
                 fidelity_ref="openems:tool-executed-cached",
             )
-            return metrics.copy(), metrics.copy(), [event], {
-                "cache_record": self.artifact_reference(persistent)
-            }
+            return (
+                metrics.copy(),
+                metrics.copy(),
+                [event],
+                {"cache_record": self.artifact_reference(persistent)},
+            )
         scenario = self.model_path()
         octave = shutil.which("octave-cli") or shutil.which("octave")
         if octave is None:
@@ -63,10 +66,7 @@ class OpenEmsWorker(BackendWorker):
         environment = {
             **os.environ,
             "AEL_OUTPUT_DIR": str(self.runtime_dir / "openems-result"),
-            **{
-                f"AEL_INPUT_{name.upper()}": str(value)
-                for name, value in self.inputs.items()
-            },
+            **{f"AEL_INPUT_{name.upper()}": str(value) for name, value in self.inputs.items()},
         }
         result = subprocess.run(
             [octave, "--no-gui", "--quiet", str(scenario)],
@@ -87,9 +87,7 @@ class OpenEmsWorker(BackendWorker):
         )
         result_dir = self.runtime_dir / "openems-result"
         artifacts = (
-            {"result_dir": self.artifact_reference(result_dir)}
-            if result_dir.is_dir()
-            else {}
+            {"result_dir": self.artifact_reference(result_dir)} if result_dir.is_dir() else {}
         )
         log = self.runtime_dir / f"step-{self.virtual_time_us + step_us}.log"
         log.write_text(f"{result.stdout}\n{result.stderr}", encoding="utf-8")

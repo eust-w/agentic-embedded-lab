@@ -153,10 +153,15 @@ class RenodeWorker(BackendWorker):
             if not isinstance(scale, (int, float)) or isinstance(scale, bool):
                 raise ValueError(f"Renode output scale for {name!r} must be numeric")
             outputs[name] = value * scale
-        return outputs, metrics, events, {
-            "script": self.artifact_reference(script),
-            "log": self.artifact_reference(log),
-        }
+        return (
+            outputs,
+            metrics,
+            events,
+            {
+                "script": self.artifact_reference(script),
+                "log": self.artifact_reference(log),
+            },
+        )
 
     def snapshot(self, destination: Path) -> Path:
         if (

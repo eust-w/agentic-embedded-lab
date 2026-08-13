@@ -1,7 +1,9 @@
 # 06 - Timer counter wraparound
 
-Causal chain: counter wraps -> signed/branch elapsed math fails -> deadline is misclassified.
+Mechanism: 32-bit counter wraps.
+
+Causal chain: 32-bit counter wraps -> elapsed-time implementation evaluates boundary -> deadline is classified.
 
 Fidelity boundary: Functional virtual timing only.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

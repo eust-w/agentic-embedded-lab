@@ -32,7 +32,7 @@ def create_app(workspace: Path | None = None) -> FastAPI:
     service = AelService(root)
     oidc_config = oidc_config_from_environment()
     oidc_verifier = OidcVerifier(oidc_config) if oidc_config else None
-    app = FastAPI(title="Agentic Embedded Lab", version="1.0.0-dev", openapi_url="/v1/openapi.json")
+    app = FastAPI(title="Agentic Embedded Lab", version="0.2.0-dev", openapi_url="/v1/openapi.json")
 
     def translate(call: Any) -> Any:
         try:
@@ -70,6 +70,10 @@ def create_app(workspace: Path | None = None) -> FastAPI:
     @app.get("/v1/doctor")
     def doctor() -> dict[str, Any]:
         return service.doctor()
+
+    @app.get("/v1/healthz")
+    def healthz() -> dict[str, str]:
+        return {"status": "ok"}
 
     @app.get("/v1/project")
     def inspect_project(
@@ -140,6 +144,13 @@ def create_app(workspace: Path | None = None) -> FastAPI:
         _: dict[str, Any] = Depends(require_user),  # noqa: B008
     ) -> dict[str, Any]:
         return translate(lambda: service.cancel_task(task_id).model_dump(mode="json"))
+
+    @app.get("/v1/tasks/{task_id}")
+    def get_task(
+        task_id: str,
+        _: dict[str, Any] = Depends(require_user),  # noqa: B008
+    ) -> dict[str, Any]:
+        return translate(lambda: service.task_status(task_id).model_dump(mode="json"))
 
     @app.post("/v1/workers/{worker_id}/lease")
     def lease_task(

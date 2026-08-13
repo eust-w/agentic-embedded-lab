@@ -1,30 +1,25 @@
 api_version: ael.dev/v1
 kind: ExperimentSpec
 name: 01-kconfig-dependency-faulty
-system: benchmarks/systems/native-analysis.yaml
+system: benchmarks/systems/zephyr-build-case01-faulty.yaml
 duration_us: 3000
 macro_step_us: 1000
 timeout_s: 300
 seed: 1001
-stimuli:
-- at_us: 0
-  target: analysis.case_id
-  value: 1
-- at_us: 0
-  target: analysis.fixed
-  value: false
+stimuli: []
 assertions:
-- metric: analysis.failure
+- metric: build.failure
   operator: eq
   expected: 0
   critical: true
 observables:
-- analysis.failure
+- build.failure
 allowed_model_states:
 - conformance_validated
 - hardware_validated
 - production_approved
 tags:
 - benchmark
+- mechanism-backed
 - faulty
 - case-01

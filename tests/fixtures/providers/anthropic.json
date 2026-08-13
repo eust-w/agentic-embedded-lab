@@ -1,0 +1,10 @@
+{
+  "id": "msg_recorded_anthropic",
+  "stop_reason": "end_turn",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"api_version\":\"ael.dev/v1\",\"kind\":\"HardwareBehaviorIR\",\"name\":\"GroundedProviderPeripheral\",\"bus_width\":32,\"size\":256,\"registers\":[{\"name\":\"STATUS\",\"offset\":0,\"width\":32,\"reset\":0,\"fields\":[{\"name\":\"READY\",\"lsb\":0,\"width\":1,\"access\":\"ro\",\"reset\":0}]}],\"grounding\":{\"/registers/0\":[\"examples/models/grounded-source.txt#lines:1-3\"]}}"
+    }
+  ]
+}

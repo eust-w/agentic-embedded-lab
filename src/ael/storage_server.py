@@ -332,6 +332,17 @@ class ServerStateStore:
             )
         return task
 
+    def task(self, task_id: str) -> WorkerTask | None:
+        with self.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    self.sa["select"](self.tasks).where(self.tasks.c.task_id == task_id)
+                )
+                .mappings()
+                .first()
+            )
+        return self._task(row) if row else None
+
     def lease_task(self, worker_id: str, lease_seconds: int = 60) -> WorkerTask | None:
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
@@ -490,5 +501,6 @@ class ServerStateStore:
             lease_token=row["lease_token"],
             lease_expires_at=row["lease_expires_at"],
             attempts=row["attempts"],
+            result=row["result"],
             created_at=row["created_at"],
         )

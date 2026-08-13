@@ -12,13 +12,18 @@ jobs:
   foundation:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          toolchains: arm-zephyr-eabi
+          sdk-version: 1.0.1
       - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
       - run: ruff check .
-      - run: pytest --cov=ael --cov-report=term-missing
+      - run: pytest --cov=ael --cov-report=term-missing --junitxml=foundation-tests.xml
       - name: Build FMI 2.0 proxies
         run: |
           cmake -S native/fmi-proxies -B .ael/build/fmi -DCMAKE_BUILD_TYPE=Release
@@ -55,7 +60,7 @@ jobs:
             exit 1
           fi
           grep -F "five reference platforms" production-gate.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: foundation-evidence
           path: |

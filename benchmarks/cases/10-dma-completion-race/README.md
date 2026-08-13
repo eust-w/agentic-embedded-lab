@@ -1,7 +1,9 @@
 # 10 - DMA completion interrupt race
 
-Causal chain: DMA flag races consumer -> completion is lost -> transfer does not complete.
+Mechanism: memory transfer completes.
+
+Causal chain: memory transfer completes -> completion flag races consumer -> copied bytes and completion are checked.
 
 Fidelity boundary: Requires peripheral and DMA conformance tests.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

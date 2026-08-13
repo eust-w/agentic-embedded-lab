@@ -1,0 +1,3 @@
+Register STATUS is a 32-bit read-only register at offset 0x00.
+Bit 0 is READY and resets to zero.
+The peripheral occupies 0x100 bytes.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import ctypes
 import json
 import platform
@@ -107,12 +108,38 @@ def main() -> None:
         seed=1024,
         omsimulator=arguments.om_simulator,
     )
+    with result.result_file.open(newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    numeric_outputs: dict[str, float] = {}
+    for row in rows:
+        for name, raw in row.items():
+            if name.lower() in {"time", "time [s]"} or raw in {None, ""}:
+                continue
+            try:
+                numeric_outputs[name] = float(raw)
+            except ValueError:
+                continue
+    nonzero_outputs = {
+        name: value for name, value in numeric_outputs.items() if abs(value) > 1e-15
+    }
+    if not nonzero_outputs:
+        raise RuntimeError("FMI acceptance produced no non-zero traced output")
+    units = {
+        f"{component.id}.{port.name}": port.unit
+        for component in system.components
+        for port in component.ports
+        if port.unit is not None
+    }
+    if not units:
+        raise RuntimeError("FMI acceptance topology declares no units")
     evidence = {
         "status": "passed",
         "ssp": str(ssp.relative_to(workspace)),
         "ssp_sha256": sha256_file(ssp),
         "result": str(result.result_file.relative_to(workspace)),
         "result_sha256": sha256_file(result.result_file),
+        "nonzero_outputs": nonzero_outputs,
+        "port_units": units,
         "hardware_validated": False,
         "limitations": ["FMI functional exchange only; no calibrated equivalence."],
     }

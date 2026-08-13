@@ -1,7 +1,7 @@
 api_version: ael.dev/v1
 kind: ExperimentSpec
 name: 23-wifi-reconnect-fixed
-system: benchmarks/systems/network-renode.yaml
+system: benchmarks/systems/network-renode-fixed.yaml
 duration_us: 6000
 macro_step_us: 1000
 timeout_s: 300
@@ -11,17 +11,30 @@ stimuli:
   target: mcu.case_id
   value: 23
 - at_us: 0
-  target: mcu.fixed
-  value: 1
+  target: network.interference_dbm
+  value: -95.0
+  unit: dBm
 - at_us: 0
-  target: network.fault_scale
+  target: network.partition_ms
   value: 0.0
+  unit: ms
+- at_us: 0
+  target: network.retry_limit
+  value: 8
+- at_us: 0
+  target: network.protocol
+  value: 1
 assertions:
+- metric: network.failure
+  operator: eq
+  expected: 0
+  critical: true
 - metric: mcu.failure
   operator: eq
   expected: 0
   critical: true
 observables:
+- network.failure
 - mcu.failure
 allowed_model_states:
 - conformance_validated
@@ -29,5 +42,6 @@ allowed_model_states:
 - production_approved
 tags:
 - benchmark
+- mechanism-backed
 - fixed
 - case-23

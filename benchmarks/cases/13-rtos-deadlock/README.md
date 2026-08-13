@@ -1,7 +1,9 @@
 # 13 - RTOS mutex deadlock
 
-Causal chain: mutex order ABBA -> tasks block cyclically -> forward progress stops.
+Mechanism: two lock orders form wait-for graph.
+
+Causal chain: two lock orders form wait-for graph -> progress watchdog observes cycle -> deadlock is reported.
 
 Fidelity boundary: RTOS binary and virtual CPU behavior only.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

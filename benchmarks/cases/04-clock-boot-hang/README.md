@@ -1,7 +1,9 @@
 # 04 - Clock initialization causes a boot hang
 
-Causal chain: clock source never ready -> boot wait does not exit -> application does not start.
+Mechanism: clock ready condition absent.
+
+Causal chain: clock ready condition absent -> bounded boot poll expires -> boot assertion fails.
 
 Fidelity boundary: Clock fidelity is model-dependent.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

@@ -90,7 +90,7 @@ class AelService:
     def inspect(self) -> dict[str, Any]:
         models = self.store.list_models()
         benchmark = load_catalog(self.layout.root)
-        release_failures = benchmark.validate_release()
+        release_failures = benchmark.validate_release(self.layout.root)
         return {
             "workspace": str(self.layout.root),
             "storage_mode": self.storage_mode,
@@ -119,38 +119,36 @@ class AelService:
                 self.layout.root / "LICENSE",
                 self.layout.root / "pyproject.toml",
                 self.layout.root / "AGENTS.md",
-                *[
-                    self.layout.root / "schemas/v1" / f"{name}.schema.json"
-                    for name in SCHEMA_TYPES
-                ],
+                *[self.layout.root / "schemas/v1" / f"{name}.schema.json" for name in SCHEMA_TYPES],
             ]
             failures.extend(
                 f"foundation artifact missing: {path.relative_to(self.layout.root)}"
                 for path in required_paths
                 if not path.is_file()
             )
-        if profile in {ReleaseProfile.SIMULATION, ReleaseProfile.PRODUCTION}:
-            failures.extend(benchmark.validate_release())
+        if profile in {
+            ReleaseProfile.SIMULATION,
+            ReleaseProfile.SOFTWARE,
+            ReleaseProfile.PRODUCTION,
+        }:
+            failures.extend(benchmark.validate_release(self.layout.root))
             acceptance_path = self.layout.root / "acceptance" / "simulation.json"
             if not acceptance_path.is_file():
                 failures.append("simulation acceptance manifest is missing")
             else:
                 from .contracts import AcceptanceManifest
 
-                acceptance = load_document(
-                    acceptance_path, AcceptanceManifest, self.layout.root
-                )
+                acceptance = load_document(acceptance_path, AcceptanceManifest, self.layout.root)
                 if acceptance.profile != ReleaseProfile.SIMULATION:
                     failures.append("simulation acceptance has the wrong profile")
                 if acceptance.platform != "Ubuntu 24.04 x86_64":
                     failures.append("simulation acceptance is not from the authoritative platform")
-                expected = {
-                    f"benchmark:{case.id:02d}-{case.slug}" for case in benchmark.cases
-                }
+                expected = {f"benchmark:{case.id:02d}-{case.slug}" for case in benchmark.cases}
                 expected.update(
                     {
                         "cross-domain:five-backend",
                         "fmi:five-domain",
+                        "backend:zephyr_build",
                         "backend:renode",
                         "backend:ngspice",
                         "backend:openmodelica",
@@ -161,28 +159,43 @@ class AelService:
                 failures.extend(
                     validate_acceptance_manifest(self.layout.root, acceptance, expected)
                 )
+        if profile in {ReleaseProfile.SOFTWARE, ReleaseProfile.PRODUCTION}:
+            from .contracts import AcceptanceManifest
+
+            software_path = self.layout.root / "acceptance" / "software.json"
+            if not software_path.is_file():
+                failures.append("software production-topology acceptance manifest is missing")
+            else:
+                software = load_document(software_path, AcceptanceManifest, self.layout.root)
+                if software.profile != ReleaseProfile.SOFTWARE:
+                    failures.append("software acceptance has the wrong profile")
+                software_expected = {
+                    "deployment:compose",
+                    "storage:postgres-s3",
+                    "security:oidc-mtls",
+                    "worker:lease-recovery",
+                    "supply-chain:sbom-signature",
+                }
+                failures.extend(
+                    validate_acceptance_manifest(self.layout.root, software, software_expected)
+                )
         if profile == ReleaseProfile.PRODUCTION:
             production_models = self.store.count_models(ModelState.PRODUCTION_APPROVED)
             if production_models < 5:
-                failures.append(
-                    f"production-approved capability packages: {production_models}/5"
-                )
+                failures.append(f"production-approved capability packages: {production_models}/5")
             production_path = self.layout.root / "acceptance" / "production.json"
             if not production_path.is_file():
                 failures.extend(
                     [
                         "five reference platforms have no current hardware differential bundles",
                         "instrument calibration and validation envelopes are unavailable",
-                        "PostgreSQL/S3 worker deployment has no production acceptance evidence",
-                        "mTLS/OIDC/recovery/license production reviews have not passed",
+                        "hardware and production capability packages require human approval",
                     ]
                 )
             else:
                 from .contracts import AcceptanceManifest
 
-                production = load_document(
-                    production_path, AcceptanceManifest, self.layout.root
-                )
+                production = load_document(production_path, AcceptanceManifest, self.layout.root)
                 if production.profile != ReleaseProfile.PRODUCTION:
                     failures.append("production acceptance has the wrong profile")
                 if not production.signature:
@@ -199,13 +212,11 @@ class AelService:
                     "license:approved",
                 }
                 failures.extend(
-                    validate_acceptance_manifest(
-                        self.layout.root, production, production_expected
-                    )
+                    validate_acceptance_manifest(self.layout.root, production, production_expected)
                 )
         return {
             "profile": profile,
-            "release": "1.0",
+            "release": "0.2.0-development-preview",
             "ready": not failures,
             "failures": failures,
             "boundary": "This check never infers hardware validation from simulation results.",
@@ -232,6 +243,12 @@ class AelService:
 
     def enqueue_task(self, task: WorkerTask) -> WorkerTask:
         return self.store.enqueue_task(task)
+
+    def task_status(self, task_id: str) -> WorkerTask:
+        task = self.store.task(task_id)
+        if task is None:
+            raise KeyError(f"unknown task: {task_id}")
+        return task
 
     def lease_task(self, worker_id: str, lease_seconds: int = 60) -> WorkerTask | None:
         return self.store.lease_task(worker_id, lease_seconds)
@@ -285,9 +302,7 @@ class AelService:
             "warnings": warnings,
         }
 
-    def run_experiment(
-        self, path: Path, cancel_event: threading.Event | None = None
-    ) -> RunResult:
+    def run_experiment(self, path: Path, cancel_event: threading.Event | None = None) -> RunResult:
         safe_path = resolve_workspace_path(self.layout.root, path, must_exist=True)
         run_id = uuid.uuid4().hex
         self.store.create_run(run_id, str(safe_path.relative_to(self.layout.root)))

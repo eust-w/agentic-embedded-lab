@@ -1,7 +1,9 @@
 # 18 - LDO load-step dropout
 
-Causal chain: load step exceeds headroom -> LDO enters dropout -> rail minimum crosses limit.
+Mechanism: load current steps.
+
+Causal chain: load current steps -> LDO impedance and decoupling produce rail transient -> minimum voltage is measured.
 
 Fidelity boundary: Valid only for the selected component model and conditions.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

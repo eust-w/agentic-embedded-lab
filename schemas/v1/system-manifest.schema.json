@@ -2,6 +2,7 @@
   "$defs": {
     "BackendName": {
       "enum": [
+        "zephyr_build",
         "native",
         "renode",
         "ngspice",

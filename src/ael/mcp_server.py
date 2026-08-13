@@ -66,11 +66,15 @@ def generate_missing_model(request_path: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def validate_model(model_id: str) -> dict[str, Any]:
-    """Apply static checks only; this tool cannot grant hardware or production approval."""
+def validate_model(model_id: str, evidence: list[str] | None = None) -> dict[str, Any]:
+    """Apply static/conformance checks; never grant hardware or production approval."""
     package, _ = service.models.load(model_id)
     if package.state == "generated":
         package = service.models.static_validate(model_id, actor="mcp-agent")
+    if package.state == "static_validated" and evidence:
+        package = service.models.conformance_validate(
+            model_id, actor="mcp-agent", evidence=evidence
+        )
     return {
         "model": package.model_dump(mode="json"),
         "next_allowed": "conformance_validated" if package.state == "static_validated" else None,

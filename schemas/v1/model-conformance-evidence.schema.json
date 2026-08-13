@@ -1,0 +1,87 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "artifact_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "minProperties": 1,
+      "title": "Artifact Hashes",
+      "type": "object"
+    },
+    "compile_passed": {
+      "title": "Compile Passed",
+      "type": "boolean"
+    },
+    "driver_tests_passed": {
+      "title": "Driver Tests Passed",
+      "type": "boolean"
+    },
+    "generated_tests_are_only_evidence": {
+      "default": false,
+      "title": "Generated Tests Are Only Evidence",
+      "type": "boolean"
+    },
+    "kind": {
+      "const": "ModelConformanceEvidence",
+      "default": "ModelConformanceEvidence",
+      "title": "Kind",
+      "type": "string"
+    },
+    "model_id": {
+      "title": "Model Id",
+      "type": "string"
+    },
+    "property_tests_passed": {
+      "title": "Property Tests Passed",
+      "type": "boolean"
+    },
+    "reference_trace_passed": {
+      "title": "Reference Trace Passed",
+      "type": "boolean"
+    },
+    "register_layout_passed": {
+      "title": "Register Layout Passed",
+      "type": "boolean"
+    },
+    "sandbox_network": {
+      "const": "none",
+      "title": "Sandbox Network",
+      "type": "string"
+    },
+    "sandbox_read_only": {
+      "title": "Sandbox Read Only",
+      "type": "boolean"
+    },
+    "source_independent": {
+      "title": "Source Independent",
+      "type": "boolean"
+    },
+    "validator": {
+      "minLength": 1,
+      "title": "Validator",
+      "type": "string"
+    }
+  },
+  "required": [
+    "model_id",
+    "validator",
+    "source_independent",
+    "register_layout_passed",
+    "compile_passed",
+    "driver_tests_passed",
+    "property_tests_passed",
+    "reference_trace_passed",
+    "sandbox_network",
+    "sandbox_read_only",
+    "artifact_hashes"
+  ],
+  "title": "ModelConformanceEvidence",
+  "type": "object"
+}

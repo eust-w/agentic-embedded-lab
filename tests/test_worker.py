@@ -15,6 +15,7 @@ from ael.contracts import (
     WorkerTaskResult,
 )
 from ael.storage import StateStore, WorkspaceLayout
+from ael.worker import OutboundWorker
 
 
 def registration() -> WorkerRegistration:
@@ -92,3 +93,33 @@ def test_expired_lease_is_recovered_by_an_eligible_worker(tmp_path: Path) -> Non
     recovered = store.lease_task("worker-2", lease_seconds=60)
     assert recovered and recovered.lease_owner == "worker-2"
     assert recovered.attempts == 2
+
+
+def test_outbound_worker_retries_transient_registration(monkeypatch) -> None:
+    worker = object.__new__(OutboundWorker)
+    worker.poll_seconds = 0
+    worker.registration = registration()
+    attempts = 0
+
+    def register() -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            import httpx
+
+            raise httpx.ConnectError("transient")
+
+    class Response:
+        def raise_for_status(self) -> None:
+            raise KeyboardInterrupt
+
+    class Client:
+        def post(self, path: str) -> Response:
+            return Response()
+
+    worker.register = register
+    worker.client = Client()
+    monkeypatch.setattr("ael.worker.time.sleep", lambda _: None)
+    with pytest.raises(KeyboardInterrupt):
+        worker.run_forever()
+    assert attempts == 2

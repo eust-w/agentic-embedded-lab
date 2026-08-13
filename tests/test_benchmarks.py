@@ -19,7 +19,7 @@ def test_catalog_has_all_24_ordered_cases(workspace: Path) -> None:
 
 
 def test_catalog_has_complete_executable_asset_contracts(workspace: Path) -> None:
-    failures = load_catalog(workspace).validate_release()
+    failures = load_catalog(workspace).validate_release(workspace)
     assert failures == []
 
 
@@ -37,13 +37,14 @@ def test_all_faulty_fixed_specs_and_systems_are_strictly_valid(workspace: Path) 
         assert faulty.seed == fixed.seed == case.seed
         assert "faulty" in faulty.tags and "fixed" in fixed.tags
         assert faulty.assertions == fixed.assertions
+        assert "mcu.fixed" not in Path(case.faulty_experiment).read_text(encoding="utf-8")
+        assert "fault_scale" not in Path(case.fixed_experiment).read_text(encoding="utf-8")
+        assert case.mechanism.execution_backend in case.backends
         system = load_document(Path(fixed.system), SystemManifest, workspace)
         validate_fmi_topology(system)
 
 
-def test_benchmark_cli_accepts_serialized_passing_manifest(
-    workspace: Path, monkeypatch
-) -> None:
+def test_benchmark_cli_accepts_serialized_passing_manifest(workspace: Path, monkeypatch) -> None:
     class PassingService:
         def run_benchmarks(self, case_ids: set[int] | None, source_revision: str):
             assert case_ids == {1}
@@ -67,9 +68,7 @@ def test_benchmark_cli_accepts_serialized_passing_manifest(
     assert result.exit_code == 0, result.output
 
 
-def test_benchmark_cli_fails_closed_for_serialized_failure(
-    workspace: Path, monkeypatch
-) -> None:
+def test_benchmark_cli_fails_closed_for_serialized_failure(workspace: Path, monkeypatch) -> None:
     class FailingService:
         def run_benchmarks(self, case_ids: set[int] | None, source_revision: str):
             return {"entries": [{"name": "benchmark:01", "status": "failed"}]}

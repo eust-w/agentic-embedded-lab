@@ -4,7 +4,7 @@ requires-python = ">=3.12, <3.14"
 
 [[package]]
 name = "agentic-embedded-lab"
-version = "0.1.0.dev0"
+version = "0.2.0.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -24,6 +24,7 @@ mcp = [
     { name = "mcp" },
 ]
 modeling = [
+    { name = "pypdf" },
     { name = "systemrdl-compiler" },
 ]
 server = [
@@ -52,6 +53,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'server'", specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "pyjwt", extras = ["crypto"], marker = "extra == 'server'", specifier = ">=2.10,<3" },
+    { name = "pypdf", marker = "extra == 'modeling'", specifier = ">=6.0,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<9" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2,<7" },
     { name = "pyvisa", marker = "extra == 'worker'", specifier = ">=1.15,<2" },
@@ -1052,6 +1054,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/6f/1b4eb0c40d6b9582d2262c38e0252529d8d510c2fcfd9fb4ec2d3b47fb38/pymonocypher-4.0.3.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a0be46e747b031383becc67f0569b8e90bdda411a7f775bb1673d3d5565326a0", size = 501516, upload-time = "2026-08-05T14:18:19.088Z" },
     { url = "https://files.pythonhosted.org/packages/db/3b/ad2c87db45cfd06c64a0cce1164de5d34213040f546d7761fb5ec2b42d20/pymonocypher-4.0.3.3-cp313-cp313-win_amd64.whl", hash = "sha256:765ed843a6a080730ea46a9d91680a714c15ea6b61c918e731f4884119bba003", size = 90938, upload-time = "2026-08-05T14:18:20.272Z" },
     { url = "https://files.pythonhosted.org/packages/9f/72/e1f974bb10911e2d6922e7479beb46bfac342758a146492348397c25a1a5/pymonocypher-4.0.3.3-cp313-cp313-win_arm64.whl", hash = "sha256:6d79d16a13e5b7c8790b27b343600f7e5295e987ab387b2fe1498f2d70a94705", size = 80746, upload-time = "2026-08-05T14:18:21.255Z" },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.15.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/17/17/ee75a92718ec7212de831e71454d702225aa5e474a805cce169806044453/pypdf-6.15.0.tar.gz", hash = "sha256:d39c4d955a76409284a905e2d65b40076d77ab76129e0faaeeb6612403ecfc79", size = 6993794, upload-time = "2026-08-06T13:06:49.929Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/72/ce3067ac31e214a66388159f8462ddb8c13dd00170f24d555a1f1ae8ee91/pypdf-6.15.0-py3-none-any.whl", hash = "sha256:14e001d6504822cb1ca9c7ed9a69bccb320f59b320730f55af804361abe4d5ee", size = 378123, upload-time = "2026-08-06T13:06:47.709Z" },
 ]
 
 [[package]]

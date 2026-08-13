@@ -1,10 +1,29 @@
-faultScale := {{fault_scale}};
-inputPower := {{input_power}};
-retryCount := {{rf_retries}};
-temperature := 25.0 + inputPower * (8.0 + 18.0 * faultScale) + retryCount * 0.15;
-batteryHours := 2400.0 / (1.0 + 11.0 * faultScale + retryCount * 0.2);
+model AelDomain
+  parameter Real ambient(unit="degC") = 25.0;
+  parameter Real thermalResistance(unit="K/W") = {{thermal_resistance_K_per_W}};
+  parameter Real thermalCapacitance(unit="J/K") = 0.8;
+  parameter Real inputPower(unit="W") = {{input_power}};
+  parameter Real sleepCurrent(unit="A") = {{sleep_current_A}};
+  parameter Real activeCurrent(unit="A") = 0.04;
+  parameter Real dutyCycle = {{duty_cycle}};
+  parameter Real batteryCapacity(unit="A.h") = 2.4;
+  parameter Real retryCount = {{rf_retries}};
+  Real temperature(start=25.0, fixed=true, unit="degC");
+  Real averageCurrent(unit="A");
+  Real batteryHours(unit="h");
+equation
+  thermalCapacitance * der(temperature) =
+    inputPower + retryCount * 0.02 - (temperature - ambient) / thermalResistance;
+  averageCurrent = sleepCurrent * (1.0 - dutyCycle) + activeCurrent * dutyCycle;
+  batteryHours = batteryCapacity / averageCurrent;
+end AelDomain;
+
+result := simulate(AelDomain, stopTime=300.0, numberOfIntervals=300,
+                   outputFormat="csv", fileNamePrefix="ael_domain_res");
+temperature := val(AelDomain.temperature, 300.0, result.resultFile);
+batteryHours := val(AelDomain.batteryHours, 300.0, result.resultFile);
 failure := if temperature > 70.0 or batteryHours < 300.0 then 1.0 else 0.0;
 print("AEL_METRIC temperature=" + String(temperature) + "\n");
 print("AEL_METRIC battery_hours=" + String(batteryHours) + "\n");
 print("AEL_METRIC failure=" + String(failure) + "\n");
-print("AEL_EVENT modelica.domain {\"calibrated\":false}\n");
+print("AEL_EVENT modelica.rc_thermal_battery {\"calibrated\":false}\n");

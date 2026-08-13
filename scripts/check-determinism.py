@@ -29,13 +29,9 @@ def main() -> None:
         hashes.append(trace_hash(result.evidence_dir / "events.jsonl"))
     if len(set(statuses)) != 1 or len(set(hashes)) != 1:
         raise SystemExit(
-            f"determinism failed: statuses={sorted(set(statuses))} "
-            f"hashes={sorted(set(hashes))}"
+            f"determinism failed: statuses={sorted(set(statuses))} hashes={sorted(set(hashes))}"
         )
-    print(
-        f"deterministic repeats={arguments.repeats} "
-        f"status={statuses[0]} trace={hashes[0]}"
-    )
+    print(f"deterministic repeats={arguments.repeats} status={statuses[0]} trace={hashes[0]}")
 
 
 if __name__ == "__main__":

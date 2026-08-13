@@ -8,7 +8,6 @@ timeout_s: 300
 seed: 404
 stimuli:
   - {at_us: 0, target: mcu.case_id, value: 4}
-  - {at_us: 0, target: mcu.fixed, value: 1}
 assertions:
   - {metric: mcu.failure, operator: eq, expected: 0, critical: true}
 allowed_model_states: [conformance_validated, hardware_validated, production_approved]

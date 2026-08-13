@@ -1,6 +1,6 @@
 static_resources:
   listeners:
-    - name: ael_mtls
+    - name: ael_worker_mtls
       address: {socket_address: {address: 0.0.0.0, port_value: 8443}}
       filter_chains:
         - transport_socket:
@@ -12,25 +12,57 @@ static_resources:
                 tls_certificates:
                   - certificate_chain: {filename: /certs/server.crt}
                     private_key: {filename: /certs/server.key}
-                validation_context: {trusted_ca: {filename: /certs/worker-ca.crt}}
+                validation_context: {trusted_ca: {filename: /certs/ca.crt}}
           filters:
             - name: envoy.filters.network.http_connection_manager
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-                stat_prefix: ael
+                stat_prefix: ael_worker
                 route_config:
-                  name: local
+                  name: worker
+                  virtual_hosts:
+                    - name: ael
+                      domains: ["*"]
+                      routes:
+                        - match: {prefix: "/v1/workers/"}
+                          route: {cluster: control_plane}
+                http_filters:
+                  - name: envoy.filters.http.header_mutation
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation
+                      mutations:
+                        request_mutations:
+                          - append:
+                              append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                              header:
+                                key: X-Client-Cert-SHA256
+                                value: "%DOWNSTREAM_PEER_FINGERPRINT_256%"
+                  - name: envoy.filters.http.router
+                    typed_config: {"@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router}
+    - name: ael_user_tls
+      address: {socket_address: {address: 0.0.0.0, port_value: 9443}}
+      filter_chains:
+        - transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain: {filename: /certs/server.crt}
+                    private_key: {filename: /certs/server.key}
+          filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ael_user
+                route_config:
+                  name: user
                   virtual_hosts:
                     - name: ael
                       domains: ["*"]
                       routes:
                         - match: {prefix: "/"}
                           route: {cluster: control_plane}
-                request_headers_to_add:
-                  - header:
-                      key: X-Client-Cert-SHA256
-                      value: "%DOWNSTREAM_PEER_FINGERPRINT_256%"
-                    append_action: OVERWRITE_IF_EXISTS_OR_ADD
                 http_filters:
                   - name: envoy.filters.http.router
                     typed_config: {"@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router}

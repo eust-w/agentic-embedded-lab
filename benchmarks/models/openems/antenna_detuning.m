@@ -31,15 +31,15 @@ port = calcPort(port, Sim_Path, freq);
 s11 = port.uf.ref ./ port.uf.inc;
 [min_s11, idx] = min(20*log10(abs(s11)));
 resonance = freq(idx);
-% This is a functional, deliberately uncalibrated link-budget proxy.  The
-% geometry delta contributes 0.35 dB/mm while the simulated return loss
-% reduces that penalty.  Do not add a nominal loss offset here: doing so
-% would turn the tuned reference geometry into a failing antenna even when
-% detune is zero.  Hardware equivalence remains explicitly unverified.
-rf_loss_db = max(0, min_s11 + abs(detune) * 0.35);
-failure = double(rf_loss_db > 6);
+[~, target_idx] = min(abs(freq - f0));
+target_s11_db = 20*log10(abs(s11(target_idx)));
+reflection = min(0.999999, abs(s11(target_idx))^2);
+mismatch_efficiency = max(1e-6, 1.0 - reflection);
+rf_loss_db = -10*log10(mismatch_efficiency);
+failure = double(rf_loss_db > 1.0);
 fprintf('AEL_METRIC resonance_hz=%g\n', resonance);
 fprintf('AEL_METRIC s11_db=%g\n', min_s11);
+fprintf('AEL_METRIC target_s11_db=%g\n', target_s11_db);
 fprintf('AEL_METRIC rf_loss_db=%g\n', rf_loss_db);
 fprintf('AEL_METRIC failure=%g\n', failure);
 fprintf('AEL_EVENT openems.solve {"calibrated":false}\n');

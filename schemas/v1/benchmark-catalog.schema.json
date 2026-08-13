@@ -1,0 +1,253 @@
+{
+  "$defs": {
+    "BackendName": {
+      "enum": [
+        "zephyr_build",
+        "native",
+        "renode",
+        "ngspice",
+        "openmodelica",
+        "omsimulator",
+        "ns3",
+        "openems",
+        "hardware",
+        "synthetic"
+      ],
+      "title": "BackendName",
+      "type": "string"
+    },
+    "BenchmarkCase": {
+      "additionalProperties": false,
+      "properties": {
+        "backends": {
+          "items": {
+            "$ref": "#/$defs/BackendName"
+          },
+          "minItems": 1,
+          "title": "Backends",
+          "type": "array"
+        },
+        "category": {
+          "$ref": "#/$defs/ProblemCategory"
+        },
+        "causal_chain": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Causal Chain",
+          "type": "array"
+        },
+        "experiment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Experiment"
+        },
+        "faulty_asset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Faulty Asset"
+        },
+        "faulty_experiment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Faulty Experiment"
+        },
+        "fidelity_boundary": {
+          "title": "Fidelity Boundary",
+          "type": "string"
+        },
+        "fixed_asset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixed Asset"
+        },
+        "fixed_experiment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fixed Experiment"
+        },
+        "hardware_target": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hardware Target"
+        },
+        "id": {
+          "maximum": 24,
+          "minimum": 1,
+          "title": "Id",
+          "type": "integer"
+        },
+        "mechanism": {
+          "$ref": "#/$defs/BenchmarkMechanism"
+        },
+        "readiness": {
+          "title": "Readiness",
+          "type": "string"
+        },
+        "seed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "title",
+        "category",
+        "backends",
+        "readiness",
+        "fidelity_boundary",
+        "mechanism"
+      ],
+      "title": "BenchmarkCase",
+      "type": "object"
+    },
+    "BenchmarkMechanism": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_backend": {
+          "$ref": "#/$defs/BackendName"
+        },
+        "faulty_assets": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Faulty Assets",
+          "type": "array"
+        },
+        "fixed_assets": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Fixed Assets",
+          "type": "array"
+        },
+        "oracle": {
+          "title": "Oracle",
+          "type": "string"
+        },
+        "required_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Required Evidence",
+          "type": "array"
+        },
+        "trigger": {
+          "title": "Trigger",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trigger",
+        "execution_backend",
+        "faulty_assets",
+        "fixed_assets",
+        "oracle",
+        "required_evidence"
+      ],
+      "title": "BenchmarkMechanism",
+      "type": "object"
+    },
+    "ProblemCategory": {
+      "enum": [
+        "build",
+        "configuration",
+        "boot",
+        "memory",
+        "digital_io",
+        "timing",
+        "interrupt",
+        "dma",
+        "serial_bus",
+        "rtos",
+        "update",
+        "analog",
+        "power",
+        "thermal",
+        "network",
+        "rf",
+        "electromagnetic",
+        "security",
+        "hardware_only"
+      ],
+      "title": "ProblemCategory",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/BenchmarkCase"
+      },
+      "title": "Cases",
+      "type": "array"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "cases"
+  ],
+  "title": "BenchmarkCatalog",
+  "type": "object"
+}

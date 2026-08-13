@@ -125,9 +125,7 @@ class BackendWorker(ABC):
                 artifacts=artifacts,
             )
         if request.operation == BackendOperation.SNAPSHOT:
-            destination = resolve_workspace_path(
-                self.workspace, request.payload["destination"]
-            )
+            destination = resolve_workspace_path(self.workspace, request.payload["destination"])
             snapshot = self.snapshot(destination)
             return BackendResponse(
                 request_id=request.request_id,
@@ -235,9 +233,7 @@ class BackendWorker(ABC):
         half = limit // 2
         return f"{output[:half]}\n... <truncated {len(output) - limit} chars> ...\n{output[-half:]}"
 
-    def parse_output(
-        self, output: str, event_time_us: int
-    ) -> tuple[dict[str, Any], list[Event]]:
+    def parse_output(self, output: str, event_time_us: int) -> tuple[dict[str, Any], list[Event]]:
         metrics: dict[str, Any] = {}
         events: list[Event] = []
         for line in output.splitlines():
@@ -265,9 +261,7 @@ class BackendWorker(ABC):
                         fidelity_ref=f"{self.backend_name}:tool-executed",
                     )
                 )
-            measurement = re.match(
-                r"^ael_([a-z0-9_.-]+)\s*=\s*([-+0-9.eE]+)", line.strip().lower()
-            )
+            measurement = re.match(r"^ael_([a-z0-9_.-]+)\s*=\s*([-+0-9.eE]+)", line.strip().lower())
             if measurement:
                 metrics[measurement.group(1)] = float(measurement.group(2))
         return metrics, events

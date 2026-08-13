@@ -20,7 +20,9 @@ class ModelicaWorker(BackendWorker):
         script = self.runtime_dir / "ael-domain.mos"
         text = source.read_text(encoding="utf-8")
         replacements = {
-            "fault_scale": self.inputs.get("fault_scale", 0),
+            "thermal_resistance_K_per_W": self.inputs.get("thermal_resistance_K_per_W", 18.0),
+            "sleep_current_A": self.inputs.get("sleep_current_A", 0.000008),
+            "duty_cycle": self.inputs.get("duty_cycle", 0.01),
             "input_power": self.inputs.get("input_power", 0.1),
             "rf_retries": self.inputs.get("rf_retries", 0),
         }

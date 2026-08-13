@@ -1,11 +1,11 @@
-version: 1.0-development
+version: 0.2.0.dev0
 cases:
 - id: 1
   slug: kconfig-dependency
   title: Kconfig dependency removes a feature from the build
   category: configuration
   backends:
-  - native
+  - zephyr_build
   readiness: executable
   fidelity_boundary: Build-system evidence only.
   faulty_asset: benchmarks/cases/01-kconfig-dependency/faulty.yaml
@@ -18,13 +18,24 @@ cases:
   - feature object omitted
   - requested behavior absent
   seed: 1001
+  mechanism:
+    trigger: Kconfig dependency false
+    execution_backend: zephyr_build
+    faulty_assets:
+    - firmware/zephyr-build/conf/case1-faulty.conf
+    fixed_assets:
+    - firmware/zephyr-build/conf/case1-fixed.conf
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 2
   slug: devicetree-mapping
   title: Devicetree address, IRQ, or pin mapping error
   category: configuration
   backends:
-  - native
   - renode
+  - zephyr_build
   readiness: executable
   fidelity_boundary: Requires a board-specific Renode model.
   faulty_asset: benchmarks/cases/02-devicetree-mapping/faulty.yaml
@@ -34,15 +45,28 @@ cases:
   fixed_experiment: benchmarks/cases/02-devicetree-mapping/fixed.yaml
   causal_chain:
   - mapping mismatch
-  - driver binds wrong resource
-  - peripheral access fails
+  - generated devicetree contains wrong address
+  - oracle rejects mapping
   seed: 1002
+  mechanism:
+    trigger: mapping mismatch
+    execution_backend: zephyr_build
+    faulty_assets:
+    - firmware/zephyr-build/conf/case2-faulty.conf
+    - firmware/zephyr-build/overlays/case2-faulty.overlay
+    fixed_assets:
+    - firmware/zephyr-build/conf/case2-fixed.conf
+    - firmware/zephyr-build/overlays/case2-fixed.overlay
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 3
   slug: linker-ram-overflow
   title: Linker section and RAM overflow
   category: memory
   backends:
-  - native
+  - zephyr_build
   readiness: executable
   fidelity_boundary: Linker evidence does not establish runtime safety.
   faulty_asset: benchmarks/cases/03-linker-ram-overflow/faulty.yaml
@@ -55,6 +79,17 @@ cases:
   - linker rejects image
   - firmware is not produced
   seed: 1003
+  mechanism:
+    trigger: section exceeds RAM
+    execution_backend: zephyr_build
+    faulty_assets:
+    - firmware/zephyr-build/conf/case3-faulty.conf
+    fixed_assets:
+    - firmware/zephyr-build/conf/case3-fixed.conf
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 4
   slug: clock-boot-hang
   title: Clock initialization causes a boot hang
@@ -69,10 +104,23 @@ cases:
   faulty_experiment: benchmarks/cases/04-clock-boot-hang/faulty.yaml
   fixed_experiment: benchmarks/cases/04-clock-boot-hang/fixed.yaml
   causal_chain:
-  - clock source never ready
-  - boot wait does not exit
-  - application does not start
+  - clock ready condition absent
+  - bounded boot poll expires
+  - boot assertion fails
   seed: 1004
+  mechanism:
+    trigger: clock ready condition absent
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/04-clock-boot-hang/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/04-clock-boot-hang/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 5
   slug: gpio-polarity-debounce
   title: GPIO polarity or button debounce error
@@ -87,10 +135,23 @@ cases:
   faulty_experiment: benchmarks/cases/05-gpio-polarity-debounce/faulty.yaml
   fixed_experiment: benchmarks/cases/05-gpio-polarity-debounce/fixed.yaml
   causal_chain:
-  - polarity/debounce wrong
-  - edge is misclassified
-  - input action is incorrect
+  - active-low bounce sampled
+  - polarity/debounce logic misclassifies edge
+  - input action fails
   seed: 1005
+  mechanism:
+    trigger: active-low bounce sampled
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/05-gpio-polarity-debounce/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/05-gpio-polarity-debounce/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 6
   slug: timer-wrap
   title: Timer counter wraparound
@@ -105,10 +166,23 @@ cases:
   faulty_experiment: benchmarks/cases/06-timer-wrap/faulty.yaml
   fixed_experiment: benchmarks/cases/06-timer-wrap/fixed.yaml
   causal_chain:
-  - counter wraps
-  - signed/branch elapsed math fails
-  - deadline is misclassified
+  - 32-bit counter wraps
+  - elapsed-time implementation evaluates boundary
+  - deadline is classified
   seed: 1006
+  mechanism:
+    trigger: 32-bit counter wraps
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/06-timer-wrap/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/06-timer-wrap/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 7
   slug: uart-framing
   title: UART baud rate or frame mismatch
@@ -123,10 +197,23 @@ cases:
   faulty_experiment: benchmarks/cases/07-uart-framing/faulty.yaml
   fixed_experiment: benchmarks/cases/07-uart-framing/fixed.yaml
   causal_chain:
-  - baud/frame mismatch
-  - receiver framing fails
-  - UART assertion fails
+  - UART frame is encoded
+  - baud/parity configuration is checked
+  - peer accepts or rejects frame
   seed: 1007
+  mechanism:
+    trigger: UART frame is encoded
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/07-uart-framing/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/07-uart-framing/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 8
   slug: uart-isr-race
   title: UART ring buffer ISR race and packet loss
@@ -141,10 +228,23 @@ cases:
   faulty_experiment: benchmarks/cases/08-uart-isr-race/faulty.yaml
   fixed_experiment: benchmarks/cases/08-uart-isr-race/fixed.yaml
   causal_chain:
-  - ISR races ring head
-  - unread byte overwritten
-  - packet loss is observed
+  - RX producer fills ring
+  - ISR push meets full-buffer policy
+  - byte preservation oracle runs
   seed: 1008
+  mechanism:
+    trigger: RX producer fills ring
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/08-uart-isr-race/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/08-uart-isr-race/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 9
   slug: irq-starvation
   title: IRQ priority starvation
@@ -159,10 +259,23 @@ cases:
   faulty_experiment: benchmarks/cases/09-irq-starvation/faulty.yaml
   fixed_experiment: benchmarks/cases/09-irq-starvation/fixed.yaml
   causal_chain:
-  - IRQ priority unbounded
-  - control task starved
-  - deadline is missed
+  - IRQ consumes control budget
+  - 1 kHz deadline is evaluated
+  - starvation is recorded
   seed: 1009
+  mechanism:
+    trigger: IRQ consumes control budget
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/09-irq-starvation/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/09-irq-starvation/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 10
   slug: dma-completion-race
   title: DMA completion interrupt race
@@ -177,10 +290,23 @@ cases:
   faulty_experiment: benchmarks/cases/10-dma-completion-race/faulty.yaml
   fixed_experiment: benchmarks/cases/10-dma-completion-race/fixed.yaml
   causal_chain:
-  - DMA flag races consumer
-  - completion is lost
-  - transfer does not complete
+  - memory transfer completes
+  - completion flag races consumer
+  - copied bytes and completion are checked
   seed: 1010
+  mechanism:
+    trigger: memory transfer completes
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/10-dma-completion-race/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/10-dma-completion-race/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 11
   slug: i2c-recovery
   title: I2C NACK, bus busy, and recovery failure
@@ -195,10 +321,23 @@ cases:
   faulty_experiment: benchmarks/cases/11-i2c-recovery/faulty.yaml
   fixed_experiment: benchmarks/cases/11-i2c-recovery/fixed.yaml
   causal_chain:
-  - I2C NACK leaves bus busy
-  - recovery clocks omitted
-  - transaction retries exhaust
+  - target leaves I2C bus busy
+  - recovery clocks and STOP are attempted
+  - retry limit is checked
   seed: 1011
+  mechanism:
+    trigger: target leaves I2C bus busy
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/11-i2c-recovery/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/11-i2c-recovery/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 12
   slug: spi-mode-crc
   title: SPI mode or CRC mismatch
@@ -213,10 +352,23 @@ cases:
   faulty_experiment: benchmarks/cases/12-spi-mode-crc/faulty.yaml
   fixed_experiment: benchmarks/cases/12-spi-mode-crc/fixed.yaml
   causal_chain:
-  - SPI mode/CRC differs
-  - frame verification fails
-  - sample is rejected
+  - SPI frame and CRC are produced
+  - target verifies CRC
+  - sample is accepted or rejected
   seed: 1012
+  mechanism:
+    trigger: SPI frame and CRC are produced
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/12-spi-mode-crc/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/12-spi-mode-crc/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 13
   slug: rtos-deadlock
   title: RTOS mutex deadlock
@@ -231,10 +383,23 @@ cases:
   faulty_experiment: benchmarks/cases/13-rtos-deadlock/faulty.yaml
   fixed_experiment: benchmarks/cases/13-rtos-deadlock/fixed.yaml
   causal_chain:
-  - mutex order ABBA
-  - tasks block cyclically
-  - forward progress stops
+  - two lock orders form wait-for graph
+  - progress watchdog observes cycle
+  - deadlock is reported
   seed: 1013
+  mechanism:
+    trigger: two lock orders form wait-for graph
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/13-rtos-deadlock/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/13-rtos-deadlock/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 14
   slug: priority-inversion
   title: Priority inversion and deadline miss
@@ -249,16 +414,28 @@ cases:
   faulty_experiment: benchmarks/cases/14-priority-inversion/faulty.yaml
   fixed_experiment: benchmarks/cases/14-priority-inversion/fixed.yaml
   causal_chain:
-  - low task holds lock
-  - high task waits
-  - medium task causes deadline miss
+  - high/medium/low scheduling contention
+  - lock wait is measured
+  - deadline oracle runs
   seed: 1014
+  mechanism:
+    trigger: high/medium/low scheduling contention
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/14-priority-inversion/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/14-priority-inversion/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 15
   slug: stack-hardfault
   title: Stack overflow, HardFault, and crash localization
   category: memory
   backends:
-  - native
   - renode
   readiness: executable
   fidelity_boundary: Crash localization does not prove absence of other faults.
@@ -268,10 +445,23 @@ cases:
   faulty_experiment: benchmarks/cases/15-stack-hardfault/faulty.yaml
   fixed_experiment: benchmarks/cases/15-stack-hardfault/fixed.yaml
   causal_chain:
-  - stack allocation unbounded
-  - guard trips
-  - HardFault evidence is captured
+  - requested stack crosses guard budget
+  - fault evidence is emitted
+  - fault oracle runs
   seed: 1015
+  mechanism:
+    trigger: requested stack crosses guard budget
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/15-stack-hardfault/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/15-stack-hardfault/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 16
   slug: watchdog-loop
   title: Watchdog reset loop
@@ -286,10 +476,23 @@ cases:
   faulty_experiment: benchmarks/cases/16-watchdog-loop/faulty.yaml
   fixed_experiment: benchmarks/cases/16-watchdog-loop/fixed.yaml
   causal_chain:
-  - health check never reaches feed
-  - watchdog resets
-  - boot loop repeats
+  - health progress gates watchdog feed
+  - feed deadline expires
+  - reset-loop condition is recorded
   seed: 1016
+  mechanism:
+    trigger: health progress gates watchdog feed
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/16-watchdog-loop/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/16-watchdog-loop/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 17
   slug: ota-power-loss
   title: Signed OTA power-loss corruption and anti-rollback recovery
@@ -305,10 +508,23 @@ cases:
   faulty_experiment: benchmarks/cases/17-ota-power-loss/faulty.yaml
   fixed_experiment: benchmarks/cases/17-ota-power-loss/fixed.yaml
   causal_chain:
-  - power loss interrupts OTA
-  - active image corrupts
-  - journal recovery determines boot
+  - power loss interrupts candidate commit
+  - boot journal selects a slot
+  - rollback oracle checks committed image
   seed: 1017
+  mechanism:
+    trigger: power loss interrupts candidate commit
+    execution_backend: renode
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/17-ota-power-loss/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/17-ota-power-loss/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 18
   slug: ldo-dropout
   title: LDO load-step dropout
@@ -323,10 +539,21 @@ cases:
   faulty_experiment: benchmarks/cases/18-ldo-dropout/faulty.yaml
   fixed_experiment: benchmarks/cases/18-ldo-dropout/fixed.yaml
   causal_chain:
-  - load step exceeds headroom
-  - LDO enters dropout
-  - rail minimum crosses limit
+  - load current steps
+  - LDO impedance and decoupling produce rail transient
+  - minimum voltage is measured
   seed: 1018
+  mechanism:
+    trigger: load current steps
+    execution_backend: ngspice
+    faulty_assets:
+    - benchmarks/cases/18-ldo-dropout/faulty.yaml
+    fixed_assets:
+    - benchmarks/cases/18-ldo-dropout/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 19
   slug: decoupling-brownout
   title: Insufficient decoupling causes brownout reset
@@ -342,10 +569,23 @@ cases:
   faulty_experiment: benchmarks/cases/19-decoupling-brownout/faulty.yaml
   fixed_experiment: benchmarks/cases/19-decoupling-brownout/fixed.yaml
   causal_chain:
-  - decoupling is insufficient
-  - rail transient crosses BOR
-  - MCU reset is requested
+  - load step crosses BOR threshold
+  - power FMU emits brownout
+  - firmware reset policy observes event
   seed: 1019
+  mechanism:
+    trigger: load step crosses BOR threshold
+    execution_backend: ngspice
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/19-decoupling-brownout/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/19-decoupling-brownout/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 20
   slug: sleep-battery-life
   title: Sleep leakage and duty-cycle battery-life miss
@@ -361,10 +601,21 @@ cases:
   faulty_experiment: benchmarks/cases/20-sleep-battery-life/faulty.yaml
   fixed_experiment: benchmarks/cases/20-sleep-battery-life/fixed.yaml
   causal_chain:
-  - sleep leakage is high
-  - average current rises
-  - battery-life target is missed
+  - firmware power states define duty cycle
+  - current is integrated
+  - battery-life oracle runs
   seed: 1020
+  mechanism:
+    trigger: firmware power states define duty cycle
+    execution_backend: openmodelica
+    faulty_assets:
+    - benchmarks/cases/20-sleep-battery-life/faulty.yaml
+    fixed_assets:
+    - benchmarks/cases/20-sleep-battery-life/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 21
   slug: thermal-protection
   title: Heating causes throttling, drift, or protection
@@ -380,10 +631,23 @@ cases:
   faulty_experiment: benchmarks/cases/21-thermal-protection/faulty.yaml
   fixed_experiment: benchmarks/cases/21-thermal-protection/fixed.yaml
   causal_chain:
-  - thermal resistance is high
-  - temperature rises
-  - protection/throttling is late
+  - loss enters RC thermal network
+  - junction temperature rises
+  - throttle threshold is checked
   seed: 1021
+  mechanism:
+    trigger: loss enters RC thermal network
+    execution_backend: openmodelica
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/21-thermal-protection/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/21-thermal-protection/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 22
   slug: 802154-interference
   title: 802.15.4 interference raises retry, loss, and energy
@@ -399,10 +663,21 @@ cases:
   faulty_experiment: benchmarks/cases/22-802154-interference/faulty.yaml
   fixed_experiment: benchmarks/cases/22-802154-interference/fixed.yaml
   causal_chain:
-  - 802.15.4 interference rises
-  - retry count increases
-  - loss and energy rise
+  - LR-WPAN interferer transmits
+  - MAC retries and energy accumulate
+  - delivery oracle runs
   seed: 1022
+  mechanism:
+    trigger: LR-WPAN interferer transmits
+    execution_backend: ns3
+    faulty_assets:
+    - benchmarks/cases/22-802154-interference/faulty.yaml
+    fixed_assets:
+    - benchmarks/cases/22-802154-interference/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 23
   slug: wifi-reconnect
   title: Wi-Fi latency, partition, and reconnect policy
@@ -418,10 +693,23 @@ cases:
   faulty_experiment: benchmarks/cases/23-wifi-reconnect/faulty.yaml
   fixed_experiment: benchmarks/cases/23-wifi-reconnect/fixed.yaml
   causal_chain:
-  - network partition occurs
-  - reconnect retries are unbounded
-  - policy assertion fails
+  - Wi-Fi link is partitioned
+  - retry/backoff state advances
+  - reconnect budget is checked
   seed: 1023
+  mechanism:
+    trigger: Wi-Fi link is partitioned
+    execution_backend: ns3
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/23-wifi-reconnect/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/23-wifi-reconnect/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact
 - id: 24
   slug: antenna-cross-domain
   title: Antenna detuning drives retries, power, and heat
@@ -441,8 +729,21 @@ cases:
   faulty_experiment: benchmarks/cases/24-antenna-cross-domain/faulty.yaml
   fixed_experiment: benchmarks/cases/24-antenna-cross-domain/fixed.yaml
   causal_chain:
-  - antenna geometry detunes
-  - RF loss raises network retries
-  - firmware retry policy raises current
-  - supply and thermal loads rise
+  - antenna geometry detunes and openEMS computes S11
+  - mismatch loss changes ns-3 delivery and retries
+  - firmware retry policy changes current
+  - ngspice rail and Modelica temperature respond
   seed: 1024
+  mechanism:
+    trigger: antenna geometry detunes and openEMS computes S11
+    execution_backend: openems
+    faulty_assets:
+    - firmware/zephyr/faulty.conf
+    - benchmarks/cases/24-antenna-cross-domain/faulty.yaml
+    fixed_assets:
+    - firmware/zephyr/fixed.conf
+    - benchmarks/cases/24-antenna-cross-domain/fixed.yaml
+    oracle: tool-produced failure metric equals zero
+    required_evidence:
+    - tool_event
+    - artifact

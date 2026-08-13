@@ -1,7 +1,7 @@
 api_version: ael.dev/v1
 kind: ExperimentSpec
 name: 13-rtos-deadlock-fixed
-system: benchmarks/systems/renode-digital.yaml
+system: benchmarks/systems/renode-digital-fixed.yaml
 duration_us: 3000
 macro_step_us: 1000
 timeout_s: 300
@@ -10,9 +10,6 @@ stimuli:
 - at_us: 0
   target: mcu.case_id
   value: 13
-- at_us: 0
-  target: mcu.fixed
-  value: 1
 assertions:
 - metric: mcu.failure
   operator: eq
@@ -26,5 +23,6 @@ allowed_model_states:
 - production_approved
 tags:
 - benchmark
+- mechanism-backed
 - fixed
 - case-13

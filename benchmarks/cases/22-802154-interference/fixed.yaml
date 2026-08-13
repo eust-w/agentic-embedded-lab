@@ -8,8 +8,19 @@ timeout_s: 300
 seed: 1022
 stimuli:
 - at_us: 0
-  target: network.fault_scale
+  target: network.interference_dbm
+  value: -95.0
+  unit: dBm
+- at_us: 0
+  target: network.partition_ms
   value: 0.0
+  unit: ms
+- at_us: 0
+  target: network.retry_limit
+  value: 8
+- at_us: 0
+  target: network.protocol
+  value: 0
 assertions:
 - metric: network.failure
   operator: eq
@@ -23,5 +34,6 @@ allowed_model_states:
 - production_approved
 tags:
 - benchmark
+- mechanism-backed
 - fixed
 - case-22

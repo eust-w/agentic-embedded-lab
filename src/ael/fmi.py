@@ -99,7 +99,9 @@ def export_ssp(system: SystemManifest, destination: Path) -> Path:
     validate_fmi_topology(system)
     ssd_namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
     ssc_namespace = "http://ssp-standard.org/SSP1/SystemStructureCommon"
-    oms_namespace = "https://raw.githubusercontent.com/OpenModelica/OMSimulator/master/schema/oms.xsd"
+    oms_namespace = (
+        "https://raw.githubusercontent.com/OpenModelica/OMSimulator/master/schema/oms.xsd"
+    )
     # OMSimulator 2.1.3 compares qualified element names (for example
     # ``ssd:System``) rather than namespace URIs.  Emit the conventional SSP
     # prefixes instead of relying on a semantically equivalent default

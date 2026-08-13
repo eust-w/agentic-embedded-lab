@@ -44,9 +44,7 @@ class DeterministicScheduler:
         system: SystemManifest,
         cancel_event: threading.Event | None = None,
     ) -> RunResult:
-        recorder = EvidenceRecorder(
-            self.layout, run_id, experiment, system, cas=self.cas
-        )
+        recorder = EvidenceRecorder(self.layout, run_id, experiment, system, cas=self.cas)
         adapters: dict[str, Adapter] = {}
         status = RunStatus.RUNNING
         error: str | None = None
@@ -131,8 +129,7 @@ class DeterministicScheduler:
                     for component_id, adapter in adapters.items():
                         adapter.snapshot(
                             str(
-                                recorder.snapshot_dir
-                                / f"{component_id}-{checkpoint:016d}.snapshot"
+                                recorder.snapshot_dir / f"{component_id}-{checkpoint:016d}.snapshot"
                             )
                         )
 

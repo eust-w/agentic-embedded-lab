@@ -8,7 +8,10 @@ components:
     model: benchmarks/models/ns3/ael-network.cc
     step_us: 1000
     ports:
-      - {name: fault_scale, direction: input, data_type: real, unit: "1"}
+      - {name: interference_dbm, direction: input, data_type: real, unit: dBm}
+      - {name: partition_ms, direction: input, data_type: real, unit: ms}
+      - {name: retry_limit, direction: input, data_type: integer, unit: "1"}
+      - {name: protocol, direction: input, data_type: integer, unit: "1"}
       - {name: rf_loss_db, direction: input, data_type: real, unit: dB}
       - {name: failure, direction: output, data_type: real, unit: "1"}
       - {name: packet_loss, direction: output, data_type: real, unit: "1"}

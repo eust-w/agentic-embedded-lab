@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 mainmenu "AEL reference firmware"
 
+config AEL_FAULTY_VARIANT
+    bool "Build intentionally faulty benchmark mechanisms"
+    default n
+
 source "Kconfig.zephyr"

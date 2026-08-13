@@ -63,4 +63,18 @@ Local mode uses SQLite and SHA-256 CAS. Server mode requires PostgreSQL and an
 S3-compatible bucket. Workers register capabilities over outbound mTLS, lease
 compatible tasks transactionally, heartbeat, recover expired leases, upload
 hashed evidence and honor cancellation. Human APIs use OIDC issuer, audience
-and JWKS validation. Deployment acceptance remains a production gate.
+and JWKS validation. Deployment acceptance forms the `software` gate. It tests
+OIDC user access, an outbound mTLS Worker, cancellation, expired-lease recovery,
+PostgreSQL restart, S3 outage/retransmit, and a reversible migration probe. It
+does not promote a hardware model or satisfy the `production` gate.
+
+## Grounded provider generation
+
+SVD and SystemRDL remain deterministic imports. Datasheet, errata and driver
+inputs may use OpenAI or Anthropic structured outputs. Providers receive only
+workspace-contained, pre-hashed sources; strict Hardware Behavior IR is
+validated before code generation. A Grounding Manifest maps generated fields
+to source locators, while a Generation Receipt records hashes, request ID,
+model and prompt-template version without storing credentials. Recorded
+fixtures are mandatory CI contract tests; optional live smoke calls are
+reported `not-run` when the corresponding Secret is absent.

@@ -1,0 +1,5 @@
+/ {
+    chosen {
+        ael-probe-address = <0x40004400>;
+    };
+};

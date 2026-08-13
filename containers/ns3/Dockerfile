@@ -8,7 +8,8 @@ RUN curl -fL "https://www.nsnam.org/releases/ns-allinone-${NS3_VERSION}.tar.bz2"
       -o /tmp/ns3.tar.bz2 \
     && tar -xjf /tmp/ns3.tar.bz2 -C /opt \
     && cd "/opt/ns-allinone-${NS3_VERSION}/ns-${NS3_VERSION}" \
-    && ./ns3 configure --disable-tests --build-profile=release --enable-modules=core \
+    && ./ns3 configure --disable-tests --build-profile=release \
+         --enable-modules=core,network,mobility,spectrum,lr-wpan,energy,wifi \
     && ./ns3 build
 COPY benchmarks/models/ns3/ael-network.cc /tmp/ael-network.cc
 RUN root="/opt/ns-allinone-${NS3_VERSION}/ns-${NS3_VERSION}" \
@@ -36,5 +37,7 @@ ENV AEL_NS3_BIN=/usr/local/bin/ns3 AEL_WORKSPACE=/workspace \
     AEL_NS3_PRECOMPILED=/opt/ael-bin/ael-network \
     AEL_NS3_MODEL_SHA256=/opt/ael-bin/ael-network.sha256 \
     LD_LIBRARY_PATH=/opt/ns-${NS3_VERSION}/build/lib
-RUN /opt/ael-bin/ael-network --stopUs=1000 | grep -F "AEL_METRIC failure=0"
+RUN /opt/ael-bin/ael-network --stopUs=1000 --protocol=0 \
+      --interference_dbm=-95 --partition_ms=0 --retry_limit=8 \
+      | grep -F "AEL_METRIC failure=0"
 ENTRYPOINT ["python3", "-m", "ael.backend_workers.ns3"]

@@ -1,7 +1,9 @@
 # 11 - I2C NACK, bus busy, and recovery failure
 
-Causal chain: I2C NACK leaves bus busy -> recovery clocks omitted -> transaction retries exhaust.
+Mechanism: target leaves I2C bus busy.
+
+Causal chain: target leaves I2C bus busy -> recovery clocks and STOP are attempted -> retry limit is checked.
 
 Fidelity boundary: Digital protocol only; rise time is not represented.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

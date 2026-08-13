@@ -1,7 +1,9 @@
 # 02 - Devicetree address, IRQ, or pin mapping error
 
-Causal chain: mapping mismatch -> driver binds wrong resource -> peripheral access fails.
+Mechanism: mapping mismatch.
+
+Causal chain: mapping mismatch -> generated devicetree contains wrong address -> oracle rejects mapping.
 
 Fidelity boundary: Requires a board-specific Renode model.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

@@ -292,6 +292,11 @@ class StateStore:
             )
         return task
 
+    def task(self, task_id: str) -> WorkerTask | None:
+        with self.connection() as connection:
+            row = connection.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        return self._task_from_row(row) if row else None
+
     def lease_task(self, worker_id: str, lease_seconds: int = 60) -> WorkerTask | None:
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
@@ -451,5 +456,6 @@ class StateStore:
             lease_token=row["lease_token"],
             lease_expires_at=row["lease_expires_at"],
             attempts=row["attempts"],
+            result=json.loads(row["result_json"]) if row["result_json"] else None,
             created_at=row["created_at"],
         )

@@ -1,7 +1,9 @@
 # 19 - Insufficient decoupling causes brownout reset
 
-Causal chain: decoupling is insufficient -> rail transient crosses BOR -> MCU reset is requested.
+Mechanism: load step crosses BOR threshold.
+
+Causal chain: load step crosses BOR threshold -> power FMU emits brownout -> firmware reset policy observes event.
 
 Fidelity boundary: PCB parasitics remain unverified unless included and calibrated.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.

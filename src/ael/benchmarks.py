@@ -11,16 +11,27 @@ from .contracts import (
     AcceptanceEntry,
     AcceptanceManifest,
     BackendName,
+    ExperimentSpec,
     ProblemCategory,
     ReleaseProfile,
     RunStatus,
     StrictModel,
+    SystemManifest,
 )
 from .io import load_document, sha256_file, write_json
 from .security import resolve_workspace_path
 
 if TYPE_CHECKING:
     from .service import AelService
+
+
+class BenchmarkMechanism(StrictModel):
+    trigger: str
+    execution_backend: BackendName
+    faulty_assets: list[str] = Field(min_length=1)
+    fixed_assets: list[str] = Field(min_length=1)
+    oracle: str
+    required_evidence: list[str] = Field(min_length=1)
 
 
 class BenchmarkCase(StrictModel):
@@ -39,13 +50,15 @@ class BenchmarkCase(StrictModel):
     seed: int = Field(default=0, ge=0)
     hardware_target: str | None = None
     fidelity_boundary: str
+    mechanism: BenchmarkMechanism
 
 
 class BenchmarkCatalog(StrictModel):
     version: str
     cases: list[BenchmarkCase]
 
-    def validate_release(self) -> list[str]:
+    def validate_release(self, workspace: Path | None = None) -> list[str]:
+        workspace = (workspace or Path.cwd()).resolve()
         failures: list[str] = []
         ids = [case.id for case in self.cases]
         if ids != list(range(1, 25)):
@@ -63,6 +76,49 @@ class BenchmarkCatalog(StrictModel):
                 ]
             ):
                 failures.append(f"{case.id:02d}-{case.slug}: missing executable assets")
+            if case.mechanism.execution_backend not in case.backends:
+                failures.append(f"{case.id:02d}-{case.slug}: mechanism backend is not declared")
+            if BackendName.NATIVE in case.backends:
+                failures.append(
+                    f"{case.id:02d}-{case.slug}: native is not a formal benchmark backend"
+                )
+            if set(case.mechanism.faulty_assets) == set(case.mechanism.fixed_assets):
+                failures.append(
+                    f"{case.id:02d}-{case.slug}: faulty/fixed mechanism assets are identical"
+                )
+            for asset in [*case.mechanism.faulty_assets, *case.mechanism.fixed_assets]:
+                try:
+                    resolve_workspace_path(workspace, asset, must_exist=True)
+                except (FileNotFoundError, ValueError) as error:
+                    failures.append(f"{case.id:02d}-{case.slug}: mechanism asset: {error}")
+            for experiment_path in [case.faulty_experiment, case.fixed_experiment]:
+                if not experiment_path:
+                    continue
+                experiment = resolve_workspace_path(workspace, experiment_path, must_exist=True)
+                text = experiment.read_text(encoding="utf-8")
+                if "mcu.fixed" in text or "fault_scale" in text:
+                    failures.append(
+                        f"{case.id:02d}-{case.slug}: forbidden result selector in {experiment_path}"
+                    )
+                spec = load_document(experiment, ExperimentSpec, workspace)
+                system_path = resolve_workspace_path(workspace, spec.system, must_exist=True)
+                system = load_document(system_path, SystemManifest, workspace)
+                forbidden_properties = {
+                    "fixed",
+                    "fault_scale",
+                    "preset_failure",
+                    "expected_failure",
+                    "declared_result",
+                    "mock_backend",
+                    "fallback_backend",
+                }
+                for component in system.components:
+                    forbidden = forbidden_properties.intersection(component.properties)
+                    if forbidden:
+                        failures.append(
+                            f"{case.id:02d}-{case.slug}: component {component.id} contains "
+                            f"result/fallback controls: {sorted(forbidden)}"
+                        )
         return failures
 
 
@@ -87,6 +143,12 @@ class BenchmarkRunner:
         ):
             path = resolve_workspace_path(self.workspace, relative_path, must_exist=True)
             result = self.service.run_experiment(path)
+            mechanism_evidence: list[dict[str, Any]] = []
+            if (result.evidence_dir / "bundle.json").is_file():
+                bundle = json.loads(
+                    (result.evidence_dir / "bundle.json").read_text(encoding="utf-8")
+                )
+                mechanism_evidence = bundle.get("mechanism_evidence", [])
             checks.append(
                 {
                     "variant": label,
@@ -96,6 +158,11 @@ class BenchmarkRunner:
                     "evidence_dir": str(result.evidence_dir.relative_to(self.workspace)),
                     "passed": result.status == expected,
                     "error": result.error,
+                    "mechanism_evidence": mechanism_evidence,
+                    "mechanism_evidence_present": case.mechanism.required_evidence
+                    and set(case.mechanism.required_evidence).issubset(
+                        {item.get("kind") for item in mechanism_evidence}
+                    ),
                 }
             )
         asset_hashes = {
@@ -113,10 +180,11 @@ class BenchmarkRunner:
             "causal_chain": case.causal_chain,
             "fidelity_boundary": case.fidelity_boundary,
             "hardware_validated": False,
+            "mechanism": case.mechanism.model_dump(mode="json"),
         }
         evidence_path = evidence_dir / f"{case.id:02d}-{case.slug}.json"
         write_json(evidence_path, payload)
-        passed = all(item["passed"] for item in checks)
+        passed = all(item["passed"] and item["mechanism_evidence_present"] for item in checks)
         return AcceptanceEntry(
             name=f"benchmark:{case.id:02d}-{case.slug}",
             status="passed" if passed else "failed",
@@ -150,6 +218,7 @@ class BenchmarkRunner:
         if case_ids is None:
             entry_by_name = {entry.name: entry for entry in entries}
             for backend in (
+                BackendName.ZEPHYR_BUILD,
                 BackendName.RENODE,
                 BackendName.NGSPICE,
                 BackendName.MODELICA,
@@ -162,8 +231,7 @@ class BenchmarkRunner:
                 ]
                 status = (
                     "passed"
-                    if source_entries
-                    and all(entry.status == "passed" for entry in source_entries)
+                    if source_entries and all(entry.status == "passed" for entry in source_entries)
                     else "failed"
                 )
                 payload = {

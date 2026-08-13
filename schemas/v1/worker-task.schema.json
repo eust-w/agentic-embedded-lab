@@ -92,6 +92,19 @@
       "title": "Required Capabilities",
       "type": "array"
     },
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result"
+    },
     "status": {
       "$ref": "#/$defs/TaskStatus",
       "default": "queued"

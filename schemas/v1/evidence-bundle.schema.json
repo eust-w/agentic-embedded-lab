@@ -149,6 +149,14 @@
       "title": "Kind",
       "type": "string"
     },
+    "mechanism_evidence": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Mechanism Evidence",
+      "type": "array"
+    },
     "model_hashes": {
       "additionalProperties": {
         "type": "string"

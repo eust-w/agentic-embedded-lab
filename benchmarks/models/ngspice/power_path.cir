@@ -1,6 +1,6 @@
-AEL functional power-path transient model
-.param source_resistance='0.1 + AEL_fault_scale*12'
-.param capacitance='47u/(1 + AEL_fault_scale*20)'
+AEL generic LDO source-impedance and decoupling transient model
+.param source_resistance='AEL_source_resistance_ohm'
+.param capacitance='AEL_capacitance_uF*1u'
 Vsource source 0 3.3
 Rsource source rail {source_resistance}
 Cdec rail 0 {capacitance} ic=3.3

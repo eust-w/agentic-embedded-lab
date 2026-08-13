@@ -25,6 +25,12 @@ class AdapterCatalog:
     def __init__(self) -> None:
         self._probe_cache: dict[BackendName, AdapterProbe] = {}
         self._factories: dict[BackendName, Callable[[], Adapter]] = {
+            BackendName.ZEPHYR_BUILD: lambda: SubprocessAdapter(
+                BackendName.ZEPHYR_BUILD,
+                "ael.backend_workers.zephyr_build",
+                "4.4.2",
+                timeout_s=360,
+            ),
             BackendName.SYNTHETIC: SyntheticAdapter,
             BackendName.NATIVE: NativeAnalysisAdapter,
             BackendName.RENODE: lambda: SubprocessAdapter(

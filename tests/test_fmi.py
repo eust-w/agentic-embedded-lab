@@ -58,7 +58,9 @@ def test_ssp_export(tmp_path) -> None:
     tree = ElementTree.parse(output)
     ssd_namespace = "http://ssp-standard.org/SSP1/SystemStructureDescription"
     ssc_namespace = "http://ssp-standard.org/SSP1/SystemStructureCommon"
-    oms_namespace = "https://raw.githubusercontent.com/OpenModelica/OMSimulator/master/schema/oms.xsd"
+    oms_namespace = (
+        "https://raw.githubusercontent.com/OpenModelica/OMSimulator/master/schema/oms.xsd"
+    )
     assert tree.getroot().attrib["name"] == "one_with_punctuation"
     ssd_tags = {
         "SystemStructureDescription",

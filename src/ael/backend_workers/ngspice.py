@@ -19,14 +19,13 @@ class NgspiceWorker(BackendWorker):
         source = self.model_path()
         deck = self.runtime_dir / "ael.cir"
         defaults = {
-            "fault_scale": 0,
+            "source_resistance_ohm": 0.15,
+            "capacitance_uF": 47.0,
             "load_microamp": 60000,
             "rf_retries": 0,
         }
         defaults.update(self.inputs)
-        parameters = [
-            f".param AEL_{name}={value}" for name, value in sorted(defaults.items())
-        ]
+        parameters = [f".param AEL_{name}={value}" for name, value in sorted(defaults.items())]
         text = source.read_text(encoding="utf-8")
         source_lines = text.splitlines()
         if not source_lines:
@@ -53,10 +52,15 @@ class NgspiceWorker(BackendWorker):
             # referencing another transient measurement. Derive the discrete
             # assertion signal from the measured rail minimum instead.
             metrics["failure"] = float(supply_voltage < 2.7)
-        return metrics.copy(), metrics, events, {
-            "raw": self.artifact_reference(raw),
-            "log": self.artifact_reference(log),
-        }
+        return (
+            metrics.copy(),
+            metrics,
+            events,
+            {
+                "raw": self.artifact_reference(raw),
+                "log": self.artifact_reference(log),
+            },
+        )
 
 
 if __name__ == "__main__":

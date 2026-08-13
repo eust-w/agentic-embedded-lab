@@ -15,8 +15,19 @@ For a case to change to `executable`, the catalog must name:
 6. a fixed-seed evidence bundle;
 7. an explicit fidelity and non-claim boundary.
 
-Pull requests execute the native fast subset. Nightly builds both Zephyr
+Pull requests execute actual Kconfig, Devicetree and linker mechanisms plus the
+unit/security suite. Nightly builds both Zephyr
 architectures and all independently licensed backend images, then runs 24
 pairs, FMI/SSP, a 20-run deterministic hash and the simulation gate. Evidence
 is an Actions artifact, never source-controlled. Production adds real
 differential evidence and therefore remains blocked in this repository.
+
+`native` is restricted to control-plane tests and is rejected as a formal
+benchmark backend. A case is also rejected when faulty/fixed assets are
+identical, an experiment contains a direct result selector such as `mcu.fixed`
+or `fault_scale`, or its bundle lacks both tool events and raw artifacts.
+
+Mechanism evidence is not a blanket fidelity claim. For example, a Zephyr
+algorithm executed on a virtual MCU can prove the compiled control path and its
+oracle, while the case boundary may still mark register timing, analog behavior
+or silicon errata as unverified.

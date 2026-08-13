@@ -1,7 +1,9 @@
 # 01 - Kconfig dependency removes a feature from the build
 
+Mechanism: Kconfig dependency false.
+
 Causal chain: Kconfig dependency false -> feature object omitted -> requested behavior absent.
 
 Fidelity boundary: Build-system evidence only.
 
-`faulty.yaml` must fail its correctness assertion; `fixed.yaml` must pass. Neither result is physical hardware evidence.
+The variants select different controlled assets; neither experiment contains a direct pass/fail selector. Tool logs and mechanism events are retained in the Evidence Bundle. No result is physical-hardware evidence.
