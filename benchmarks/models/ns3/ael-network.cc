@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 using namespace ns3;
@@ -82,14 +83,16 @@ int main(int argc, char* argv[])
 
     NetDeviceContainer devices;
     std::vector<Ptr<energy::SimpleDeviceEnergyModel>> energyModels;
+    std::unique_ptr<LrWpanHelper> lrWpanHelper;
     if (protocol == 0)
     {
-        LrWpanHelper helper;
-        devices = helper.Install(nodes);
+        lrWpanHelper = std::make_unique<LrWpanHelper>();
+        devices = lrWpanHelper->Install(nodes);
         for (uint32_t index = 0; index < devices.GetN(); ++index)
         {
             auto device = DynamicCast<LrWpanNetDevice>(devices.Get(index));
-            helper.AddMobility(device->GetPhy(), nodes.Get(index)->GetObject<MobilityModel>());
+            lrWpanHelper->AddMobility(
+                device->GetPhy(), nodes.Get(index)->GetObject<MobilityModel>());
         }
         auto sourceMac = DynamicCast<LrWpanNetDevice>(devices.Get(0))->GetMac();
         auto receiverMac = DynamicCast<LrWpanNetDevice>(devices.Get(1))->GetMac();
