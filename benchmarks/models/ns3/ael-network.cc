@@ -86,6 +86,11 @@ int main(int argc, char* argv[])
     {
         LrWpanHelper helper;
         devices = helper.Install(nodes);
+        for (uint32_t index = 0; index < devices.GetN(); ++index)
+        {
+            auto device = DynamicCast<LrWpanNetDevice>(devices.Get(index));
+            helper.AddMobility(device->GetPhy(), nodes.Get(index)->GetObject<MobilityModel>());
+        }
         auto sourceMac = DynamicCast<LrWpanNetDevice>(devices.Get(0))->GetMac();
         auto receiverMac = DynamicCast<LrWpanNetDevice>(devices.Get(1))->GetMac();
         auto interfererMac = DynamicCast<LrWpanNetDevice>(devices.Get(2))->GetMac();
