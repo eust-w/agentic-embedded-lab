@@ -76,6 +76,7 @@ jobs:
           assert 28.0 < step["metrics"]["temperature"] < 29.0, step
           assert step["metrics"]["battery_hours"] > 5000.0, step
           PY
+          fi
       - uses: actions/upload-artifact@v6
         if: always()
         with:
