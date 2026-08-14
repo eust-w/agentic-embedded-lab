@@ -2,6 +2,16 @@
 
 All notable changes to Agentic Embedded Lab are documented here.
 
+## Unreleased
+
+### Documentation
+
+- Rebuilt the public project landing page with a bilingual, media-rich README.
+- Documented the plugin-first architecture, continuous simulation-in-the-loop,
+  and evidence-gated continual-learning and self-evolution direction.
+- Added public contribution and security-reporting guidance.
+- Moved push-triggered backend and simulation workflows to the default branch.
+
 ## 0.2.0.dev0 - 2026-08-14
 
 Development Preview. This is not a production or hardware-equivalence release.

@@ -10,11 +10,26 @@ readme = "README.md"
 requires-python = ">=3.12,<3.14"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Agentic Embedded Lab contributors" }]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Software Development :: Embedded Systems",
+]
 dependencies = [
   "pydantic>=2.12,<3",
   "PyYAML>=6.0.2,<7",
   "typer>=0.16,<1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/eust-w/agentic-embedded-lab"
+Repository = "https://github.com/eust-w/agentic-embedded-lab.git"
+Documentation = "https://github.com/eust-w/agentic-embedded-lab/tree/main/docs"
+Issues = "https://github.com/eust-w/agentic-embedded-lab/issues"
+Changelog = "https://github.com/eust-w/agentic-embedded-lab/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 server = [

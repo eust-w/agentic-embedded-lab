@@ -6,7 +6,7 @@ concurrency:
 
 on:
   push:
-    branches: ["codex/ael-0.2-real-mechanisms"]
+    branches: ["main"]
   schedule:
     - cron: "17 18 * * *"
   workflow_dispatch:

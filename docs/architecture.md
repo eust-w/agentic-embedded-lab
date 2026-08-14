@@ -4,6 +4,13 @@ AEL separates agent intent from simulator commands. The CLI is the behavior
 source; HTTP and MCP delegate to the same `AelService` and never expose a shell,
 Renode Monitor, SCPI, or an unrestricted host path.
 
+The long-term architecture is plugin-first: agent interfaces, routers, execution
+adapters, model packages, oracles, evidence stores, workers, instruments, and
+policy gates are capabilities behind versioned contracts. Continuous simulation
+campaigns and evidence-gated self-evolution are described in
+[the project vision](vision.md). Those future layers reuse the contracts below;
+they do not bypass fidelity, security, or promotion gates.
+
 ```text
 Agent / CLI / API
        |
@@ -78,3 +85,8 @@ to source locators, while a Generation Receipt records hashes, request ID,
 model and prompt-template version without storing credentials. Recorded
 fixtures are mandatory CI contract tests; optional live smoke calls are
 reported `not-run` when the corresponding Secret is absent.
+
+Generated candidates are intentionally separated from validation. An agent can
+advance a candidate only through `conformance_validated`; hardware and production
+states require independent physical evidence and a human actor. This is the basis
+for continual learning without self-approval.
