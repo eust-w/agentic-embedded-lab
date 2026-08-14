@@ -1,0 +1,46 @@
+version: "1.0"
+boards:
+  - id: stm32f407g-disc1
+    display_name: STM32F407G-DISC1
+    architecture: arm-cortex-m4
+    board_revision: pinned-at-enrollment
+    debug_backend: openocd
+    openocd_interface: interface/stlink.cfg
+    openocd_target: target/stm32f4x.cfg
+    samples_required: 3
+    validation_status: unverified
+  - id: hifive1-revb
+    display_name: SiFive HiFive1 Rev B
+    architecture: riscv32
+    board_revision: Rev B
+    debug_backend: openocd
+    openocd_interface: interface/ftdi/olimex-arm-usb-tiny-h.cfg
+    openocd_target: target/sifive-hifive1-revb.cfg
+    samples_required: 3
+    validation_status: unverified
+  - id: nrf52840-dk
+    display_name: Nordic nRF52840 DK
+    architecture: arm-cortex-m4
+    board_revision: pinned-at-enrollment
+    debug_backend: jlink
+    jlink_device: nRF52840_xxAA
+    samples_required: 3
+    validation_status: unverified
+  - id: esp32-s3-devkitc-1
+    display_name: ESP32-S3-DevKitC-1
+    architecture: xtensa-lx7
+    board_revision: pinned-at-enrollment
+    debug_backend: openocd
+    openocd_interface: board/esp32s3-builtin.cfg
+    openocd_target: target/esp32s3.cfg
+    samples_required: 3
+    validation_status: unverified
+  - id: rp2040-pico
+    display_name: Raspberry Pi Pico RP2040
+    architecture: arm-cortex-m0plus
+    board_revision: pinned-at-enrollment
+    debug_backend: openocd
+    openocd_interface: interface/cmsis-dap.cfg
+    openocd_target: target/rp2040.cfg
+    samples_required: 3
+    validation_status: unverified

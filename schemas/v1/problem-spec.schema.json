@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "ProblemCategory": {
+      "enum": [
+        "build",
+        "configuration",
+        "boot",
+        "memory",
+        "digital_io",
+        "timing",
+        "interrupt",
+        "dma",
+        "serial_bus",
+        "rtos",
+        "update",
+        "analog",
+        "power",
+        "thermal",
+        "network",
+        "rf",
+        "electromagnetic",
+        "security",
+        "hardware_only"
+      ],
+      "title": "ProblemCategory",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "category": {
+      "$ref": "#/$defs/ProblemCategory"
+    },
+    "constraints": {
+      "additionalProperties": true,
+      "title": "Constraints",
+      "type": "object"
+    },
+    "desired_claims": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Desired Claims",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "kind": {
+      "const": "ProblemSpec",
+      "default": "ProblemSpec",
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "symptoms": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Symptoms",
+      "type": "array"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target"
+    },
+    "title": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "title",
+    "category",
+    "symptoms"
+  ],
+  "title": "ProblemSpec",
+  "type": "object"
+}

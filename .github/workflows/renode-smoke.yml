@@ -1,0 +1,83 @@
+name: renode-riscv-smoke
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ["codex/ael-0.2-real-mechanisms"]
+    paths:
+      - ".github/workflows/renode-smoke.yml"
+      - "benchmarks/models/renode/**"
+      - "benchmarks/systems/renode-riscv-smoke.yaml"
+      - "benchmarks/experiments/riscv-smoke.yaml"
+      - "containers/renode/**"
+      - "firmware/zephyr/**"
+      - "scripts/renode-riscv-direct.resc"
+      - "src/ael/adapters/**"
+      - "src/ael/backend_workers/renode.py"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: "3.12"}
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          toolchains: riscv64-zephyr-elf
+          sdk-version: 1.0.1
+      - uses: docker/setup-buildx-action@v4
+      - run: |
+          west build -p always -b hifive1_revb firmware/zephyr \
+            -d firmware/zephyr/build-hifive1
+          python -m pip install -e .
+          docker buildx build \
+            --file containers/renode/Dockerfile \
+            --tag ael-renode:ci \
+            --cache-from type=gha,scope=renode \
+            --cache-to type=gha,mode=max,scope=renode \
+            --load .
+      - name: Direct Renode phase probe
+        run: |
+          set +e
+          timeout --kill-after=5s --signal=TERM 25s docker run --rm \
+            --read-only \
+            --network=none \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges \
+            --pids-limit=512 \
+            --memory=4g \
+            --cpus=2 \
+            --tmpfs=/tmp:rw,exec,nosuid,nodev,size=2g \
+            --mount "type=bind,src=$PWD,dst=/workspace" \
+            --workdir /tmp \
+            --env HOME=/tmp/ael-home \
+            --env XDG_CONFIG_HOME=/tmp/ael-config \
+            --entrypoint=renode \
+            ael-renode:ci --disable-gui --console /workspace/scripts/renode-riscv-direct.resc \
+            >renode-direct.log 2>&1
+          direct_status=$?
+          set -e
+          sed -n '1,240p' renode-direct.log
+          test "$direct_status" -eq 0
+          grep -F 'AEL_PHASE:ran' renode-direct.log
+          grep -F 'AEL_REGISTER:failure:0' renode-direct.log
+      - name: Adapter evidence smoke
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_OCI_RUNTIME: docker
+        run: ael run benchmarks/experiments/riscv-smoke.yaml
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: renode-riscv-smoke-evidence
+          path: |
+            renode-direct.log
+            runs/
+          retention-days: 14

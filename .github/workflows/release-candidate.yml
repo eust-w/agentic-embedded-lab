@@ -1,0 +1,127 @@
+name: release-candidate-software-gates
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      simulation_run_id:
+        description: Successful nightly-simulation run containing authoritative evidence
+        required: true
+        type: string
+
+jobs:
+  server-worker-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: "3.12"}
+      - uses: actions/download-artifact@v8
+        with:
+          name: nightly-simulation-evidence
+          path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.simulation_run_id }}
+      - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
+      - name: Provider recorded-contract tests
+        run: pytest tests/test_modeling.py -k 'provider or grounding or conformance'
+      - name: Optional live provider smoke tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: scripts/provider-live-smoke.py --output .ael/provider-live-smoke.json
+      - name: Software unit and recovery tests
+        run: >-
+          pytest tests/test_worker.py tests/test_server_storage.py tests/test_security.py
+          tests/test_api.py tests/test_release.py --junitxml=software-tests.xml
+      - name: Local production-topology acceptance
+        run: scripts/run-compose-acceptance.sh
+      - name: Validate compose and Helm rendering
+        run: |
+          docker compose -f deploy/compose.yaml config >/dev/null
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          helm lint deploy/helm/ael
+          helm template ael deploy/helm/ael >/tmp/ael-manifests.yaml
+      - name: Generate CycloneDX SBOM
+        env:
+          SYFT_VERSION: 1.42.3
+        run: |
+          archive="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          base="https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}"
+          curl --fail --location --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 20 --max-time 600 "${base}/${archive}" -o "/tmp/${archive}"
+          curl --fail --location --retry 6 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 20 --max-time 600 \
+            "${base}/syft_${SYFT_VERSION}_checksums.txt" -o /tmp/syft-checksums.txt
+          (cd /tmp && grep -F " ${archive}" syft-checksums.txt | sha256sum --check -)
+          tar -xzf "/tmp/${archive}" -C /tmp syft
+          /tmp/syft scan dir:. --output cyclonedx-json=ael-sbom.cdx.json
+      - name: Generate Python license inventory
+        run: |
+          python -m pip install pip-licenses
+          pip-licenses --format=json --with-urls --with-license-file >python-licenses.json
+      - uses: sigstore/cosign-installer@v3
+      - name: Keyless sign and verify the SBOM
+        run: |
+          cosign sign-blob --yes --bundle ael-sbom.sigstore.json ael-sbom.cdx.json
+          cosign verify-blob \
+            --bundle ael-sbom.sigstore.json \
+            --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-candidate.yml@refs/heads/.*" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            ael-sbom.cdx.json
+      - name: Build and enforce software release evidence
+        run: |
+          scripts/build-software-acceptance.py \
+            --compose-report .ael/compose-acceptance/report.json \
+            --junit software-tests.xml \
+            --sbom ael-sbom.cdx.json \
+            --signature ael-sbom.sigstore.json \
+            --licenses python-licenses.json
+          ael release check --profile software >software-gate.json
+      - name: Production must fail only on physical-Lab evidence
+        run: |
+          if ael release check --profile production >production-gate.json; then
+            echo "production gate unexpectedly passed" >&2
+            exit 1
+          fi
+          grep -F "five reference platforms" production-gate.json
+          grep -F "instrument calibration" production-gate.json
+          grep -F "human approval" production-gate.json
+          python - <<'PY'
+          import json
+          report = json.load(open("production-gate.json", encoding="utf-8"))
+          allowed = (
+              "production-approved capability packages",
+              "five reference platforms",
+              "instrument calibration",
+              "human approval",
+          )
+          unexpected = [item for item in report["failures"] if not item.startswith(allowed)]
+          if unexpected:
+              raise SystemExit(f"unexpected production blockers: {unexpected}")
+          PY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: release-candidate-software-evidence
+          path: |
+            acceptance/
+            .ael/compose-acceptance/report.json
+            .ael/provider-live-smoke.json
+            software-tests.xml
+            software-gate.json
+            production-gate.json
+            ael-sbom.cdx.json
+            ael-sbom.sigstore.json
+            python-licenses.json
+            /tmp/ael-manifests.yaml
+          retention-days: 30

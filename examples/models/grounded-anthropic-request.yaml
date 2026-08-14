@@ -1,0 +1,13 @@
+api_version: ael.dev/v1
+kind: ModelGenerationRequest
+id: grounded-anthropic
+name: GroundedProviderPeripheral
+version: 0.1.0
+backend: renode
+datasheets: [examples/models/grounded-source.txt]
+generator: ael.grounded-provider/v1
+generation:
+  provider: anthropic
+  model: recorded-anthropic-model
+  prompt_template_version: ael-hardware-ir/v1
+  max_attempts: 1

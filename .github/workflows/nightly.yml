@@ -1,0 +1,177 @@
+name: nightly-simulation
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ["codex/ael-0.2-real-mechanisms"]
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          toolchains: arm-zephyr-eabi:riscv64-zephyr-elf
+          sdk-version: 1.0.1
+      - run: scripts/build-firmware.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: zephyr-reference-firmware
+          path: |
+            firmware/zephyr/build-stm32-faulty/zephyr/zephyr.elf
+            firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf
+            firmware/zephyr/build-hifive1/zephyr/zephyr.elf
+          retention-days: 7
+
+  simulation:
+    needs: firmware
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: "3.12"}
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: .
+          toolchains: arm-zephyr-eabi
+          sdk-version: 1.0.1
+      - uses: docker/setup-buildx-action@v4
+      - uses: actions/download-artifact@v8
+        with:
+          name: zephyr-reference-firmware
+          # upload-artifact stores paths relative to their common
+          # firmware/zephyr ancestor; restore that ancestor explicitly so
+          # manifests keep workspace-relative firmware paths stable.
+          path: firmware/zephyr
+      - run: python -m pip install -e '.[dev,mcp,server,worker,modeling]'
+      - name: Build pinned backend images
+        run: |
+          # Build the largest source image first while the runner has maximum headroom.
+          for backend in openems openmodelica ngspice renode ns3; do
+            docker buildx build \
+              --file "containers/${backend}/Dockerfile" \
+              --tag "ael-${backend}:ci" \
+              --cache-from "type=gha,scope=${backend}" \
+              --cache-to "type=gha,mode=max,scope=${backend}" \
+              --load .
+            docker buildx prune --all --force
+          done
+      - name: Execute 24 faulty/fixed pairs
+        id: benchmark
+        continue-on-error: true
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_NGSPICE_IMAGE: ael-ngspice:ci
+          AEL_OPENMODELICA_IMAGE: ael-openmodelica:ci
+          AEL_OMSIMULATOR_IMAGE: ael-openmodelica:ci
+          AEL_NS3_IMAGE: ael-ns3:ci
+          AEL_OPENEMS_IMAGE: ael-openems:ci
+          AEL_OCI_RUNTIME: docker
+        run: ael benchmark run --source-revision "$GITHUB_SHA"
+      - name: Execute FMI 2.0/SSP five-domain acceptance
+        id: fmi
+        if: always()
+        continue-on-error: true
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_NGSPICE_IMAGE: ael-ngspice:ci
+          AEL_OPENMODELICA_IMAGE: ael-openmodelica:ci
+          AEL_NS3_IMAGE: ael-ns3:ci
+          AEL_OPENEMS_IMAGE: ael-openems:ci
+          AEL_OCI_RUNTIME: docker
+        run: |
+          docker run --rm --entrypoint=OMSimulator ael-openmodelica:ci --version
+          scripts/run-fmi-acceptance.py --om-simulator scripts/omsimulator-container
+      - name: Check 20-run deterministic trace
+        id: determinism
+        if: always()
+        continue-on-error: true
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_NGSPICE_IMAGE: ael-ngspice:ci
+          AEL_OPENMODELICA_IMAGE: ael-openmodelica:ci
+          AEL_NS3_IMAGE: ael-ns3:ci
+          AEL_OPENEMS_IMAGE: ael-openems:ci
+          AEL_OCI_RUNTIME: docker
+        run: scripts/check-determinism.py benchmarks/cases/24-antenna-cross-domain/fixed.yaml --warmup --repeats 20
+      - name: Check simulation release gate
+        id: simulation_gate
+        if: always()
+        continue-on-error: true
+        run: ael release check --profile simulation
+      - name: Production gate must remain blocked
+        id: production_gate
+        if: always()
+        continue-on-error: true
+        run: |
+          if ael release check --profile production >production-gate.json; then
+            exit 1
+          fi
+          grep -F "hardware differential" production-gate.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: nightly-simulation-evidence
+          path: |
+            acceptance/
+            runs/
+            .ael/build/fmi/*.fmu
+            .ael/build/fmi/*.ssp
+            .ael/build/fmi/*.log
+            .ael/build/fmi/*-result.csv
+            production-gate.json
+          retention-days: 30
+      - name: Enforce all software simulation gates
+        if: always()
+        env:
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+          FMI_OUTCOME: ${{ steps.fmi.outcome }}
+          DETERMINISM_OUTCOME: ${{ steps.determinism.outcome }}
+          SIMULATION_GATE_OUTCOME: ${{ steps.simulation_gate.outcome }}
+          PRODUCTION_GATE_OUTCOME: ${{ steps.production_gate.outcome }}
+        run: |
+          test "$BENCHMARK_OUTCOME" = success
+          test "$FMI_OUTCOME" = success
+          test "$DETERMINISM_OUTCOME" = success
+          test "$SIMULATION_GATE_OUTCOME" = success
+          test "$PRODUCTION_GATE_OUTCOME" = success
+
+  riscv-smoke:
+    needs: firmware
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: {python-version: "3.12"}
+      - uses: docker/setup-buildx-action@v4
+      - uses: actions/download-artifact@v8
+        with:
+          name: zephyr-reference-firmware
+          path: firmware/zephyr
+      - run: python -m pip install -e .
+      - name: Load pinned Renode image
+        run: |
+          docker buildx build \
+            --file containers/renode/Dockerfile \
+            --tag ael-renode:ci \
+            --cache-from type=gha,scope=renode \
+            --cache-to type=gha,mode=max,scope=renode \
+            --load .
+      - name: Boot RISC-V Zephyr reference in Renode
+        env:
+          AEL_RENODE_IMAGE: ael-renode:ci
+          AEL_OCI_RUNTIME: docker
+        run: |
+          ael run benchmarks/experiments/riscv-smoke.yaml

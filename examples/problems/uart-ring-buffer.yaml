@@ -1,0 +1,14 @@
+api_version: ael.dev/v1
+kind: ProblemSpec
+name: uart-ring-buffer-loss
+title: UART packets are lost under interrupt load
+category: interrupt
+symptoms:
+  - Packets disappear when two interrupt sources overlap.
+target: generic-cortex-m
+constraints:
+  packet_rate_hz: 1000
+evidence:
+  - UART log reports sequence gaps.
+desired_claims:
+  - The failure is reproducible under a declared interrupt model.

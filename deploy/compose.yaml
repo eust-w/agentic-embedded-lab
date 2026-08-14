@@ -1,0 +1,128 @@
+services:
+  postgres:
+    image: postgres:17.6
+    environment:
+      POSTGRES_DB: ael
+      POSTGRES_USER: ael
+      POSTGRES_PASSWORD: development-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ael"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes: [ael-postgres:/var/lib/postgresql/data]
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ael-development
+      MINIO_ROOT_PASSWORD: development-only-secret
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes: [ael-minio:/data]
+    ports: ["127.0.0.1:9000:9000"]
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 ael-development development-only-secret &&
+        mc mb --ignore-existing local/ael-development
+  dev-oidc:
+    build:
+      context: ..
+      dockerfile: containers/control-plane/Dockerfile
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      AEL_DEV_OIDC_ISSUER: http://dev-oidc:8080
+      AEL_DEV_OIDC_AUDIENCE: ael-dev
+    entrypoint: ["python", "-m", "ael.dev_oidc"]
+    ports: ["127.0.0.1:8080:8080"]
+  control-plane:
+    build:
+      context: ..
+      dockerfile: containers/control-plane/Dockerfile
+    read_only: true
+    tmpfs: [/tmp]
+    volumes: ["../:/workspace"]
+    environment:
+      AEL_DATABASE_URL: postgresql+psycopg://ael:development-only@postgres/ael
+      AEL_S3_BUCKET: ael-development
+      AEL_S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: ael-development
+      AWS_SECRET_ACCESS_KEY: development-only-secret
+      AEL_OIDC_ISSUER: http://dev-oidc:8080
+      AEL_OIDC_AUDIENCE: ael-dev
+      AEL_OIDC_JWKS_URL: http://dev-oidc:8080/.well-known/jwks.json
+      AEL_WORKER_FINGERPRINTS: "${AEL_WORKER_FINGERPRINTS:-}"
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+      dev-oidc: {condition: service_started}
+  envoy:
+    image: envoyproxy/envoy:v1.35.3
+    command: ["-c", "/etc/envoy/envoy.yaml"]
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ../.ael/dev-certs:/certs:ro
+    depends_on: [control-plane]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -r /proc/net/tcp &&
+          cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -qi ':20FB' &&
+          cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -qi ':24E3'
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "127.0.0.1:8443:8443"
+      - "127.0.0.1:9443:9443"
+  simulation-worker:
+    build:
+      context: ..
+      dockerfile: containers/control-plane/Dockerfile
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - ../:/workspace
+      - ../.ael/dev-certs:/certs:ro
+    environment:
+      AEL_WORKSPACE: /workspace
+      AEL_DATABASE_URL: postgresql+psycopg://ael:development-only@postgres/ael
+      AEL_S3_BUCKET: ael-development
+      AEL_S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: ael-development
+      AWS_SECRET_ACCESS_KEY: development-only-secret
+    entrypoint:
+      - python
+      - -m
+      - ael.worker
+      - --control-plane
+      - https://envoy:8443
+      - --cert
+      - /certs/worker.crt
+      - --key
+      - /certs/worker.key
+      - --ca
+      - /certs/ca.crt
+      - --worker-id
+      - compose-worker
+      - --capability
+      - synthetic
+    depends_on:
+      envoy: {condition: service_healthy}
+    restart: on-failure:5
+
+volumes:
+  ael-postgres:
+  ael-minio:

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+workspace="$(pwd -P)"
+image="${AEL_OMSIMULATOR_IMAGE:-ael-openmodelica:ci}"
+cpus="${AEL_BACKEND_CPUS:-2}"
+environment_args=()
+docker_args=(run --rm)
+if [[ -z "${AEL_FMI_CONTAINER_HOST:-}" ]]; then
+  docker_args+=(--network=none)
+fi
+while IFS='=' read -r name value; do
+  environment_args+=(--env "${name}=${value}")
+done < <(env | grep '^AEL_FMI_SOCKET_' || true)
+exec docker "${docker_args[@]}" --read-only --cap-drop=ALL \
+  --user="$(id -u):$(id -g)" \
+  --security-opt=no-new-privileges --pids-limit=512 --memory=4g --cpus="${cpus}" \
+  --tmpfs=/tmp:rw,exec,nosuid,nodev,size=1g \
+  --mount="type=bind,src=${workspace},dst=${workspace}" \
+  "${environment_args[@]}" \
+  --env=HOME=/tmp --env=XDG_CONFIG_HOME=/tmp \
+  --workdir="${workspace}" --entrypoint=OMSimulator "${image}" "$@"

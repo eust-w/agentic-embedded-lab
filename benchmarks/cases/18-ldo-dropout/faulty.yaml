@@ -1,0 +1,40 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: 18-ldo-dropout-faulty
+system: benchmarks/systems/ngspice-power.yaml
+duration_us: 3000
+macro_step_us: 1000
+timeout_s: 300
+seed: 1018
+stimuli:
+- at_us: 0
+  target: circuit.source_resistance_ohm
+  value: 12.0
+  unit: Ohm
+- at_us: 0
+  target: circuit.capacitance_uF
+  value: 2.2
+  unit: uF
+- at_us: 0
+  target: circuit.load_microamp
+  value: 160000.0
+  unit: uA
+- at_us: 0
+  target: circuit.rf_retries
+  value: 0.0
+assertions:
+- metric: circuit.failure
+  operator: eq
+  expected: 0
+  critical: true
+observables:
+- circuit.failure
+allowed_model_states:
+- conformance_validated
+- hardware_validated
+- production_approved
+tags:
+- benchmark
+- mechanism-backed
+- faulty
+- case-18

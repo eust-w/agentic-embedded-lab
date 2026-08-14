@@ -1,0 +1,35 @@
+version: "1"
+status: unverified
+instruments:
+  - id: bench-power
+    kind: power_supply
+    driver: scpi-generic
+    resource: TCPIP::192.0.2.10::INSTR
+  - id: scope
+    kind: oscilloscope
+    driver: scpi-generic
+    resource: TCPIP::192.0.2.11::INSTR
+  - id: logic
+    kind: logic_analyzer
+    driver: fx2lafw
+    resource: usb
+  - id: power-analyzer
+    kind: power_analyzer
+    driver: joulescope-js220
+    resource: usb
+  - id: chamber
+    kind: thermal_chamber
+    driver: scpi-generic
+    resource: TCPIP::192.0.2.12::INSTR
+  - id: vna
+    kind: vna
+    driver: scpi-generic
+    resource: TCPIP::192.0.2.13::INSTR
+  - id: spectrum
+    kind: spectrum_analyzer
+    driver: scpi-generic
+    resource: TCPIP::192.0.2.14::INSTR
+  - id: attenuator
+    kind: attenuator
+    driver: scpi-generic
+    resource: TCPIP::192.0.2.15::INSTR

@@ -1,0 +1,43 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: 19-decoupling-brownout-fixed
+system: benchmarks/systems/power-renode-fixed.yaml
+duration_us: 6000
+macro_step_us: 1000
+timeout_s: 300
+seed: 1019
+stimuli:
+- at_us: 0
+  target: mcu.case_id
+  value: 19
+- at_us: 0
+  target: circuit.source_resistance_ohm
+  value: 0.15
+  unit: Ohm
+- at_us: 0
+  target: circuit.capacitance_uF
+  value: 47.0
+  unit: uF
+- at_us: 0
+  target: circuit.load_microamp
+  value: 60000.0
+  unit: uA
+- at_us: 0
+  target: circuit.rf_retries
+  value: 0.0
+assertions:
+- metric: circuit.failure
+  operator: eq
+  expected: 0
+  critical: true
+observables:
+- circuit.failure
+allowed_model_states:
+- conformance_validated
+- hardware_validated
+- production_approved
+tags:
+- benchmark
+- mechanism-backed
+- fixed
+- case-19

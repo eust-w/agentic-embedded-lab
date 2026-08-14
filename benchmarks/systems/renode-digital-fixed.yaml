@@ -1,0 +1,47 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: renode-zephyr-dual-architecture-reference-fixed
+components:
+- id: mcu
+  type: stm32f4-zephyr-reference
+  backend: renode
+  model: benchmarks/models/renode/stm32f4-ael.repl
+  step_us: 1000
+  ports:
+  - name: case_id
+    direction: input
+    data_type: integer
+  - name: network_retries
+    direction: input
+    data_type: real
+    unit: '1'
+  - name: failure
+    direction: output
+    data_type: integer
+  - name: retries
+    direction: output
+    data_type: real
+    unit: '1'
+  - name: current
+    direction: output
+    data_type: real
+    unit: uA
+  properties:
+    firmware: firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf
+    model_state: conformance_validated
+    input_registers:
+      case_id: 537000960
+      network_retries: 537000980
+    output_registers:
+      failure: 537000968
+      retries: 537000972
+      current: 537000976
+    output_sentinels:
+      failure: 4294967295
+fidelity:
+  firmware_cpu: functional
+  register: functional-bridge
+  timing: virtual-functional
+  electrical: unverified
+  hardware: unverified
+connections: []

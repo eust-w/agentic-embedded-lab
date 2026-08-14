@@ -1,0 +1,99 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: 24-antenna-cross-domain-fixed
+system: benchmarks/systems/five-domain-fixed.yaml
+duration_us: 6000
+macro_step_us: 1000
+timeout_s: 1800
+seed: 1024
+stimuli:
+- at_us: 0
+  target: mcu.case_id
+  value: 24
+- at_us: 0
+  target: circuit.source_resistance_ohm
+  value: 0.15
+  unit: Ohm
+- at_us: 0
+  target: circuit.capacitance_uF
+  value: 47.0
+  unit: uF
+- at_us: 0
+  target: circuit.load_microamp
+  value: 60000.0
+  unit: uA
+- at_us: 0
+  target: circuit.rf_retries
+  value: 0.0
+- at_us: 0
+  target: plant.thermal_resistance_K_per_W
+  value: 18.0
+  unit: K/W
+- at_us: 0
+  target: plant.sleep_current_A
+  value: 8.0e-06
+  unit: A
+- at_us: 0
+  target: plant.duty_cycle
+  value: 0.01
+- at_us: 0
+  target: plant.input_power
+  value: 0.18
+  unit: W
+- at_us: 0
+  target: plant.rf_retries
+  value: 0.0
+- at_us: 0
+  target: network.interference_dbm
+  value: -95.0
+  unit: dBm
+- at_us: 0
+  target: network.partition_ms
+  value: 0.0
+  unit: ms
+- at_us: 0
+  target: network.retry_limit
+  value: 8
+- at_us: 0
+  target: network.protocol
+  value: 0
+- at_us: 0
+  target: antenna.detune
+  value: 0.0
+  unit: mm
+assertions:
+- metric: antenna.failure
+  operator: eq
+  expected: 0
+  critical: true
+- metric: network.failure
+  operator: eq
+  expected: 0
+  critical: true
+- metric: mcu.failure
+  operator: eq
+  expected: 0
+  critical: true
+- metric: circuit.failure
+  operator: eq
+  expected: 0
+  critical: true
+- metric: plant.failure
+  operator: eq
+  expected: 0
+  critical: true
+observables:
+- antenna.failure
+- network.failure
+- mcu.failure
+- circuit.failure
+- plant.failure
+allowed_model_states:
+- conformance_validated
+- hardware_validated
+- production_approved
+tags:
+- benchmark
+- mechanism-backed
+- fixed
+- case-24

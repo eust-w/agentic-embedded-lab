@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "BackendName": {
+      "enum": [
+        "zephyr_build",
+        "native",
+        "renode",
+        "ngspice",
+        "openmodelica",
+        "omsimulator",
+        "ns3",
+        "openems",
+        "hardware",
+        "synthetic"
+      ],
+      "title": "BackendName",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "execution_backend": {
+      "$ref": "#/$defs/BackendName"
+    },
+    "faulty_assets": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Faulty Assets",
+      "type": "array"
+    },
+    "fixed_assets": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Fixed Assets",
+      "type": "array"
+    },
+    "oracle": {
+      "title": "Oracle",
+      "type": "string"
+    },
+    "required_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Required Evidence",
+      "type": "array"
+    },
+    "trigger": {
+      "title": "Trigger",
+      "type": "string"
+    }
+  },
+  "required": [
+    "trigger",
+    "execution_backend",
+    "faulty_assets",
+    "fixed_assets",
+    "oracle",
+    "required_evidence"
+  ],
+  "title": "BenchmarkMechanism",
+  "type": "object"
+}

@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "AcceptanceEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Path"
+        },
+        "evidence_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Sha256"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "blocked"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "AcceptanceEntry",
+      "type": "object"
+    },
+    "ReleaseProfile": {
+      "enum": [
+        "foundation",
+        "simulation",
+        "software",
+        "production"
+      ],
+      "title": "ReleaseProfile",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/AcceptanceEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "kind": {
+      "const": "AcceptanceManifest",
+      "default": "AcceptanceManifest",
+      "title": "Kind",
+      "type": "string"
+    },
+    "platform": {
+      "title": "Platform",
+      "type": "string"
+    },
+    "profile": {
+      "$ref": "#/$defs/ReleaseProfile"
+    },
+    "signature": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signature"
+    },
+    "source_revision": {
+      "title": "Source Revision",
+      "type": "string"
+    }
+  },
+  "required": [
+    "profile",
+    "source_revision",
+    "platform",
+    "entries",
+    "created_at"
+  ],
+  "title": "AcceptanceManifest",
+  "type": "object"
+}

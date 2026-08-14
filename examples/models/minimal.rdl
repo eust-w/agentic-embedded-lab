@@ -1,0 +1,6 @@
+addrmap minimal {
+    reg {
+        field { sw=rw; hw=r; reset=0; } enable[0:0];
+        field { sw=r; hw=w; reset=0; } ready[1:1];
+    } control @ 0x0;
+};

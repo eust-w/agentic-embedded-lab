@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+mainmenu "AEL Zephyr build mechanism fixtures"
+
+config AEL_DEPENDENCY
+    bool "Required feature dependency"
+
+config AEL_FEATURE
+    bool "Feature guarded by dependency"
+    depends on AEL_DEPENDENCY
+
+config AEL_FORCE_OVERFLOW
+    bool "Allocate a deliberately oversized BSS section"
+
+source "Kconfig.zephyr"

@@ -1,0 +1,22 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: synthetic-smoke
+system: examples/systems/synthetic-loop.yaml
+duration_us: 5000
+macro_step_us: 1000
+timeout_s: 10
+seed: 42
+stimuli:
+  - at_us: 0
+    target: source.input
+    value: 1.5
+    unit: V
+faults: []
+observables: [source.output, sink.output]
+assertions:
+  - metric: source.output
+    operator: eq
+    expected: 3.0
+    unit: V
+allowed_model_states: [generated, static_validated, conformance_validated, hardware_validated, production_approved]
+tags: [foundation, synthetic, unverified]

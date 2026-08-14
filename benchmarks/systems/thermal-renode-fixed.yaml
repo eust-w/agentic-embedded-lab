@@ -1,0 +1,64 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: firmware-thermal-cross-domain-fixed
+components:
+- id: mcu
+  type: stm32f4-zephyr-reference
+  backend: renode
+  model: benchmarks/models/renode/stm32f4-ael.repl
+  step_us: 1000
+  ports:
+  - name: case_id
+    direction: input
+    data_type: integer
+  - name: failure
+    direction: output
+    data_type: integer
+  properties:
+    firmware: firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf
+    model_state: conformance_validated
+    input_registers:
+      case_id: 537000960
+    output_registers:
+      failure: 537000968
+    output_sentinels:
+      failure: 4294967295
+- id: plant
+  type: thermal-battery-functional-model
+  backend: openmodelica
+  model: benchmarks/models/modelica/domain.mos
+  step_us: 1000
+  ports:
+  - name: thermal_resistance_K_per_W
+    direction: input
+    data_type: real
+    unit: K/W
+  - name: sleep_current_A
+    direction: input
+    data_type: real
+    unit: A
+  - name: duty_cycle
+    direction: input
+    data_type: real
+    unit: '1'
+  - name: input_power
+    direction: input
+    data_type: real
+    unit: W
+  - name: rf_retries
+    direction: input
+    data_type: real
+    unit: '1'
+  - name: failure
+    direction: output
+    data_type: real
+    unit: '1'
+  - name: temperature
+    direction: output
+    data_type: real
+    unit: Cel
+fidelity:
+  digital: functional
+  thermal: functional-lumped
+  hardware: unverified
+connections: []

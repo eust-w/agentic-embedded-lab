@@ -1,0 +1,75 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: firmware-network-cross-domain-faulty
+components:
+- id: network
+  type: deterministic-network-scenario
+  backend: ns3
+  model: benchmarks/models/ns3/ael-network.cc
+  step_us: 1000
+  ports:
+  - name: interference_dbm
+    direction: input
+    data_type: real
+    unit: dBm
+  - name: partition_ms
+    direction: input
+    data_type: real
+    unit: ms
+  - name: retry_limit
+    direction: input
+    data_type: integer
+    unit: '1'
+  - name: protocol
+    direction: input
+    data_type: integer
+    unit: '1'
+  - name: rf_loss_db
+    direction: input
+    data_type: real
+    unit: dB
+  - name: retries
+    direction: output
+    data_type: real
+    unit: '1'
+  - name: failure
+    direction: output
+    data_type: real
+    unit: '1'
+  properties:
+    program: scratch/ael-network
+- id: mcu
+  type: stm32f4-zephyr-reference
+  backend: renode
+  model: benchmarks/models/renode/stm32f4-ael.repl
+  step_us: 1000
+  ports:
+  - name: case_id
+    direction: input
+    data_type: integer
+  - name: network_retries
+    direction: input
+    data_type: real
+    unit: '1'
+  - name: failure
+    direction: output
+    data_type: integer
+  properties:
+    firmware: firmware/zephyr/build-stm32-faulty/zephyr/zephyr.elf
+    model_state: conformance_validated
+    input_registers:
+      case_id: 537000960
+      network_retries: 537000980
+    output_registers:
+      failure: 537000968
+    output_sentinels:
+      failure: 4294967295
+connections:
+- source: network.retries
+  target: mcu.network_retries
+  unit: '1'
+fidelity:
+  digital: functional
+  network: functional-scenario
+  rf_front_end: unverified
+  hardware: unverified

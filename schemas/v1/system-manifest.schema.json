@@ -1,0 +1,233 @@
+{
+  "$defs": {
+    "BackendName": {
+      "enum": [
+        "zephyr_build",
+        "native",
+        "renode",
+        "ngspice",
+        "openmodelica",
+        "omsimulator",
+        "ns3",
+        "openems",
+        "hardware",
+        "synthetic"
+      ],
+      "title": "BackendName",
+      "type": "string"
+    },
+    "Connection": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]*\\.[A-Za-z][A-Za-z0-9_.-]*$",
+          "title": "Source",
+          "type": "string"
+        },
+        "target": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]*\\.[A-Za-z][A-Za-z0-9_.-]*$",
+          "title": "Target",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "source",
+        "target"
+      ],
+      "title": "Connection",
+      "type": "object"
+    },
+    "Port": {
+      "additionalProperties": false,
+      "properties": {
+        "data_type": {
+          "enum": [
+            "real",
+            "integer",
+            "boolean",
+            "string",
+            "bytes"
+          ],
+          "title": "Data Type",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "input",
+            "output",
+            "bidirectional"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "name",
+        "direction",
+        "data_type"
+      ],
+      "title": "Port",
+      "type": "object"
+    },
+    "SystemComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "$ref": "#/$defs/BackendName"
+        },
+        "direct_feedthrough": {
+          "default": false,
+          "title": "Direct Feedthrough",
+          "type": "boolean"
+        },
+        "event_driven": {
+          "default": false,
+          "title": "Event Driven",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "ports": {
+          "items": {
+            "$ref": "#/$defs/Port"
+          },
+          "title": "Ports",
+          "type": "array"
+        },
+        "properties": {
+          "additionalProperties": true,
+          "title": "Properties",
+          "type": "object"
+        },
+        "step_us": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Us"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "backend"
+      ],
+      "title": "SystemComponent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "components": {
+      "items": {
+        "$ref": "#/$defs/SystemComponent"
+      },
+      "minItems": 1,
+      "title": "Components",
+      "type": "array"
+    },
+    "connections": {
+      "items": {
+        "$ref": "#/$defs/Connection"
+      },
+      "title": "Connections",
+      "type": "array"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "fidelity": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Fidelity",
+      "type": "object"
+    },
+    "kind": {
+      "const": "SystemManifest",
+      "default": "SystemManifest",
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "components"
+  ],
+  "title": "SystemManifest",
+  "type": "object"
+}

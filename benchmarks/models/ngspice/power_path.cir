@@ -1,0 +1,12 @@
+AEL generic LDO source-impedance and decoupling transient model
+.param source_resistance='AEL_source_resistance_ohm'
+.param capacitance='AEL_capacitance_uF*1u'
+Vsource source 0 3.3
+Rsource source rail {source_resistance}
+Cdec rail 0 {capacitance} ic=3.3
+Iload rail 0 PWL(0 0.002 100u {AEL_load_microamp*1u+AEL_rf_retries*0.004} 3m {AEL_load_microamp*1u+AEL_rf_retries*0.004})
+.tran 2u 4m uic
+.measure tran ael_supply_voltage MIN v(rail) FROM=100u TO=4m
+.measure tran ael_peak_current MAX i(Vsource) FROM=100u TO=4m
+.measure tran ael_power AVG par('-v(source)*i(Vsource)') FROM=100u TO=4m
+.end

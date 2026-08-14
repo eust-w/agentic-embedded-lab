@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "UnitValue": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "UnitValue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "calibration_id": {
+      "title": "Calibration Id",
+      "type": "string"
+    },
+    "instrument_id": {
+      "title": "Instrument Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "InstrumentOperationRequest",
+      "default": "InstrumentOperationRequest",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation": {
+      "enum": [
+        "power.configure",
+        "power.output",
+        "power.measure",
+        "scope.capture",
+        "logic.capture",
+        "energy.measure",
+        "chamber.set_temperature",
+        "vna.sparameters",
+        "spectrum.capture",
+        "attenuator.set"
+      ],
+      "title": "Operation",
+      "type": "string"
+    },
+    "parameters": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/UnitValue"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Parameters",
+      "type": "object"
+    }
+  },
+  "required": [
+    "instrument_id",
+    "operation",
+    "calibration_id"
+  ],
+  "title": "InstrumentOperationRequest",
+  "type": "object"
+}

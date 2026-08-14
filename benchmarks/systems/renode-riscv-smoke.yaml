@@ -1,0 +1,30 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: renode-riscv-zephyr-reference
+components:
+  - id: mcu
+    type: sifive-fe310-zephyr-reference
+    backend: renode
+    model: benchmarks/models/renode/sifive-fe310-ael.repl
+    step_us: 1000
+    ports:
+      - {name: case_id, direction: input, data_type: integer}
+      - {name: failure, direction: output, data_type: integer}
+    properties:
+      firmware: firmware/zephyr/build-hifive1/zephyr/zephyr.elf
+      model_state: conformance_validated
+      memory_tags:
+        - {address: 0x10008000, size: 4, name: PRCI_HFROSCCFG, default: 0xffffffff}
+        - {address: 0x10008008, size: 4, name: PRCI_PLLCFG, default: 0xffffffff}
+      performance_mips: 320
+      entry_symbol: __start
+      input_registers: {case_id: 0x80003c00}
+      output_registers: {failure: 0x80003c08}
+      output_sentinels: {failure: 0xffffffff}
+fidelity:
+  firmware_cpu: functional
+  memory: synthetic-code-window-and-dtim-functional
+  register: functional-bridge
+  timing: virtual-functional
+  electrical: unverified
+  hardware: unverified

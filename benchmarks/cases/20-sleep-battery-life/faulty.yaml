@@ -1,0 +1,43 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: 20-sleep-battery-life-faulty
+system: benchmarks/systems/modelica-domain.yaml
+duration_us: 3000
+macro_step_us: 1000
+timeout_s: 300
+seed: 1020
+stimuli:
+- at_us: 0
+  target: plant.thermal_resistance_K_per_W
+  value: 95.0
+  unit: K/W
+- at_us: 0
+  target: plant.sleep_current_A
+  value: 0.0012
+  unit: A
+- at_us: 0
+  target: plant.duty_cycle
+  value: 0.2
+- at_us: 0
+  target: plant.input_power
+  value: 0.65
+  unit: W
+- at_us: 0
+  target: plant.rf_retries
+  value: 0.0
+assertions:
+- metric: plant.failure
+  operator: eq
+  expected: 0
+  critical: true
+observables:
+- plant.failure
+allowed_model_states:
+- conformance_validated
+- hardware_validated
+- production_approved
+tags:
+- benchmark
+- mechanism-backed
+- faulty
+- case-20

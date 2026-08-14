@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ .Release.Name }}-control-plane}
+spec:
+  replicas: {{ .Values.replicas }}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector: {matchLabels: {app: {{ .Release.Name }}-control-plane}}
+  template:
+    metadata: {labels: {app: {{ .Release.Name }}-control-plane}}
+    spec:
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: control-plane
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          ports: [{name: http, containerPort: 8765}]
+          env:
+            - name: AEL_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: {{ .Values.database.urlSecret }}, key: {{ .Values.database.urlKey }}}}
+            - {name: AEL_S3_BUCKET, value: {{ .Values.s3.bucket | quote }}}
+            - {name: AEL_S3_ENDPOINT, value: {{ .Values.s3.endpoint | quote }}}
+            - {name: AEL_OIDC_ISSUER, value: {{ .Values.oidc.issuer | quote }}}
+            - {name: AEL_OIDC_AUDIENCE, value: {{ .Values.oidc.audience | quote }}}
+            - {name: AEL_WORKER_FINGERPRINTS, value: {{ .Values.workerFingerprints | quote }}}
+          readinessProbe: {httpGet: {path: /v1/doctor, port: http}, initialDelaySeconds: 2}
+          livenessProbe: {httpGet: {path: /v1/doctor, port: http}, initialDelaySeconds: 10}
+          resources: {{ toYaml .Values.resources | nindent 12 }}
+          volumeMounts: [{name: workspace, mountPath: /workspace}]
+      volumes: [{name: workspace, emptyDir: {}}]

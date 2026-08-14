@@ -1,0 +1,59 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "kind": {
+      "const": "WorkerHeartbeat",
+      "default": "WorkerHeartbeat",
+      "title": "Kind",
+      "type": "string"
+    },
+    "lease_token": {
+      "title": "Lease Token",
+      "type": "string"
+    },
+    "message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message"
+    },
+    "progress": {
+      "default": 0.0,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Progress",
+      "type": "number"
+    },
+    "status": {
+      "enum": [
+        "leased",
+        "running"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "lease_token",
+    "status"
+  ],
+  "title": "WorkerHeartbeat",
+  "type": "object"
+}

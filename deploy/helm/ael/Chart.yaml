@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agentic-embedded-lab
+description: AEL control plane and outbound simulation worker
+type: application
+version: 0.1.0
+appVersion: 0.1.0-dev

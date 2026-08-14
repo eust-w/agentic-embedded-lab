@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "UnitValue": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "UnitValue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "calibration_id": {
+      "title": "Calibration Id",
+      "type": "string"
+    },
+    "captured_at": {
+      "format": "date-time",
+      "title": "Captured At",
+      "type": "string"
+    },
+    "driver": {
+      "title": "Driver",
+      "type": "string"
+    },
+    "instrument_id": {
+      "title": "Instrument Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "InstrumentEvidence",
+      "default": "InstrumentEvidence",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation": {
+      "title": "Operation",
+      "type": "string"
+    },
+    "parameters": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/UnitValue"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "title": "Parameters",
+      "type": "object"
+    },
+    "raw_artifact_path": {
+      "title": "Raw Artifact Path",
+      "type": "string"
+    },
+    "raw_artifact_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Raw Artifact Sha256",
+      "type": "string"
+    }
+  },
+  "required": [
+    "instrument_id",
+    "driver",
+    "calibration_id",
+    "operation",
+    "parameters",
+    "raw_artifact_path",
+    "raw_artifact_sha256",
+    "captured_at"
+  ],
+  "title": "InstrumentEvidence",
+  "type": "object"
+}

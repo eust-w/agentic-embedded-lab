@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "cases": {
+    "1": {
+      "faulty": {"failure": 1, "diagnostic": "CONFIG_AEL_FEATURE is disabled"},
+      "fixed": {"failure": 0, "diagnostic": "CONFIG_AEL_FEATURE is enabled"}
+    },
+    "2": {
+      "faulty": {"failure": 1, "diagnostic": "devicetree mapping mismatch"},
+      "fixed": {"failure": 0, "diagnostic": "devicetree mapping is consistent"}
+    },
+    "3": {
+      "faulty": {"failure": 1, "diagnostic": "linker RAM region overflow"},
+      "fixed": {"failure": 0, "diagnostic": "linker RAM budget satisfied"}
+    }
+  }
+}

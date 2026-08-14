@@ -1,0 +1,165 @@
+{
+  "$defs": {
+    "BackendName": {
+      "enum": [
+        "zephyr_build",
+        "native",
+        "renode",
+        "ngspice",
+        "openmodelica",
+        "omsimulator",
+        "ns3",
+        "openems",
+        "hardware",
+        "synthetic"
+      ],
+      "title": "BackendName",
+      "type": "string"
+    },
+    "ModelGenerationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "default": 2,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_template_version": {
+          "default": "ael-hardware-ir/v1",
+          "minLength": 1,
+          "title": "Prompt Template Version",
+          "type": "string"
+        },
+        "provider": {
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
+      "title": "ModelGenerationConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "backend": {
+      "$ref": "#/$defs/BackendName"
+    },
+    "datasheets": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Datasheets",
+      "type": "array"
+    },
+    "drivers": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Drivers",
+      "type": "array"
+    },
+    "generation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ModelGenerationConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "generator": {
+      "default": "ael.svd-importer/v1",
+      "title": "Generator",
+      "type": "string"
+    },
+    "hardware_traces": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Hardware Traces",
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_.-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "ModelGenerationRequest",
+      "default": "ModelGenerationRequest",
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "reference_models": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reference Models",
+      "type": "array"
+    },
+    "svd": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Svd"
+    },
+    "systemrdl": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Systemrdl"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "version",
+    "backend"
+  ],
+  "title": "ModelGenerationRequest",
+  "type": "object"
+}

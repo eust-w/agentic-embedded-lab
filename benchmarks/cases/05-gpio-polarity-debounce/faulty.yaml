@@ -1,0 +1,28 @@
+api_version: ael.dev/v1
+kind: ExperimentSpec
+name: 05-gpio-polarity-debounce-faulty
+system: benchmarks/systems/renode-digital-faulty.yaml
+duration_us: 3000
+macro_step_us: 1000
+timeout_s: 300
+seed: 1005
+stimuli:
+- at_us: 0
+  target: mcu.case_id
+  value: 5
+assertions:
+- metric: mcu.failure
+  operator: eq
+  expected: 0
+  critical: true
+observables:
+- mcu.failure
+allowed_model_states:
+- conformance_validated
+- hardware_validated
+- production_approved
+tags:
+- benchmark
+- mechanism-backed
+- faulty
+- case-05

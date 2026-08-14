@@ -1,0 +1,20 @@
+api_version: ael.dev/v1
+kind: SystemManifest
+name: zephyr-build-case01-fixed
+components:
+- id: build
+  type: zephyr-controlled-build
+  backend: zephyr_build
+  step_us: 1000
+  ports:
+  - name: failure
+    direction: output
+    data_type: integer
+  properties:
+    case_id: 1
+    variant: fixed
+    source: firmware/zephyr-build
+    timeout_s: 300
+fidelity:
+  build: tool-executed-zephyr-4.4.2
+  hardware: unverified

@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "ClaimStatus": {
+      "enum": [
+        "unverified",
+        "model_dependent",
+        "simulation_validated",
+        "hardware_validated",
+        "production_approved"
+      ],
+      "title": "ClaimStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "evidence_paths": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Paths",
+      "type": "array"
+    },
+    "hardware_validated": {
+      "default": false,
+      "title": "Hardware Validated",
+      "type": "boolean"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "statement": {
+      "title": "Statement",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ClaimStatus"
+    },
+    "validation_envelope_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Validation Envelope Id"
+    }
+  },
+  "required": [
+    "id",
+    "statement",
+    "status",
+    "evidence_paths"
+  ],
+  "title": "Claim",
+  "type": "object"
+}

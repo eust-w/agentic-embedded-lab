@@ -1,0 +1,678 @@
+{
+  "$defs": {
+    "BehaviorField": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "enum": [
+            "ro",
+            "wo",
+            "rw",
+            "w1c",
+            "w1s"
+          ],
+          "title": "Access",
+          "type": "string"
+        },
+        "lsb": {
+          "maximum": 63,
+          "minimum": 0,
+          "title": "Lsb",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "reset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Reset",
+          "type": "integer"
+        },
+        "side_effect": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Side Effect"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "lsb",
+        "width",
+        "access"
+      ],
+      "title": "BehaviorField",
+      "type": "object"
+    },
+    "BehaviorRegister": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/BehaviorField"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "reset": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Reset",
+          "type": "integer"
+        },
+        "width": {
+          "default": 32,
+          "enum": [
+            8,
+            16,
+            32,
+            64
+          ],
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "offset"
+      ],
+      "title": "BehaviorRegister",
+      "type": "object"
+    },
+    "ClockBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled_when": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enabled When"
+        },
+        "frequency": {
+          "$ref": "#/$defs/UnitValue"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "reset_domain": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reset Domain"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "frequency"
+      ],
+      "title": "ClockBehavior",
+      "type": "object"
+    },
+    "DmaRequestBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "title": "Condition",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "peripheral_to_memory",
+            "memory_to_peripheral",
+            "bidirectional"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "request_line": {
+          "minimum": 0,
+          "title": "Request Line",
+          "type": "integer"
+        },
+        "width_bits": {
+          "enum": [
+            8,
+            16,
+            32,
+            64
+          ],
+          "title": "Width Bits",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "request_line",
+        "condition",
+        "direction",
+        "width_bits"
+      ],
+      "title": "DmaRequestBehavior",
+      "type": "object"
+    },
+    "FaultBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "title": "Effect",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "recoverable": {
+          "title": "Recoverable",
+          "type": "boolean"
+        },
+        "recovery": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recovery"
+        },
+        "trigger": {
+          "title": "Trigger",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "trigger",
+        "effect",
+        "recoverable"
+      ],
+      "title": "FaultBehavior",
+      "type": "object"
+    },
+    "InterruptBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "clear_condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clear Condition"
+        },
+        "condition": {
+          "title": "Condition",
+          "type": "string"
+        },
+        "line": {
+          "minimum": 0,
+          "title": "Line",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "trigger": {
+          "enum": [
+            "level_high",
+            "level_low",
+            "rising",
+            "falling",
+            "pulse"
+          ],
+          "title": "Trigger",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "line",
+        "trigger",
+        "condition"
+      ],
+      "title": "InterruptBehavior",
+      "type": "object"
+    },
+    "Port": {
+      "additionalProperties": false,
+      "properties": {
+        "data_type": {
+          "enum": [
+            "real",
+            "integer",
+            "boolean",
+            "string",
+            "bytes"
+          ],
+          "title": "Data Type",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "input",
+            "output",
+            "bidirectional"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        }
+      },
+      "required": [
+        "name",
+        "direction",
+        "data_type"
+      ],
+      "title": "Port",
+      "type": "object"
+    },
+    "PowerStateBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "entry_condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entry Condition"
+        },
+        "exit_condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Condition"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "wake_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "PowerStateBehavior",
+      "type": "object"
+    },
+    "TimerBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "clock": {
+          "title": "Clock",
+          "type": "string"
+        },
+        "compare_channels": {
+          "default": 0,
+          "maximum": 16,
+          "minimum": 0,
+          "title": "Compare Channels",
+          "type": "integer"
+        },
+        "direction": {
+          "default": "up",
+          "enum": [
+            "up",
+            "down",
+            "up_down"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "width": {
+          "enum": [
+            8,
+            16,
+            24,
+            32,
+            64
+          ],
+          "title": "Width",
+          "type": "integer"
+        },
+        "wrap_event": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Wrap Event"
+        }
+      },
+      "required": [
+        "name",
+        "clock",
+        "width"
+      ],
+      "title": "TimerBehavior",
+      "type": "object"
+    },
+    "TransactionBehavior": {
+      "additionalProperties": false,
+      "properties": {
+        "crc": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crc"
+        },
+        "latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "protocol": {
+          "enum": [
+            "uart",
+            "i2c",
+            "spi",
+            "can",
+            "can_fd",
+            "custom"
+          ],
+          "title": "Protocol",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "controller",
+            "target",
+            "peer"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "name",
+        "protocol",
+        "role"
+      ],
+      "title": "TransactionBehavior",
+      "type": "object"
+    },
+    "UnitValue": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "UnitValue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "api_version": {
+      "const": "ael.dev/v1",
+      "default": "ael.dev/v1",
+      "title": "Api Version",
+      "type": "string"
+    },
+    "bus_width": {
+      "default": 32,
+      "enum": [
+        8,
+        16,
+        32,
+        64
+      ],
+      "title": "Bus Width",
+      "type": "integer"
+    },
+    "clocks": {
+      "items": {
+        "$ref": "#/$defs/ClockBehavior"
+      },
+      "title": "Clocks",
+      "type": "array"
+    },
+    "dma_requests": {
+      "items": {
+        "$ref": "#/$defs/DmaRequestBehavior"
+      },
+      "title": "Dma Requests",
+      "type": "array"
+    },
+    "faults": {
+      "items": {
+        "$ref": "#/$defs/FaultBehavior"
+      },
+      "title": "Faults",
+      "type": "array"
+    },
+    "fmi_ports": {
+      "items": {
+        "$ref": "#/$defs/Port"
+      },
+      "title": "Fmi Ports",
+      "type": "array"
+    },
+    "grounding": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Grounding",
+      "type": "object"
+    },
+    "interrupts": {
+      "items": {
+        "$ref": "#/$defs/InterruptBehavior"
+      },
+      "title": "Interrupts",
+      "type": "array"
+    },
+    "kind": {
+      "const": "HardwareBehaviorIR",
+      "default": "HardwareBehaviorIR",
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "power_states": {
+      "items": {
+        "$ref": "#/$defs/PowerStateBehavior"
+      },
+      "title": "Power States",
+      "type": "array"
+    },
+    "registers": {
+      "items": {
+        "$ref": "#/$defs/BehaviorRegister"
+      },
+      "title": "Registers",
+      "type": "array"
+    },
+    "size": {
+      "exclusiveMinimum": 0,
+      "title": "Size",
+      "type": "integer"
+    },
+    "state_machines": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "State Machines",
+      "type": "array"
+    },
+    "timers": {
+      "items": {
+        "$ref": "#/$defs/TimerBehavior"
+      },
+      "title": "Timers",
+      "type": "array"
+    },
+    "timing": {
+      "additionalProperties": {
+        "$ref": "#/$defs/UnitValue"
+      },
+      "title": "Timing",
+      "type": "object"
+    },
+    "transactions": {
+      "items": {
+        "$ref": "#/$defs/TransactionBehavior"
+      },
+      "title": "Transactions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "size"
+  ],
+  "title": "HardwareBehaviorIR",
+  "type": "object"
+}

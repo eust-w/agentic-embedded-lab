@@ -1,0 +1,8 @@
+api_version: ael.dev/v1
+kind: ModelGenerationRequest
+id: ael.demo.timer
+name: AEL Demo Timer
+version: 0.1.0
+backend: renode
+svd: examples/models/minimal.svd
+generator: ael.svd-importer/v1
