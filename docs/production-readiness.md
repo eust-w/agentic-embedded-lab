@@ -33,10 +33,15 @@ local software claim or strengthen it merely by running the same commands.
 
 ## Release rule
 
-No production tag may be created until all 24 faulty/fixed cases are executable, the
-five-backend case passes, each reference platform has a current production-
-approved capability package, and every production claim resolves to original
-source, model, toolchain, hardware trace, calibration, and envelope evidence.
+Development Preview versions may be tagged only after the `software` gate passes.
+Their GitHub releases must be marked as pre-releases, use a development-version
+identifier, and state that simulator results do not establish hardware equivalence.
+
+No stable production tag may be created until all 24 faulty/fixed cases are
+executable, the five-backend case passes, each reference platform has a current
+production-approved capability package, and every production claim resolves to
+original source, model, toolchain, hardware trace, calibration, and envelope
+evidence.
 
 Neither the `simulation` nor the `software` gate is a hardware-equivalence claim. The
 `production` gate intentionally remains failed until five-board differential

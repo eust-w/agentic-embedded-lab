@@ -97,7 +97,10 @@ all 24 pairs, FMI/SSP, 20-run determinism, the Compose recovery topology, and th
 The production release remains blocked until the five reference boards have current
 differential bundles, every production claim has a calibrated validation
 envelope, and the deployment, recovery, security, signing, and license reviews
-have passed. No tag or release workflow is provided before that production gate.
+have passed. Development Preview tags such as `v0.2.0.dev0` may be published
+after the `software` gate passes, but they must be marked as GitHub pre-releases
+and must not claim hardware equivalence. Stable production tags remain blocked
+until the `production` gate passes.
 
 Run `scripts/run-compose-acceptance.sh` to exercise the local software topology;
 it generates ephemeral development certificates, removes project volumes after
