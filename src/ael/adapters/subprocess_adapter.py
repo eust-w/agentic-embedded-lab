@@ -6,7 +6,9 @@ import select
 import shutil
 import subprocess
 import sys
+import threading
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +47,8 @@ class SubprocessAdapter(Adapter):
         self.timeout_s = timeout_s
         self.process: subprocess.Popen[str] | None = None
         self.launch_command: list[str] | None = None
+        self._stderr_lines: deque[str] = deque(maxlen=200)
+        self._stderr_thread: threading.Thread | None = None
 
     def probe(self) -> AdapterProbe:
         try:
@@ -120,7 +124,19 @@ class SubprocessAdapter(Adapter):
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait(timeout=5)
+        if self._stderr_thread and self._stderr_thread.is_alive():
+            self._stderr_thread.join(timeout=1)
         self.process = None
+        self._stderr_thread = None
+
+    def _drain_stderr(self) -> None:
+        if self.process is None or self.process.stderr is None:
+            return
+        try:
+            for line in iter(self.process.stderr.readline, ""):
+                self._stderr_lines.append(line)
+        except (ValueError, OSError):
+            pass
 
     def _start(self) -> None:
         if self.process is not None and self.process.poll() is None:
@@ -135,12 +151,17 @@ class SubprocessAdapter(Adapter):
                 raise RuntimeError("backend image configured but no OCI runtime is installed")
             workspace = Path(os.environ.get("AEL_WORKSPACE", Path.cwd())).resolve()
             (workspace / ".ael" / "backend-runtime").mkdir(parents=True, exist_ok=True)
+            user_options = (
+                [f"--user={os.getuid()}:{os.getgid()}"]
+                if hasattr(os, "getuid") and hasattr(os, "getgid")
+                else []
+            )
             self.launch_command = [
                 runtime,
                 "run",
                 "--rm",
                 "--interactive",
-                f"--user={os.getuid()}:{os.getgid()}",
+                *user_options,
                 "--read-only",
                 "--network=none",
                 "--cap-drop=ALL",
@@ -167,6 +188,7 @@ class SubprocessAdapter(Adapter):
             ]
         else:
             self.launch_command = [sys.executable, "-m", self.worker_module]
+        self._stderr_lines.clear()
         self.process = subprocess.Popen(
             self.launch_command,
             stdin=subprocess.PIPE,
@@ -176,6 +198,8 @@ class SubprocessAdapter(Adapter):
             bufsize=1,
             env=environment,
         )
+        self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
+        self._stderr_thread.start()
 
     def _call(
         self,
@@ -199,7 +223,7 @@ class SubprocessAdapter(Adapter):
             raise TimeoutError(f"backend {self.backend} did not respond within {self.timeout_s}s")
         line = self.process.stdout.readline()
         if not line:
-            stderr = self.process.stderr.read() if self.process.stderr else ""
+            stderr = "".join(self._stderr_lines)
             raise BackendProtocolError(
                 f"backend exited with {self.process.poll()}; stderr={stderr[-2000:]}"
             )

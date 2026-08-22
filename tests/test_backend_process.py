@@ -503,3 +503,83 @@ def test_vendored_renode_platforms_do_not_fetch_runtime_assets(workspace: Path) 
         assert platform.is_file()
         assert "http://" not in platform.read_text(encoding="utf-8")
         assert "https://" not in platform.read_text(encoding="utf-8")
+
+
+def test_modelica_worker_handles_custom_class_name(tmp_path: Path, monkeypatch) -> None:
+    tool = tmp_path / "fake-omc"
+    tool.write_text(
+        """#!/usr/bin/env python3
+import pathlib, sys
+if '--version' in sys.argv:
+    print('1.27.0')
+    raise SystemExit(0)
+mos = pathlib.Path(sys.argv[-1]).read_text()
+assert 'loadFile("CustomThermal.mo");' in mos
+print('AEL_METRIC temperature_C=42.5')
+""",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    model = tmp_path / "custom.mo"
+    model.write_text(
+        "model CustomThermal\n  Real temp = {{input_power}};\nend CustomThermal;\nprint(temp);\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_OPENMODELICA_BIN", str(tool))
+    worker = ModelicaWorker()
+    worker.component = SystemComponent(
+        id="thermal",
+        type="test",
+        backend=BackendName.MODELICA,
+        model="custom.mo",
+        step_us=1000,
+        properties={"parameters": {"input_power": 5.0}},
+    )
+    worker.runtime_dir = tmp_path / "runtime"
+    worker.runtime_dir.mkdir(parents=True, exist_ok=True)
+    outputs, metrics, events, artifacts = worker.step(1000)
+    assert metrics["temperature_C"] == 42.5
+    assert (worker.runtime_dir / "CustomThermal.mo").is_file()
+
+
+def test_ngspice_worker_supports_custom_parameters_and_bor_threshold(
+    tmp_path: Path, monkeypatch
+) -> None:
+    tool = tmp_path / "fake-ngspice"
+    tool.write_text(
+        """#!/usr/bin/env python3
+import pathlib, sys
+if '--version' in sys.argv or '-v' in sys.argv:
+    print('ngspice-46')
+    raise SystemExit(0)
+deck = pathlib.Path(sys.argv[-1]).read_text().splitlines()
+assert any(line.startswith('.param AEL_custom_voltage=5') for line in deck)
+if '-o' in sys.argv:
+    log = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
+    log.write_text('ael_supply_voltage = 2.900000e+00\\n')
+if '-r' in sys.argv:
+    raw = pathlib.Path(sys.argv[sys.argv.index('-r') + 1])
+    raw.write_bytes(b'raw')
+""",
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    model = tmp_path / "deck.cir"
+    model.write_text("Custom Deck\n.end\n", encoding="utf-8")
+    monkeypatch.setenv("AEL_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("AEL_NGSPICE_BIN", str(tool))
+    worker = NgspiceWorker()
+    worker.component = SystemComponent(
+        id="circuit",
+        type="test",
+        backend=BackendName.NGSPICE,
+        model="deck.cir",
+        step_us=1000,
+        properties={"bor_threshold_V": 3.0, "parameters": {"custom_voltage": 5.0}},
+    )
+    worker.runtime_dir = tmp_path / "runtime"
+    worker.runtime_dir.mkdir(parents=True, exist_ok=True)
+    outputs, metrics, events, artifacts = worker.step(1000)
+    assert metrics["failure"] == 1.0
+    assert any(e.type == "power.brownout_threshold_crossed" for e in events)

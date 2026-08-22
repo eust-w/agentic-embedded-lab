@@ -4,6 +4,20 @@ All notable changes to Agentic Embedded Lab are documented here.
 
 ## Unreleased
 
+### Added
+
+- Added the experimental Aether Native desktop/server companion, plugin registry,
+  working memory, streamed agent events, diff review, and development harness.
+- Generalized Zephyr, ngspice, Modelica, FMI workspace, backend process, provider,
+  and server-storage behavior with regression coverage.
+
+### Security
+
+- Removed embedded provider credentials and made all model keys environment-only.
+- Restricted Aether to loopback by default, validated path identifiers, replaced
+  arbitrary shell execution with fixed diagnostics, and disabled in-process
+  evolution by default.
+
 ### Documentation
 
 - Rebuilt the public project landing page with a bilingual, media-rich README.

@@ -35,6 +35,10 @@ class NgspiceWorker(BackendWorker):
             "load_microamp": 60000,
             "rf_retries": 0,
         }
+        if "parameters" in self.component.properties and isinstance(
+            self.component.properties["parameters"], dict
+        ):
+            defaults.update(self.component.properties["parameters"])
         defaults.update(self.inputs)
         parameters = [f".param AEL_{name}={value}" for name, value in sorted(defaults.items())]
         text = source.read_text(encoding="utf-8")
@@ -58,11 +62,12 @@ class NgspiceWorker(BackendWorker):
         combined = result.stdout + "\n" + log.read_text(encoding="utf-8", errors="replace")
         metrics, events = self.parse_output(combined, self.virtual_time_us + step_us)
         supply_voltage = metrics.get("supply_voltage")
+        bor_threshold = float(self.component.properties.get("bor_threshold_V", 2.7))
         if isinstance(supply_voltage, (int, float)):
             # ngspice does not portably support a .measure PARAM expression
             # referencing another transient measurement. Derive the discrete
             # assertion signal from the measured rail minimum instead.
-            threshold_crossed = not self.brownout_observed and supply_voltage < 2.7
+            threshold_crossed = not self.brownout_observed and supply_voltage < bor_threshold
             self.brownout_observed = self.brownout_observed or threshold_crossed
             metrics["failure"] = float(self.brownout_observed)
             if threshold_crossed:
@@ -72,7 +77,10 @@ class NgspiceWorker(BackendWorker):
                         virtual_time_us=self.virtual_time_us + step_us,
                         source=self.component.id,
                         type="power.brownout_threshold_crossed",
-                        payload={"rail_voltage_V": supply_voltage, "bor_threshold_V": 2.7},
+                        payload={
+                            "rail_voltage_V": supply_voltage,
+                            "bor_threshold_V": bor_threshold,
+                        },
                         fidelity_ref="ngspice:tool-executed",
                     )
                 )

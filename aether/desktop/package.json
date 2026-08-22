@@ -1,0 +1,29 @@
+{
+  "name": "aether-desktop",
+  "version": "0.1.0",
+  "description": "Aether Native - Codex Desktop Agent with Self-Evolution Plugin Microkernel",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "keywords": ["agent", "ai", "codex", "desktop", "self-evolution", "deepseek", "plugins"],
+  "author": "Aether Native Contributors",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.aether.native",
+    "productName": "Aether Native",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "zip"]
+    }
+  }
+}

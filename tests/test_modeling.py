@@ -144,3 +144,31 @@ def test_conformance_requires_evidence_outside_generated_model(workspace: Path) 
             actor="test",
             evidence=[result.package.ir_path or ""],
         )
+
+
+def test_openai_provider_chat_completions_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ael.contracts import ModelGenerationConfig
+    from ael.model_providers import OpenAIProvider
+
+    captured_url = []
+
+    def fake_post(url, headers, payload):
+        captured_url.append(url)
+        ir_json = (
+            '{"api_version":"ael.dev/v1","kind":"HardwareBehaviorIR",'
+            '"name":"TestPerip","bus_width":32,"size":256,"registers":[],"grounding":{}}'
+        )
+        return {
+            "id": "chatcmpl-test",
+            "choices": [{"message": {"content": ir_json}}],
+        }, "req-test"
+
+    monkeypatch.setattr("ael.model_providers._post_json", fake_post)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("AEL_OPENAI_API_MODE", "chat_completions")
+    provider = OpenAIProvider()
+    res = provider.generate("test prompt", ModelGenerationConfig(provider="openai", model="gpt-4o"))
+    assert res.ir.name == "TestPerip"
+    assert captured_url[0].endswith("/chat/completions")

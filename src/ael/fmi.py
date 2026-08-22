@@ -335,8 +335,13 @@ class FmiBridgeServer:
 
 
 class FmiOrchestrator:
-    def __init__(self, catalog: AdapterCatalog | None = None) -> None:
+    def __init__(
+        self,
+        catalog: AdapterCatalog | None = None,
+        workspace: Path | None = None,
+    ) -> None:
         self.catalog = catalog or AdapterCatalog()
+        self.workspace = workspace.resolve() if workspace else None
 
     def run(
         self,
@@ -347,13 +352,14 @@ class FmiOrchestrator:
         timeout_s: int,
         seed: int,
         omsimulator: str = "OMSimulator",
+        workspace: Path | None = None,
     ) -> FmiRunResult:
         validate_fmi_topology(system)
         servers: list[FmiBridgeServer] = []
         # Keep Unix sockets under the workspace so an isolated OMSimulator
         # container can access them through the scoped workspace mount. Never
         # expose the host-wide /tmp directory to the co-simulation process.
-        workspace_root = Path.cwd().resolve()
+        workspace_root = (workspace or self.workspace or Path.cwd()).resolve()
         runtime_root = workspace_root / ".ael" / "runtime"
         runtime_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="ael-fmi-", dir=runtime_root) as temporary:

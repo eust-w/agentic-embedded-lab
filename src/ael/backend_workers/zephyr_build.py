@@ -51,32 +51,54 @@ class ZephyrBuildWorker(BackendWorker):
         del step_us
         case_id = int(self.component.properties.get("case_id", 0))
         variant = str(self.component.properties.get("variant", ""))
-        if case_id not in {1, 2, 3} or variant not in {"faulty", "fixed"}:
-            raise ValueError("zephyr_build supports case_id 1..3 and faulty/fixed variants")
         source = self.property_path("source", required=True)
         build = self.runtime_dir / "build"
-        config = source / "conf" / f"case{case_id}-{variant}.conf"
-        overlay = (
-            source
-            / "overlays"
-            / (f"case2-{variant}.overlay" if case_id == 2 else "reference.overlay")
-        )
-        if not config.is_file() or not overlay.is_file():
-            raise FileNotFoundError(f"missing controlled Zephyr build asset for case {case_id}")
+        if case_id in {1, 2, 3} and variant in {"faulty", "fixed"}:
+            board = "stm32f4_disco"
+            config = source / "conf" / f"case{case_id}-{variant}.conf"
+            overlay = (
+                source
+                / "overlays"
+                / (f"case2-{variant}.overlay" if case_id == 2 else "reference.overlay")
+            )
+            if not config.is_file() or not overlay.is_file():
+                raise FileNotFoundError(f"missing controlled Zephyr build asset for case {case_id}")
+            extra_args = [
+                f"-DUSER_CACHE_DIR={self.runtime_dir / 'zephyr-cache'}",
+                f"-DEXTRA_CONF_FILE={config}",
+                f"-DDTC_OVERLAY_FILE={overlay}",
+            ]
+        else:
+            board = str(self.component.properties.get("board", "stm32f4_disco"))
+            extra_args = [f"-DUSER_CACHE_DIR={self.runtime_dir / 'zephyr-cache'}"]
+            conf_prop = self.component.properties.get("conf") or self.component.properties.get(
+                "extra_conf_file"
+            )
+            if conf_prop:
+                conf_path = self.property_path("conf") or self.property_path("extra_conf_file")
+                if conf_path and conf_path.is_file():
+                    extra_args.append(f"-DEXTRA_CONF_FILE={conf_path}")
+            overlay_prop = self.component.properties.get(
+                "overlay"
+            ) or self.component.properties.get("dtc_overlay_file")
+            if overlay_prop:
+                overlay_path = self.property_path("overlay") or self.property_path(
+                    "dtc_overlay_file"
+                )
+                if overlay_path and overlay_path.is_file():
+                    extra_args.append(f"-DDTC_OVERLAY_FILE={overlay_path}")
         command = [
             str(self.tool),
             "build",
             "-p",
             "always",
             "-b",
-            "stm32f4_disco",
+            board,
             str(source),
             "-d",
             str(build),
             "--",
-            f"-DUSER_CACHE_DIR={self.runtime_dir / 'zephyr-cache'}",
-            f"-DEXTRA_CONF_FILE={config}",
-            f"-DDTC_OVERLAY_FILE={overlay}",
+            *extra_args,
         ]
         result = subprocess.run(
             command,

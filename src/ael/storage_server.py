@@ -370,6 +370,7 @@ class ServerStateStore:
                 self.sa["select"](self.tasks)
                 .where(self.tasks.c.status == TaskStatus.QUEUED)
                 .order_by(self.tasks.c.created_at, self.tasks.c.task_id)
+                .limit(20)
                 .with_for_update(skip_locked=True)
             ).mappings()
             row = next(
