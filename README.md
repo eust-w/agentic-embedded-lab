@@ -242,6 +242,15 @@ compare, generate a missing model, and validate that model. Large event streams
 are paged instead of being injected into the agent context. See
 [MCP configuration](docs/mcp.md).
 
+## Experimental Aether Native companion
+
+The repository also contains [Aether Native](aether/README.md), an experimental
+local desktop shell and plugin-runtime prototype. It is useful for exploring
+agent UI, plugin registry, memory, streamed events, and review flows, but it is
+not part of the production gate. Provider keys are environment-only, arbitrary
+HTTP/Agent shell execution is disabled, and in-process evolution is off by
+default.
+
 ## Executable benchmark
 
 | Domain | Cases | Mechanisms |

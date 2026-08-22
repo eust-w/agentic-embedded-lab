@@ -229,3 +229,25 @@ def test_fmi_orchestrator_fails_closed_on_coordinator_log_error(tmp_path, monkey
             timeout_s=1,
             seed=1,
         )
+
+
+def test_fmi_orchestrator_resolves_explicit_workspace(tmp_path: Path, monkeypatch) -> None:
+    ws = tmp_path / "custom_ws"
+    ws.mkdir()
+    system = SystemManifest(name="explicit-ws", components=[component("test")])
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr("ael.fmi.subprocess.run", lambda *args, **kwargs: Completed())
+    orchestrator = FmiOrchestrator(workspace=ws)
+    orchestrator.run(
+        system,
+        ws / "system.ssp",
+        stop_time_s=0.001,
+        timeout_s=1,
+        seed=1,
+    )
+    assert (ws / ".ael/runtime").is_dir()

@@ -1,5 +1,6 @@
 .DS_Store
 .ael/
+.aether/
 .cache/
 .coverage
 .coverage.*
@@ -8,6 +9,9 @@
 .ruff_cache/
 .venv/
 __pycache__/
+aether/desktop/node_modules/
+aether/desktop/dist/
+aether/desktop/out/
 *.egg-info/
 *.py[cod]
 build/

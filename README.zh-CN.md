@@ -225,6 +225,13 @@ AEL_WORKSPACE=/absolute/path/to/agentic-embedded-lab ael-mcp
 模型。大规模事件流通过分页读取，不会直接塞满 Agent 上下文。详见
 [MCP 配置](docs/mcp.md)。
 
+## 实验性 Aether Native 桌面端
+
+仓库同时包含 [Aether Native](aether/README.md)：一个用于探索 Agent 桌面交互、
+插件 Registry、工作记忆、流式事件和 Diff 审阅的实验性本地应用。它不属于
+production 发布门；Provider 密钥只从环境变量读取，HTTP/Agent 任意 Shell 已
+禁用，同进程自进化默认关闭。
+
 ## 证据与发布门
 
 | 发布门 | 要求 | 当前状态 |

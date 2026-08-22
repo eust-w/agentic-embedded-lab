@@ -58,11 +58,12 @@ ael-mcp = "ael.mcp_server:main"
 ael-worker = "ael.worker:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ael"]
+packages = ["src/ael", "aether"]
 
 [tool.pytest.ini_options]
 addopts = "-q --strict-markers"
 testpaths = ["tests"]
+pythonpath = [".", "src"]
 filterwarnings = [
   "ignore:Field 'lifespan' has an incomplete definition:pydantic_settings.exceptions.IncompleteFieldDefinitionWarning",
 ]
@@ -70,6 +71,7 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = [".aether", "build"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

@@ -64,49 +64,87 @@ class OpenAIProvider:
         if recorded is None and not api_key:
             raise RuntimeError("OPENAI_API_KEY is required for provider=openai")
         schema = HardwareBehaviorIR.model_json_schema()
-        payload = {
-            "model": config.model,
-            "store": False,
-            "input": [
-                {
-                    "role": "developer",
-                    "content": (
-                        "Generate only a grounded AEL HardwareBehaviorIR. Never invent "
-                        "undocumented registers or behavior."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "ael_hardware_behavior_ir",
-                    "strict": True,
-                    "schema": schema,
-                }
-            },
-        }
         base = os.environ.get("AEL_OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+        api_mode = os.environ.get("AEL_OPENAI_API_MODE")
+        use_chat_completions = (
+            api_mode == "chat_completions" or base.endswith("/chat/completions")
+        )
+        if use_chat_completions:
+            endpoint = base if base.endswith("/chat/completions") else f"{base}/chat/completions"
+            payload: dict[str, Any] = {
+                "model": config.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Generate only a grounded AEL HardwareBehaviorIR. Never invent "
+                            "undocumented registers or behavior."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "ael_hardware_behavior_ir",
+                        "strict": True,
+                        "schema": schema,
+                    },
+                },
+            }
+        else:
+            endpoint = f"{base}/responses"
+            payload = {
+                "model": config.model,
+                "store": False,
+                "input": [
+                    {
+                        "role": "developer",
+                        "content": (
+                            "Generate only a grounded AEL HardwareBehaviorIR. Never invent "
+                            "undocumented registers or behavior."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": "ael_hardware_behavior_ir",
+                        "strict": True,
+                        "schema": schema,
+                    }
+                },
+            }
         if recorded is None:
             response, header_request_id = _post_json(
-                f"{base}/responses", {"authorization": f"Bearer {api_key}"}, payload
+                endpoint, {"authorization": f"Bearer {api_key}"}, payload
             )
         else:
             response, header_request_id = recorded, "ael-recorded-openai"
         raw = response.get("output_text")
         if not isinstance(raw, str):
-            parts: list[str] = []
-            for item in response.get("output", []):
-                if item.get("type") != "message":
-                    continue
-                for content in item.get("content", []):
-                    if content.get("type") == "output_text" and isinstance(
-                        content.get("text"), str
-                    ):
-                        parts.append(content["text"])
-            raw = "".join(parts)
+            choices = response.get("choices")
+            if (
+                isinstance(choices, list)
+                and choices
+                and isinstance(choices[0], dict)
+                and isinstance(choices[0].get("message", {}).get("content"), str)
+            ):
+                raw = choices[0]["message"]["content"]
+            else:
+                parts: list[str] = []
+                for item in response.get("output", []):
+                    if item.get("type") != "message":
+                        continue
+                    for content in item.get("content", []):
+                        if content.get("type") == "output_text" and isinstance(
+                            content.get("text"), str
+                        ):
+                            parts.append(content["text"])
+                raw = "".join(parts)
         if not raw:
-            raise RuntimeError("OpenAI response contained no output_text")
+            raise RuntimeError("OpenAI response contained no output_text or message content")
         return ProviderResult(
             HardwareBehaviorIR.model_validate_json(raw),
             raw,
