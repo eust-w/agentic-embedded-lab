@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,6 +83,9 @@ func main() {
 	if err := migrateSystems(filepath.Join(*source, "systems"), filepath.Join(*output, "systems")); err != nil {
 		fatal(err)
 	}
+	if err := specializeFirmwareSystems(filepath.Join(*output, "systems")); err != nil {
+		fatal(err)
+	}
 	if err := migrateExperiments(filepath.Join(*source, "cases"), filepath.Join(*source, "systems"), filepath.Join(*output, "experiments")); err != nil {
 		fatal(err)
 	}
@@ -149,9 +153,20 @@ func migrateExperiments(source, systems, output string) error {
 		if systemID == "" {
 			return fmt.Errorf("experiment %s references unknown system %s", path, legacy.System)
 		}
+		caseID, _ := strconv.Atoi(strings.Split(filepath.Base(filepath.Dir(path)), "-")[0])
+		variant := "fixed"
+		if strings.Contains(filepath.Base(path), "faulty") {
+			variant = "faulty"
+		}
+		if caseID >= 4 && caseID <= 17 {
+			systemID = fmt.Sprintf("renode-zephyr-case%02d-%s", caseID, variant)
+		}
 		experiment := ael.Experiment{APIVersion: ael.APIVersion, ID: legacy.Name, SystemID: systemID, DurationUS: legacy.DurationUS, MacroStepUS: legacy.MacroStepUS, Seed: legacy.Seed, Timeout: time.Duration(legacy.TimeoutS) * time.Second,
 			RequiredFidelity: ael.Fidelity{Firmware: ael.FidelityFunctional, Register: ael.FidelitySynthetic, Protocol: ael.FidelityFunctional, Timing: ael.FidelityFunctional, Physical: ael.FidelityUnsupported, HardwareValidated: false}}
 		for _, stimulus := range legacy.Stimuli {
+			if stimulus.Target == "mcu.case_id" {
+				continue
+			}
 			experiment.Stimuli = append(experiment.Stimuli, ael.Stimulus{AtUS: stimulus.AtUS, Target: stimulus.Target, Value: stimulus.Value, Unit: stimulus.Unit})
 		}
 		for _, fault := range legacy.Faults {
@@ -170,6 +185,96 @@ func migrateExperiments(source, systems, output string) error {
 		}
 	}
 	return nil
+}
+
+func specializeFirmwareSystems(output string) error {
+	for _, variant := range []string{"faulty", "fixed"} {
+		basePath := filepath.Join(output, "renode-digital-"+variant+".yaml")
+		var base ael.System
+		if err := decodeV2YAML(basePath, &base); err != nil {
+			return err
+		}
+		for caseID := 4; caseID <= 17; caseID++ {
+			clone, err := cloneSystem(base)
+			if err != nil {
+				return err
+			}
+			clone.ID = fmt.Sprintf("renode-zephyr-case%02d-%s", caseID, variant)
+			specializeMCUFirmware(&clone, caseID, variant)
+			if err := writeYAML(filepath.Join(output, fmt.Sprintf("renode-case%02d-%s.yaml", caseID, variant)), clone); err != nil {
+				return err
+			}
+		}
+	}
+	for _, item := range []struct {
+		file    string
+		caseID  int
+		variant string
+	}{
+		{"power-renode-faulty.yaml", 19, "faulty"}, {"power-renode-fixed.yaml", 19, "fixed"},
+		{"thermal-renode-faulty.yaml", 21, "faulty"}, {"thermal-renode-fixed.yaml", 21, "fixed"},
+		{"network-renode-faulty.yaml", 23, "faulty"}, {"network-renode-fixed.yaml", 23, "fixed"},
+		{"five-domain-faulty.yaml", 24, "faulty"}, {"five-domain-fixed.yaml", 24, "fixed"},
+	} {
+		path := filepath.Join(output, item.file)
+		var system ael.System
+		if err := decodeV2YAML(path, &system); err != nil {
+			return err
+		}
+		specializeMCUFirmware(&system, item.caseID, item.variant)
+		if err := writeYAML(path, system); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func specializeMCUFirmware(system *ael.System, caseID int, variant string) {
+	for index := range system.Components {
+		component := &system.Components[index]
+		if component.ID != "mcu" {
+			continue
+		}
+		if component.Properties == nil {
+			component.Properties = map[string]any{}
+		}
+		component.Properties["firmware"] = fmt.Sprintf("firmware/zephyr/build-case%02d-%s/zephyr/zephyr.elf", caseID, variant)
+		if inputs, ok := component.Properties["input_registers"].(map[string]any); ok {
+			delete(inputs, "case_id")
+		}
+		ports := component.Ports[:0]
+		for _, port := range component.Ports {
+			if port.Name != "case_id" {
+				ports = append(ports, port)
+			}
+		}
+		component.Ports = ports
+	}
+}
+
+func cloneSystem(source ael.System) (ael.System, error) {
+	payload, err := json.Marshal(source)
+	if err != nil {
+		return ael.System{}, err
+	}
+	var target ael.System
+	err = json.Unmarshal(payload, &target)
+	return target, err
+}
+func decodeV2YAML(path string, target any) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var normalized any
+	if err := yaml.Unmarshal(data, &normalized); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(normalized)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(payload, target)
 }
 
 func readLegacySystemIDs(directory string) (map[string]string, error) {

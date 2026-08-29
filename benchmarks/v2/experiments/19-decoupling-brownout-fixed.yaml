@@ -19,9 +19,6 @@ required_fidelity:
 seed: 1019
 stimuli:
     - at_us: 0
-      target: mcu.case_id
-      value: 19
-    - at_us: 0
       target: circuit.source_resistance_ohm
       unit: Ohm
       value: 0.15

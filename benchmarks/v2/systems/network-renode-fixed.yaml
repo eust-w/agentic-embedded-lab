@@ -61,9 +61,6 @@ components:
       model: benchmarks/models/renode/stm32f4-ael.repl
       ports:
         - direction: input
-          name: case_id
-          type: integer
-        - direction: input
           name: network_retries
           type: real
           unit: "1"
@@ -71,9 +68,8 @@ components:
           name: failure
           type: integer
       properties:
-        firmware: firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf
+        firmware: firmware/zephyr/build-case23-fixed/zephyr/zephyr.elf
         input_registers:
-            case_id: 5.3700096e+08
             network_retries: 5.3700098e+08
         model_state: conformance_validated
         output_registers:

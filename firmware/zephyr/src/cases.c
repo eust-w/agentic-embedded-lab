@@ -131,10 +131,10 @@ static uint32_t ota_journal_failure(void)
     return active.committed == 0U || active.sequence != 7U;
 }
 
-struct ael_result ael_run_case(uint32_t case_id, uint32_t external_retries)
+struct ael_result ael_run_selected(uint32_t external_retries)
 {
     struct ael_result result = {0U, 0U, 4200U, "mechanism passed"};
-    switch (case_id) {
+    switch (CONFIG_AEL_MECHANISM_ID) {
     case 4: {
         volatile uint32_t ready = FAULTY ? 0U : 1U;
         uint32_t polls = 0;

@@ -23,9 +23,6 @@ required_fidelity:
 seed: 1023
 stimuli:
     - at_us: 0
-      target: mcu.case_id
-      value: 23
-    - at_us: 0
       target: network.interference_dbm
       unit: dBm
       value: -42

@@ -83,8 +83,12 @@ func (Renode) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 	metrics, events := ParseOutput(state, output, state.VirtualTimeUS+stepUS)
 	resultOutputs := make(map[string]float64)
 	scales := propertyMap(state.Component.Properties, "output_scales")
+	sentinels := propertyMap(state.Component.Properties, "output_sentinels")
 	for _, match := range registerPattern.FindAllStringSubmatch(string(output), -1) {
 		value, _ := strconv.ParseUint(match[2], 16, 64)
+		if sentinel, ok := integer(sentinels[match[1]]); ok && value == uint64(sentinel) {
+			return ael.StepResult{}, fmt.Errorf("Renode output register %s remained at sentinel %#x", match[1], value)
+		}
 		scale := numberOr(scales[match[1]], 1)
 		resultOutputs[match[1]] = float64(value) * scale
 	}
@@ -354,7 +358,67 @@ func (Zephyr) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 		board = "stm32f4_disco"
 	}
 	build := filepath.Join(state.RuntimeDir, "build")
-	args := []string{"build", "-p", "always", "-b", board, sourcePath, "-d", build, "--", "-DUSER_CACHE_DIR=" + filepath.Join(state.RuntimeDir, "zephyr-cache")}
+	extra := []string{"-DUSER_CACHE_DIR=" + filepath.Join(state.RuntimeDir, "zephyr-cache")}
+	caseID, caseOK := integer(state.Component.Properties["case_id"])
+	variant := stringProperty(state.Component.Properties, "variant")
+	if caseOK && caseID >= 1 && caseID <= 3 && (variant == "faulty" || variant == "fixed") {
+		config, err := WorkspacePath(state, fmt.Sprintf("firmware/zephyr-build/conf/case%d-%s.conf", caseID, variant), true)
+		if err != nil {
+			return ael.StepResult{}, err
+		}
+		overlayName := "reference.overlay"
+		if caseID == 2 {
+			overlayName = fmt.Sprintf("case2-%s.overlay", variant)
+		}
+		overlay, err := WorkspacePath(state, filepath.Join("firmware/zephyr-build/overlays", overlayName), true)
+		if err != nil {
+			return ael.StepResult{}, err
+		}
+		extra = append(extra, "-DEXTRA_CONF_FILE="+config, "-DDTC_OVERLAY_FILE="+overlay)
+	}
+	args := []string{"build", "-p", "always", "-b", board, sourcePath, "-d", build, "--"}
+	args = append(args, extra...)
+	if caseOK && caseID >= 1 && caseID <= 3 {
+		output, exitCode, err := RunToolObserved(ctx, state, args, durationProperty(state.Component.Properties, "timeout_s", 300*time.Second), nil)
+		if err != nil {
+			return ael.StepResult{}, err
+		}
+		logPath := filepath.Join(state.RuntimeDir, "zephyr-build.log")
+		_ = os.WriteFile(logPath, output, 0o600)
+		configData, _ := os.ReadFile(filepath.Join(build, "zephyr", ".config"))
+		dtsData, _ := os.ReadFile(filepath.Join(build, "zephyr", "zephyr.dts"))
+		mechanismFailed := false
+		detail := ""
+		switch caseID {
+		case 1:
+			mechanismFailed = !strings.Contains(string(configData), "CONFIG_AEL_FEATURE=y")
+			detail = "resolved Kconfig feature dependency"
+		case 2:
+			pattern := regexp.MustCompile(`ael-probe-address\s*=\s*<\s*(0x[0-9a-fA-F]+)`)
+			match := pattern.FindStringSubmatch(string(dtsData))
+			resolved := uint64(0)
+			if match != nil {
+				resolved, _ = strconv.ParseUint(match[1], 0, 64)
+			}
+			mechanismFailed = resolved != 0x40011000
+			detail = fmt.Sprintf("resolved devicetree address=%#x", resolved)
+		case 3:
+			mechanismFailed = exitCode != 0
+			detail = fmt.Sprintf("link returncode=%d", exitCode)
+		}
+		value := 0.0
+		if mechanismFailed {
+			value = 1
+		}
+		artifacts := map[string]string{"build_log": relativeArtifact(state.Workspace, logPath)}
+		for label, path := range map[string]string{"dotconfig": filepath.Join(build, "zephyr", ".config"), "devicetree": filepath.Join(build, "zephyr", "zephyr.dts"), "firmware_elf": filepath.Join(build, "zephyr", "zephyr.elf")} {
+			if _, err := os.Stat(path); err == nil {
+				artifacts[label] = relativeArtifact(state.Workspace, path)
+			}
+		}
+		event := ael.Event{VirtualTimeUS: state.VirtualTimeUS + stepUS, Source: state.Component.ID, Type: fmt.Sprintf("zephyr.build.case%d", caseID), Payload: map[string]any{"variant": variant, "returncode": exitCode, "mechanism_failed": mechanismFailed, "detail": detail}, FidelityRef: "zephyr_build:tool-executed"}
+		return ael.StepResult{Outputs: map[string]float64{"failure": value}, Metrics: map[string]float64{"failure": value}, Events: []ael.Event{event}, Artifacts: artifacts}, nil
+	}
 	result, err := scriptWorkerStep(ctx, state, stepUS, args, "zephyr_build")
 	if err != nil {
 		return result, err

@@ -14,9 +14,6 @@ components:
       id: mcu
       model: benchmarks/models/renode/stm32f4-ael.repl
       ports:
-        - direction: input
-          name: case_id
-          type: integer
         - direction: output
           name: current
           type: real
@@ -25,9 +22,8 @@ components:
           name: failure
           type: integer
       properties:
-        firmware: firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf
-        input_registers:
-            case_id: 5.3700096e+08
+        firmware: firmware/zephyr/build-case19-fixed/zephyr/zephyr.elf
+        input_registers: {}
         model_state: conformance_validated
         output_registers:
             current: 5.37000976e+08

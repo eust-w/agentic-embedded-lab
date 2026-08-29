@@ -19,9 +19,6 @@ required_fidelity:
 seed: 1021
 stimuli:
     - at_us: 0
-      target: mcu.case_id
-      value: 21
-    - at_us: 0
       target: plant.thermal_resistance_K_per_W
       unit: K/W
       value: 18

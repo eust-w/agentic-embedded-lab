@@ -17,9 +17,6 @@ required_fidelity:
     register: synthetic
     timing: functional
 seed: 1010
-stimuli:
-    - at_us: 0
-      target: mcu.case_id
-      value: 10
-system_id: renode-zephyr-dual-architecture-reference-faulty
+stimuli: null
+system_id: renode-zephyr-case10-faulty
 timeout: 3e+11

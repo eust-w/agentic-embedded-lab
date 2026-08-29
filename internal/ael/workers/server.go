@@ -173,6 +173,29 @@ func RunTool(ctx context.Context, state *State, arguments []string, timeout time
 	return output, nil
 }
 
+func RunToolObserved(ctx context.Context, state *State, arguments []string, timeout time.Duration, environment map[string]string) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	command := exec.CommandContext(ctx, state.Tool, arguments...)
+	command.Dir = state.RuntimeDir
+	command.Env = append(os.Environ(), "AEL_SEED="+strconv.FormatInt(state.Seed, 10))
+	for key, value := range environment {
+		command.Env = append(command.Env, key+"="+value)
+	}
+	output, err := command.CombinedOutput()
+	if ctx.Err() != nil {
+		return output, -1, ctx.Err()
+	}
+	if err == nil {
+		return output, 0, nil
+	}
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
+		return output, exitError.ExitCode(), nil
+	}
+	return output, -1, err
+}
+
 func ParseOutput(state *State, output []byte, virtualTimeUS int64) (map[string]float64, []ael.Event) {
 	metrics := make(map[string]float64)
 	var events []ael.Event

@@ -10,4 +10,4 @@ struct ael_result {
     const char *cause;
 };
 
-struct ael_result ael_run_case(uint32_t case_id, uint32_t external_retries);
+struct ael_result ael_run_selected(uint32_t external_retries);

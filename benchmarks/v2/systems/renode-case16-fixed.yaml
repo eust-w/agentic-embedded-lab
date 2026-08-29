@@ -1,0 +1,46 @@
+api_version: ael.dev/v2
+components:
+    - backend: renode
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: mcu
+      model: benchmarks/models/renode/stm32f4-ael.repl
+      ports:
+        - direction: input
+          name: network_retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: integer
+        - direction: output
+          name: retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: current
+          type: real
+          unit: uA
+      properties:
+        firmware: firmware/zephyr/build-case16-fixed/zephyr/zephyr.elf
+        input_registers:
+            network_retries: 5.3700098e+08
+        model_state: conformance_validated
+        output_registers:
+            current: 5.37000976e+08
+            failure: 5.37000968e+08
+            retries: 5.37000972e+08
+        output_sentinels:
+            failure: 4.294967295e+09
+      rollback: false
+      step_us: 1000
+connections: null
+id: renode-zephyr-case16-fixed
