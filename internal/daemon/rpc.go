@@ -3,6 +3,9 @@ package daemon
 import (
 	"bufio"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +14,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/eust-w/agentic-embedded-lab/internal/ael"
+	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/approval"
 	"github.com/eust-w/agentic-embedded-lab/internal/executor"
@@ -33,6 +38,7 @@ type Response struct {
 	ID         string `json:"id"`
 	Result     any    `json:"result,omitempty"`
 	Error      string `json:"error,omitempty"`
+	Proof      string `json:"proof,omitempty"`
 }
 
 type Server struct {
@@ -40,6 +46,8 @@ type Server struct {
 	Token      string
 	Runtime    *agent.Runtime
 	Agents     *multiagent.Manager
+	AEL        *ael.RunManager
+	Models     *modeling.Manager
 }
 
 func (s *Server) Listen(ctx context.Context) error {
@@ -93,6 +101,7 @@ func (s *Server) serveConnection(ctx context.Context, connection net.Conn) {
 			continue
 		}
 		response := s.dispatch(ctx, request)
+		response.Proof = responseProof(s.Token, response)
 		if err := encoder.Encode(response); err != nil {
 			return
 		}
@@ -135,6 +144,12 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		s.Runtime.ConfigureProjectTools(params.ProjectID, registry, approval.New(), plugins.NewHookDispatcher())
 		if s.Agents != nil {
 			_ = s.Agents.ConfigureProject(params.ProjectID, params.Root, filepath.Join(filepath.Dir(params.Root), ".aether-worktrees"))
+		}
+		if s.AEL != nil {
+			_ = s.AEL.RegisterProject(params.ProjectID, params.Root)
+		}
+		if s.Models != nil {
+			s.Models.RegisterProject(params.ProjectID, params.Root)
 		}
 		response.Result = map[string]any{"project_id": params.ProjectID, "root": params.Root, "tools": registry.Definitions()}
 	case "thread.create":
@@ -271,6 +286,111 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		_ = json.Unmarshal(request.Params, &params)
 		err := s.Agents.CloseAgent(ctx, params.ID)
 		response.Result, response.Error = resultOrError(map[string]bool{"closed": err == nil}, err)
+	case "ael.start":
+		if s.AEL == nil {
+			response.Error = "AEL runtime is unavailable"
+			break
+		}
+		var params ael.RunRequest
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		record, err := s.AEL.Start(ctx, params)
+		response.Result, response.Error = resultOrError(record, err)
+	case "ael.get":
+		if s.AEL == nil {
+			response.Error = "AEL runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		record, err := s.AEL.Get(ctx, params.ID)
+		response.Result, response.Error = resultOrError(record, err)
+	case "ael.cancel":
+		if s.AEL == nil {
+			response.Error = "AEL runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		response.Result = map[string]bool{"cancelled": s.AEL.Cancel(params.ID)}
+	case "ael.replay":
+		if s.AEL == nil {
+			response.Error = "AEL runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		record, err := s.AEL.Replay(ctx, params.ID)
+		response.Result, response.Error = resultOrError(record, err)
+	case "ael.compare":
+		if s.AEL == nil {
+			response.Error = "AEL runtime is unavailable"
+			break
+		}
+		var params struct{ Left, Right string }
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		comparison, err := s.AEL.Compare(ctx, params.Left, params.Right)
+		response.Result, response.Error = resultOrError(comparison, err)
+	case "model.generate":
+		if s.Models == nil {
+			response.Error = "model runtime is unavailable"
+			break
+		}
+		var params struct {
+			ProjectID string                     `json:"project_id"`
+			Request   modeling.GenerationRequest `json:"request"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		packageValue, err := s.Models.Generate(ctx, params.ProjectID, params.Request)
+		response.Result, response.Error = resultOrError(packageValue, err)
+	case "model.generate_grounded":
+		if s.Models == nil {
+			response.Error = "model runtime is unavailable"
+			break
+		}
+		var params struct {
+			ProjectID string                   `json:"project_id"`
+			Request   modeling.GroundedRequest `json:"request"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		packageValue, err := s.Models.GenerateGrounded(ctx, params.ProjectID, params.Request)
+		response.Result, response.Error = resultOrError(packageValue, err)
+	case "model.promote":
+		if s.Models == nil {
+			response.Error = "model runtime is unavailable"
+			break
+		}
+		var params struct {
+			ProjectID string                        `json:"project_id"`
+			ID        string                        `json:"id"`
+			Version   string                        `json:"version"`
+			Target    modeling.ModelState           `json:"target"`
+			Actor     string                        `json:"actor"`
+			Evidence  *modeling.ConformanceEvidence `json:"evidence"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		packageValue, err := s.Models.Promote(params.ProjectID, params.ID, params.Version, params.Target, params.Actor, params.Evidence)
+		response.Result, response.Error = resultOrError(packageValue, err)
 	default:
 		response.Error = "unknown method"
 	}
@@ -305,6 +425,11 @@ func (c *Client) Call(ctx context.Context, request Request, result any) error {
 	if err := json.NewDecoder(connection).Decode(&response); err != nil {
 		return err
 	}
+	proof := response.Proof
+	response.Proof = ""
+	if proof == "" || !hmac.Equal([]byte(proof), []byte(responseProof(c.Token, response))) {
+		return errors.New("daemon response authentication failed")
+	}
 	if response.Error != "" {
 		return errors.New(response.Error)
 	}
@@ -316,4 +441,12 @@ func (c *Client) Call(ctx context.Context, request Request, result any) error {
 		return err
 	}
 	return json.Unmarshal(payload, result)
+}
+
+func responseProof(token string, response Response) string {
+	response.Proof = ""
+	payload, _ := json.Marshal(response)
+	mac := hmac.New(sha256.New, []byte(token))
+	_, _ = mac.Write(payload)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

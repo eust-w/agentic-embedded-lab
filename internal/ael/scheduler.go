@@ -66,14 +66,14 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 	for _, component := range components {
 		factory := s.Factories[component.Backend]
 		if factory == nil {
-			return EvidenceBundle{}, fmt.Errorf("backend %s is unavailable", component.Backend)
+			return bundle, fmt.Errorf("backend %s is unavailable", component.Backend)
 		}
 		adapter, err := factory(component)
 		if err != nil {
-			return EvidenceBundle{}, err
+			return bundle, err
 		}
 		if err := adapter.Prepare(ctx, component, experiment.Seed); err != nil {
-			return EvidenceBundle{}, fmt.Errorf("prepare %s: %w", component.ID, err)
+			return bundle, fmt.Errorf("prepare %s: %w", component.ID, err)
 		}
 		adapters[component.ID] = adapter
 	}

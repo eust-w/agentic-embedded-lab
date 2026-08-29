@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/modeling/generation-request",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "backend": {
+      "type": "string"
+    },
+    "svd": {
+      "type": "string"
+    },
+    "systemrdl": {
+      "type": "string"
+    },
+    "generator": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "name",
+    "version",
+    "backend",
+    "generator"
+  ]
+}

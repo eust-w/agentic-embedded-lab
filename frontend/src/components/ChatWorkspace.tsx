@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Circle, FileCode2, ShieldCheck } from 'lucide-react'
+import { Check, ChevronRight, Circle, FileCode2, LoaderCircle, Send, ShieldCheck } from 'lucide-react'
 import { useWorkspace } from '../store/workspace'
 import type { WorkspaceView } from '../types'
 
@@ -19,12 +19,29 @@ const calls = [
 export function ChatWorkspace({ mode }: { mode: WorkspaceView }) {
   const approval = useWorkspace((state) => state.approval)
   const decide = useWorkspace((state) => state.decideApproval)
+  const project = useWorkspace((state) => state.project)
+  const items = useWorkspace((state) => state.items)
+  const input = useWorkspace((state) => state.input)
+  const busy = useWorkspace((state) => state.busy)
+  const backendError = useWorkspace((state) => state.backendError)
+  const setInput = useWorkspace((state) => state.setInput)
+  const submit = useWorkspace((state) => state.submit)
+  const resolveLiveApproval = useWorkspace((state) => state.resolveLiveApproval)
+  const liveApproval = [...items].reverse().find((item) => item.type === 'approval')
+  const liveRequest = liveApproval?.payload.request as { id?: string; tool?: string; reason?: string; resource?: string } | undefined
   return (
     <section className="chat-workspace" aria-label={mode === 'diff' ? '变更工作区' : '对话工作区'}>
       <div className="assistant-heading">
         <div className="aether-mark">A</div>
-        <div><strong>Aether</strong><span>2 分钟前</span><p>正在修复嵌入式固件时序问题</p><small>高 ISR 负载下，UART RX 在 115200 波特率发生溢出。</small></div>
+        <div><strong>Aether</strong><span>{project ? '实时任务' : '离线预览'}</span><p>{project ? `项目：${project.root.split('/').at(-1)}` : '正在修复嵌入式固件时序问题'}</p><small>{project ? '模型输出、工具结果与审批记录均来自本地 aetherd。' : '高 ISR 负载下，UART RX 在 115200 波特率发生溢出。'}</small></div>
       </div>
+      {project ? <div className="live-feed" aria-live="polite">
+        {items.length === 0 ? <div className="empty-live-state">输入任务后，真实模型输出、工具调用和审批请求会显示在这里。</div> : items.map((item) => <article className={`live-item ${item.type}`} key={item.id}>
+          <small>{item.type === 'user_message' ? '你' : item.type === 'agent_message' ? 'Aether' : item.type === 'tool_result' ? '工具结果' : item.type === 'approval' ? '审批请求' : '执行事件'}</small>
+          <p>{renderItem(item.payload)}</p>
+        </article>)}
+      </div> : null}
+      {!project ? <>
       <div className="plan-panel">
         <div className="panel-title">执行计划</div>
         {plan.map(([label, status], index) => (
@@ -39,6 +56,14 @@ export function ChatWorkspace({ mode }: { mode: WorkspaceView }) {
           <div className="tool-call" key={`${name}-${target}`}><ChevronRight size={14} /><span>工具调用</span><code>{name}</code><small>{target}</small><Check size={13} className="success-icon" /><time>{duration}</time></div>
         ))}
       </div>
+      </> : null}
+      {project && liveRequest?.id ? <div className="approval-card live-approval">
+        <ShieldCheck size={21} />
+        <div className="approval-copy"><strong>工具请求批准：{liveRequest.tool}</strong><p>{liveRequest.reason}</p><code>{liveRequest.resource}</code></div>
+        <button className="primary-button" onClick={() => void resolveLiveApproval(liveRequest.id!, true)}>仅批准本次</button>
+        <button className="secondary-button" onClick={() => void resolveLiveApproval(liveRequest.id!, false)}>拒绝</button>
+      </div> : null}
+      {!project ? <>
       {approval.status === 'pending' ? (
         <div className="approval-card">
           <ShieldCheck size={21} />
@@ -64,7 +89,21 @@ export function ChatWorkspace({ mode }: { mode: WorkspaceView }) {
 <mark className="added"><i>132</i>   {'}'}</mark></pre>
         </div>
       </div>
-      <div className="composer-placeholder"><Circle size={12} /> Agent 正在等待批准，批准后才会应用变更。</div>
+      </> : null}
+      {backendError ? <div className="backend-error">{backendError}</div> : null}
+      <form className={`live-composer ${project ? 'connected' : ''}`} onSubmit={(event) => { event.preventDefault(); void submit() }}>
+        <Circle size={12} />
+        <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder={project ? '描述要完成的嵌入式开发任务…' : '先从左侧选择项目工作区'} disabled={!project || busy} rows={2} />
+        <button className="primary-button" type="submit" disabled={!project || busy || !input.trim()}>{busy ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />}{busy ? '执行中' : '发送'}</button>
+      </form>
     </section>
   )
+}
+
+function renderItem(payload: Record<string, unknown>): string {
+  if (typeof payload.text === 'string') return payload.text
+  if (typeof payload.delta === 'string') return payload.delta
+  if (typeof payload.error === 'string') return payload.error
+  if (payload.tool && typeof payload.tool === 'string') return payload.tool
+  return JSON.stringify(payload)
 }

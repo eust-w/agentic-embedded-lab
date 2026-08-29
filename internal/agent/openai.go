@@ -45,6 +45,7 @@ type ResponseRequest struct {
 	PreviousID string                    `json:"previous_response_id,omitempty"`
 	Reasoning  map[string]any            `json:"reasoning,omitempty"`
 	Metadata   map[string]string         `json:"metadata,omitempty"`
+	Text       map[string]any            `json:"text,omitempty"`
 }
 
 type ResponseEvent struct {

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/modeling/conformance-evidence",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "model_id": {
+      "type": "string"
+    },
+    "validator": {
+      "type": "string"
+    },
+    "source_independent": {
+      "type": "boolean"
+    },
+    "register_layout_passed": {
+      "type": "boolean"
+    },
+    "compile_passed": {
+      "type": "boolean"
+    },
+    "driver_tests_passed": {
+      "type": "boolean"
+    },
+    "property_tests_passed": {
+      "type": "boolean"
+    },
+    "reference_trace_passed": {
+      "type": "boolean"
+    },
+    "generated_tests_are_only_evidence": {
+      "type": "boolean"
+    },
+    "sandbox_network": {
+      "type": "string"
+    },
+    "sandbox_read_only": {
+      "type": "boolean"
+    },
+    "artifact_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "model_id",
+    "validator",
+    "source_independent",
+    "register_layout_passed",
+    "compile_passed",
+    "driver_tests_passed",
+    "property_tests_passed",
+    "reference_trace_passed",
+    "generated_tests_are_only_evidence",
+    "sandbox_network",
+    "sandbox_read_only",
+    "artifact_hashes"
+  ]
+}

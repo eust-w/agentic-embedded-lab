@@ -1,0 +1,419 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/modeling/ir",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "bus_width": {
+      "type": "integer"
+    },
+    "size": {
+      "type": "integer"
+    },
+    "registers": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "reset": {
+            "type": "integer"
+          },
+          "fields": {
+            "items": {
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "lsb": {
+                  "type": "integer"
+                },
+                "width": {
+                  "type": "integer"
+                },
+                "access": {
+                  "type": "string"
+                },
+                "reset": {
+                  "type": "integer"
+                },
+                "side_effect": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "name",
+                "lsb",
+                "width",
+                "access",
+                "reset"
+              ]
+            },
+            "type": "array"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "offset",
+          "width",
+          "reset",
+          "fields"
+        ]
+      },
+      "type": "array"
+    },
+    "state_machines": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "clocks": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "frequency": {
+            "properties": {
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "value",
+              "unit"
+            ]
+          },
+          "enabled_when": {
+            "type": "string"
+          },
+          "reset_domain": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "source",
+          "frequency"
+        ]
+      },
+      "type": "array"
+    },
+    "timers": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "clock": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "wrap_event": {
+            "type": "string"
+          },
+          "compare_channels": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "clock",
+          "width",
+          "direction",
+          "compare_channels"
+        ]
+      },
+      "type": "array"
+    },
+    "interrupts": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "clear_condition": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "line",
+          "trigger",
+          "condition"
+        ]
+      },
+      "type": "array"
+    },
+    "dma_requests": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "request_line": {
+            "type": "integer"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "width_bits": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "request_line",
+          "condition",
+          "direction",
+          "width_bits"
+        ]
+      },
+      "type": "array"
+    },
+    "transactions": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "latency": {
+            "properties": {
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "value",
+              "unit"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "protocol",
+          "role"
+        ]
+      },
+      "type": "array"
+    },
+    "faults": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "effects": {
+            "type": "object"
+          },
+          "recover_by": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "trigger",
+          "effects"
+        ]
+      },
+      "type": "array"
+    },
+    "timing": {
+      "additionalProperties": {
+        "properties": {
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value",
+          "unit"
+        ]
+      },
+      "type": "object"
+    },
+    "power_states": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "current": {
+            "properties": {
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "value",
+              "unit"
+            ]
+          },
+          "entry_condition": {
+            "type": "string"
+          },
+          "exit_condition": {
+            "type": "string"
+          },
+          "wake_latency": {
+            "properties": {
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "value",
+              "unit"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ]
+      },
+      "type": "array"
+    },
+    "fmi_ports": {
+      "items": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "direction",
+          "type"
+        ]
+      },
+      "type": "array"
+    },
+    "grounding": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "kind",
+    "name",
+    "bus_width",
+    "size",
+    "registers",
+    "state_machines",
+    "clocks",
+    "timers",
+    "interrupts",
+    "dma_requests",
+    "transactions",
+    "faults",
+    "timing",
+    "power_states",
+    "fmi_ports",
+    "grounding"
+  ]
+}

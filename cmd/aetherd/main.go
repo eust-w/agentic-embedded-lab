@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/eust-w/agentic-embedded-lab/internal/ael"
+	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
@@ -26,6 +28,7 @@ const daemonTokenAccount = "daemon-capability-token"
 func main() {
 	dataDirectory := flag.String("data", defaultDataDirectory(), "Aether application data directory")
 	socketPath := flag.String("socket", defaultSocketPath(), "Aether daemon Unix socket")
+	aelBackend := flag.String("ael-backend", defaultAELBackend(), "AEL backend worker executable")
 	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -44,7 +47,9 @@ func main() {
 	runtime := agent.NewRuntime(state, client, bus)
 	agents := multiagent.New(state, runtime, bus, 4)
 	defer agents.Close()
-	server := daemon.Server{SocketPath: *socketPath, Token: token, Runtime: runtime, Agents: agents}
+	aelRuns := ael.NewRunManager(state, *aelBackend)
+	models := modeling.NewManager(client)
+	server := daemon.Server{SocketPath: *socketPath, Token: token, Runtime: runtime, Agents: agents, AEL: aelRuns, Models: models}
 	if err := server.Listen(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("run daemon: %v", err)
 	}
@@ -83,6 +88,14 @@ func defaultSocketPath() string {
 		return filepath.Join(os.TempDir(), "aetherd.sock")
 	}
 	return filepath.Join(home, "Library", "Application Support", "Aether", "run", "aetherd.sock")
+}
+
+func defaultAELBackend() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return "ael-backend"
+	}
+	return filepath.Join(filepath.Dir(executable), "ael-backend")
 }
 
 func init() {

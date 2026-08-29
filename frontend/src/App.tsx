@@ -9,6 +9,8 @@ import { useWorkspace } from './store/workspace'
 
 export function App() {
   const view = useWorkspace((state) => state.view)
+  const connect = useWorkspace((state) => state.connect)
+  useEffect(() => { void connect() }, [connect])
   return (
     <div className="app-shell">
       <AppToolbar />
@@ -21,3 +23,4 @@ export function App() {
     </div>
   )
 }
+import { useEffect } from 'react'

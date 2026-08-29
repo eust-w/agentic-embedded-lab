@@ -19,6 +19,10 @@ const (
 type Native interface {
 	AccessibilityTrusted(prompt bool) bool
 	ScreenRecordingTrusted(prompt bool) bool
+	FrontmostBundleID() (string, error)
+	FocusedElementSecure() bool
+	ElementTree(limit int) ([]byte, error)
+	Screenshot() ([]byte, error)
 	Click(x, y float64) error
 	Type(text string) error
 }
@@ -36,6 +40,9 @@ func (c *Controller) SetApplicationPermission(ctx context.Context, bundleID stri
 	if bundleID == "" || (decision != DecisionAllow && decision != DecisionDeny) {
 		return errors.New("bundle id and explicit decision are required")
 	}
+	if protectedApplication(bundleID) && decision == DecisionAllow {
+		return errors.New("macOS security and login applications cannot be controlled")
+	}
 	_, err := c.state.DB().ExecContext(ctx, `INSERT INTO permissions(kind, resource, decision, scope, updated_at)
 		VALUES ('application', ?, ?, ?, ?) ON CONFLICT(kind, resource) DO UPDATE SET
 		decision=excluded.decision, scope=excluded.scope, updated_at=excluded.updated_at`, bundleID,
@@ -44,6 +51,9 @@ func (c *Controller) SetApplicationPermission(ctx context.Context, bundleID stri
 }
 
 func (c *Controller) ApplicationDecision(ctx context.Context, bundleID string) Decision {
+	if protectedApplication(bundleID) {
+		return DecisionDeny
+	}
 	var decision Decision
 	if err := c.state.DB().QueryRowContext(ctx, `SELECT decision FROM permissions
 		WHERE kind='application' AND resource=?`, bundleID).Scan(&decision); err != nil {
@@ -60,21 +70,64 @@ func (c *Controller) Status(prompt bool) map[string]bool {
 }
 
 func (c *Controller) Click(ctx context.Context, bundleID string, x, y float64) error {
-	if c.ApplicationDecision(ctx, bundleID) != DecisionAllow {
-		return errors.New("application control is not allowed")
-	}
-	if !c.native.AccessibilityTrusted(false) {
-		return errors.New("macOS Accessibility permission is not granted")
+	if err := c.authorize(ctx, bundleID); err != nil {
+		return err
 	}
 	return c.native.Click(x, y)
 }
 
 func (c *Controller) Type(ctx context.Context, bundleID, text string) error {
+	if err := c.authorize(ctx, bundleID); err != nil {
+		return err
+	}
+	if c.native.FocusedElementSecure() {
+		return errors.New("typing into password or secure fields is prohibited")
+	}
+	return c.native.Type(text)
+}
+
+func (c *Controller) ElementTree(ctx context.Context, bundleID string, limit int) ([]byte, error) {
+	if err := c.authorize(ctx, bundleID); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	return c.native.ElementTree(limit)
+}
+
+func (c *Controller) Screenshot(ctx context.Context, bundleID string) ([]byte, error) {
+	if err := c.authorize(ctx, bundleID); err != nil {
+		return nil, err
+	}
+	if !c.native.ScreenRecordingTrusted(false) {
+		return nil, errors.New("macOS Screen Recording permission is not granted")
+	}
+	return c.native.Screenshot()
+}
+
+func (c *Controller) authorize(ctx context.Context, bundleID string) error {
 	if c.ApplicationDecision(ctx, bundleID) != DecisionAllow {
 		return errors.New("application control is not allowed")
 	}
 	if !c.native.AccessibilityTrusted(false) {
 		return errors.New("macOS Accessibility permission is not granted")
 	}
-	return c.native.Type(text)
+	frontmost, err := c.native.FrontmostBundleID()
+	if err != nil {
+		return err
+	}
+	if frontmost != bundleID {
+		return errors.New("authorized application is not frontmost")
+	}
+	return nil
+}
+
+func protectedApplication(bundleID string) bool {
+	switch bundleID {
+	case "com.apple.systempreferences", "com.apple.SystemSettings", "com.apple.loginwindow", "com.apple.SecurityAgent":
+		return true
+	default:
+		return false
+	}
 }

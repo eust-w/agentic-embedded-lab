@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
+	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/invopop/jsonschema"
@@ -20,20 +21,24 @@ func main() {
 		fatal(err)
 	}
 	models := map[string]any{
-		"thread":              protocol.Thread{},
-		"turn":                protocol.Turn{},
-		"item":                protocol.Item{},
-		"approval-request":    protocol.ApprovalRequest{},
-		"agent-spec":          protocol.AgentSpec{},
-		"automation-spec":     protocol.AutomationSpec{},
-		"plugin-manifest":     plugins.Manifest{},
-		"ael-problem":         ael.Problem{},
-		"ael-system":          ael.System{},
-		"ael-experiment":      ael.Experiment{},
-		"ael-event":           ael.Event{},
-		"ael-evidence-bundle": ael.EvidenceBundle{},
-		"ael-claim":           ael.Claim{},
-		"validation-envelope": ael.ValidationEnvelope{},
+		"thread":                     protocol.Thread{},
+		"turn":                       protocol.Turn{},
+		"item":                       protocol.Item{},
+		"approval-request":           protocol.ApprovalRequest{},
+		"agent-spec":                 protocol.AgentSpec{},
+		"automation-spec":            protocol.AutomationSpec{},
+		"plugin-manifest":            plugins.Manifest{},
+		"ael-problem":                ael.Problem{},
+		"ael-system":                 ael.System{},
+		"ael-experiment":             ael.Experiment{},
+		"ael-event":                  ael.Event{},
+		"ael-evidence-bundle":        ael.EvidenceBundle{},
+		"ael-claim":                  ael.Claim{},
+		"validation-envelope":        ael.ValidationEnvelope{},
+		"hardware-behavior-ir":       modeling.IR{},
+		"model-package":              modeling.Package{},
+		"model-generation-request":   modeling.GenerationRequest{},
+		"model-conformance-evidence": modeling.ConformanceEvidence{},
 	}
 	reflector := &jsonschema.Reflector{AllowAdditionalProperties: false, DoNotReference: true}
 	for name, model := range models {

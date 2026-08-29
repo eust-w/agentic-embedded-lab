@@ -2,11 +2,15 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 
+	"github.com/eust-w/agentic-embedded-lab/internal/ael"
+	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
 	"github.com/eust-w/agentic-embedded-lab/internal/launchagent"
@@ -14,6 +18,7 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/secret"
 	"github.com/google/uuid"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const daemonTokenAccount = "daemon-capability-token"
@@ -24,21 +29,31 @@ type Backend struct {
 	service launchagent.Service
 }
 
+type ProjectInfo struct {
+	ID         string                     `json:"id"`
+	Root       string                     `json:"root"`
+	Permission protocol.PermissionProfile `json:"permission"`
+	Tools      []protocol.ToolDefinition  `json:"tools"`
+}
+
 func NewBackend() *Backend { return &Backend{service: launchagent.New()} }
 
 func (b *Backend) Startup(ctx context.Context) {
 	b.ctx = ctx
-	keychain := secret.NewKeychainStore()
-	token, _ := keychain.Get(agent.KeychainService, daemonTokenAccount)
-	b.client = &daemon.Client{SocketPath: defaultSocketPath(), Token: string(token)}
+	_ = b.refreshClient()
 }
 
 func (b *Backend) Health() (map[string]any, error) {
-	if b.client == nil || b.client.Token == "" {
-		return nil, errors.New("Aether daemon is not configured")
+	if err := b.refreshClient(); err != nil {
+		return nil, errors.New("Aether 后台尚未配置")
 	}
 	var result map[string]any
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "health"}, &result)
+	if err != nil {
+		if refreshErr := b.refreshClient(); refreshErr == nil {
+			err = b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "health"}, &result)
+		}
+	}
 	return result, err
 }
 
@@ -47,6 +62,34 @@ func (b *Backend) OpenProject(projectID, root string, permission protocol.Permis
 	params, _ := json.Marshal(map[string]any{"project_id": projectID, "root": root, "permission": permission})
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "project.open", Params: params}, &result)
 	return result, err
+}
+
+func (b *Backend) SelectProject(permission protocol.PermissionProfile) (ProjectInfo, error) {
+	if _, err := b.Health(); err != nil {
+		return ProjectInfo{}, err
+	}
+	if permission == "" {
+		permission = protocol.PermissionWorkspace
+	}
+	root, err := runtime.OpenDirectoryDialog(b.ctx, runtime.OpenDialogOptions{Title: "选择嵌入式项目工作区"})
+	if err != nil {
+		return ProjectInfo{}, err
+	}
+	if root == "" {
+		return ProjectInfo{}, errors.New("未选择项目")
+	}
+	digest := sha256.Sum256([]byte(root))
+	projectID := "project-" + hex.EncodeToString(digest[:8])
+	result, err := b.OpenProject(projectID, root, permission)
+	if err != nil {
+		return ProjectInfo{}, err
+	}
+	tools := make([]protocol.ToolDefinition, 0)
+	if value, ok := result["tools"]; ok {
+		payload, _ := json.Marshal(value)
+		_ = json.Unmarshal(payload, &tools)
+	}
+	return ProjectInfo{ID: projectID, Root: root, Permission: permission, Tools: tools}, nil
 }
 
 func (b *Backend) CreateThread(projectID, title string, permission protocol.PermissionProfile) (protocol.Thread, error) {
@@ -137,6 +180,62 @@ func (b *Backend) CloseAgent(id string) (bool, error) {
 	return result["closed"], err
 }
 
+func (b *Backend) StartExperiment(request ael.RunRequest) (ael.RunRecord, error) {
+	var record ael.RunRecord
+	params, _ := json.Marshal(request)
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "ael.start", Params: params}, &record)
+	return record, err
+}
+
+func (b *Backend) GetExperiment(id string) (ael.RunRecord, error) {
+	var record ael.RunRecord
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "ael.get", Params: params}, &record)
+	return record, err
+}
+
+func (b *Backend) CancelExperiment(id string) (bool, error) {
+	var result map[string]bool
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "ael.cancel", Params: params}, &result)
+	return result["cancelled"], err
+}
+
+func (b *Backend) ReplayExperiment(id string) (ael.RunRecord, error) {
+	var record ael.RunRecord
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "ael.replay", Params: params}, &record)
+	return record, err
+}
+
+func (b *Backend) CompareExperiments(left, right string) (ael.Comparison, error) {
+	var result ael.Comparison
+	params, _ := json.Marshal(map[string]string{"left": left, "right": right})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "ael.compare", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) GenerateModel(projectID string, request modeling.GenerationRequest) (modeling.Package, error) {
+	var result modeling.Package
+	params, _ := json.Marshal(map[string]any{"project_id": projectID, "request": request})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "model.generate", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) GenerateGroundedModel(projectID string, request modeling.GroundedRequest) (modeling.Package, error) {
+	var result modeling.Package
+	params, _ := json.Marshal(map[string]any{"project_id": projectID, "request": request})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "model.generate_grounded", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) PromoteModel(projectID, id, version string, target modeling.ModelState, actor string, evidence *modeling.ConformanceEvidence) (modeling.Package, error) {
+	var result modeling.Package
+	params, _ := json.Marshal(map[string]any{"project_id": projectID, "id": id, "version": version, "target": target, "actor": actor, "evidence": evidence})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "model.promote", Params: params}, &result)
+	return result, err
+}
+
 func (b *Backend) BackgroundServiceStatus() launchagent.Status { return b.service.Status() }
 
 func (b *Backend) InstallBackgroundService() error { return b.service.Register() }
@@ -149,4 +248,14 @@ func defaultSocketPath() string {
 		return filepath.Join(os.TempDir(), "aetherd.sock")
 	}
 	return filepath.Join(home, "Library", "Application Support", "Aether", "run", "aetherd.sock")
+}
+
+func (b *Backend) refreshClient() error {
+	keychain := secret.NewKeychainStore()
+	token, err := keychain.Get(agent.KeychainService, daemonTokenAccount)
+	if err != nil || len(token) < 32 {
+		return errors.New("daemon capability token is unavailable")
+	}
+	b.client = &daemon.Client{SocketPath: defaultSocketPath(), Token: string(token)}
+	return nil
 }

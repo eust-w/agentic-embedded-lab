@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/modeling/package",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "backend": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string"
+    },
+    "source_paths": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "source_hashes": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "ir_path": {
+      "type": "string"
+    },
+    "artifact_paths": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "signature": {
+      "type": "string"
+    },
+    "generated_by": {
+      "type": "string"
+    },
+    "grounding_manifest_path": {
+      "type": "string"
+    },
+    "generation_receipt_path": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "kind",
+    "id",
+    "name",
+    "version",
+    "backend",
+    "state",
+    "source_paths",
+    "source_hashes",
+    "artifact_paths",
+    "validation_evidence",
+    "created_at"
+  ]
+}

@@ -15,7 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 type Store struct {
 	db   *sql.DB
@@ -151,6 +151,16 @@ func (s *Store) migrate(ctx context.Context) error {
 			updated_at TEXT NOT NULL,
 			PRIMARY KEY(kind, resource)
 		)`,
+		`CREATE TABLE IF NOT EXISTS ael_runs (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			request_json BLOB NOT NULL,
+			result_json BLOB,
+			error TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
 		`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`,
 	}
 	for index, statement := range statements {
@@ -258,6 +268,35 @@ func (s *Store) StartTurn(ctx context.Context, threadID, input string) (protocol
 		return protocol.Turn{}, err
 	}
 	return turn, nil
+}
+
+func (s *Store) FinishTurn(ctx context.Context, threadID, turnID string, status protocol.ThreadStatus, message string) error {
+	if status != protocol.ThreadCompleted && status != protocol.ThreadFailed && status != protocol.ThreadCancelled && status != protocol.ThreadWaiting {
+		return errors.New("turn may only finish in a terminal or waiting state")
+	}
+	now := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE turns SET status=?, finished_at=?, error=NULLIF(?, '') WHERE id=? AND thread_id=? AND status=?`,
+		status, formatTime(now), message, turnID, threadID, protocol.ThreadRunning)
+	if err != nil {
+		return err
+	}
+	changed, _ := result.RowsAffected()
+	if changed != 1 {
+		return errors.New("running turn was not found")
+	}
+	threadStatus := status
+	if status == protocol.ThreadCompleted {
+		threadStatus = protocol.ThreadReady
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE threads SET status=?, updated_at=? WHERE id=?`, threadStatus, formatTime(now), threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) AppendItem(ctx context.Context, item protocol.Item) (protocol.Item, error) {

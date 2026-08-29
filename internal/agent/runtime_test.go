@@ -50,7 +50,13 @@ func TestRuntimePersistsStreamedTurn(t *testing.T) {
 			if turn.ID != items[0].TurnID {
 				t.Fatalf("unexpected turn linkage")
 			}
-			return
+			threads, err := runtime.ListThreads(context.Background(), "p")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(threads) == 1 && threads[0].Status == protocol.ThreadReady {
+				return
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

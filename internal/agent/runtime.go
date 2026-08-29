@@ -134,6 +134,10 @@ func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn prot
 			return
 		}
 		if len(calls) == 0 {
+			if err := r.store.FinishTurn(context.Background(), thread.ID, turn.ID, protocol.ThreadCompleted, ""); err != nil {
+				r.failTurn(thread.ID, turn.ID, err)
+				return
+			}
 			r.bus.Publish(events.Event{Topic: "turn.completed", Data: map[string]any{"turn_id": turn.ID}})
 			return
 		}
@@ -282,8 +286,17 @@ func functionOutput(callID string, output any) map[string]any {
 }
 
 func (r *Runtime) failTurn(threadID, turnID string, err error) {
+	status := protocol.ThreadFailed
+	if errors.Is(err, context.Canceled) {
+		status = protocol.ThreadCancelled
+	}
+	_ = r.store.FinishTurn(context.Background(), threadID, turnID, status, err.Error())
 	_, _ = r.store.AppendItem(context.Background(), protocol.Item{ThreadID: threadID, TurnID: turnID, Type: protocol.ItemAgentMessage, Payload: map[string]any{"error": err.Error(), "at": time.Now().UTC()}})
-	r.bus.Publish(events.Event{Topic: "turn.failed", Data: map[string]any{"turn_id": turnID, "error": err.Error()}})
+	topic := "turn.failed"
+	if status == protocol.ThreadCancelled {
+		topic = "turn.cancelled"
+	}
+	r.bus.Publish(events.Event{Topic: topic, Data: map[string]any{"turn_id": turnID, "error": err.Error()}})
 }
 
 type ApprovalBroker struct {

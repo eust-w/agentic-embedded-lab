@@ -9,6 +9,9 @@ export function AppToolbar() {
   const running = useWorkspace((state) => state.running)
   const setView = useWorkspace((state) => state.setView)
   const setRunning = useWorkspace((state) => state.setRunning)
+  const project = useWorkspace((state) => state.project)
+  const startExperiment = useWorkspace((state) => state.startExperiment)
+  const cancelExperiment = useWorkspace((state) => state.cancelExperiment)
   return (
     <header className="app-toolbar">
       <div className="traffic-lights" aria-hidden="true"><i /><i /><i /></div>
@@ -26,7 +29,7 @@ export function AppToolbar() {
         <button className="select-button">gpt-5.6 <span>⌄</span></button>
         <button className="select-button">工作区写入 <span>⌄</span></button>
         <button className="tool-button" onClick={() => setView('browser')}><Globe2 size={15} /> 浏览器</button>
-        <button className={running ? 'run-button running' : 'run-button'} onClick={() => setRunning(!running)}>
+        <button className={running ? 'run-button running' : 'run-button'} onClick={() => project ? (running ? void cancelExperiment() : void startExperiment()) : setRunning(!running)}>
           {running ? <Square size={14} /> : <Play size={15} />} {running ? '停止' : '运行实验'}
         </button>
         <button className="icon-button" aria-label="打开工作区菜单"><Box size={16} /></button>
