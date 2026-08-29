@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -33,6 +34,7 @@ type Config struct {
 	Env       map[string]string `json:"env,omitempty"`
 	URL       string            `json:"url,omitempty"`
 	Bearer    string            `json:"bearer,omitempty"`
+	BearerEnv string            `json:"bearer_env,omitempty"`
 	Required  bool              `json:"required"`
 }
 
@@ -69,16 +71,27 @@ type rpcError struct {
 }
 
 type Client struct {
-	config Config
-	http   *http.Client
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	reader *bufio.Reader
-	nextID atomic.Int64
+	config       Config
+	http         *http.Client
+	mu           sync.Mutex
+	cmd          *exec.Cmd
+	stdin        io.WriteCloser
+	reader       *bufio.Reader
+	nextID       atomic.Int64
+	tokens       TokenProvider
+	sessionID    string
+	instructions string
+}
+
+type TokenProvider interface {
+	Token(context.Context) (string, error)
 }
 
 func New(config Config) (*Client, error) {
+	return NewWithToken(config, nil)
+}
+
+func NewWithToken(config Config, tokens TokenProvider) (*Client, error) {
 	if config.Name == "" {
 		return nil, errors.New("MCP server name is required")
 	}
@@ -88,7 +101,23 @@ func New(config Config) (*Client, error) {
 	if config.Transport == TransportHTTP && !strings.HasPrefix(config.URL, "https://") && !strings.HasPrefix(config.URL, "http://127.0.0.1") && !strings.HasPrefix(config.URL, "http://localhost") {
 		return nil, errors.New("HTTP MCP requires HTTPS or a loopback URL")
 	}
-	return &Client{config: config, http: &http.Client{}}, nil
+	if config.Bearer != "" {
+		return nil, errors.New("inline MCP bearer tokens are forbidden; use a Secret-backed TokenProvider")
+	}
+	if tokens == nil && config.BearerEnv != "" {
+		tokens = EnvironmentToken(config.BearerEnv)
+	}
+	return &Client{config: config, http: &http.Client{}, tokens: tokens}, nil
+}
+
+type EnvironmentToken string
+
+func (name EnvironmentToken) Token(context.Context) (string, error) {
+	value := strings.TrimSpace(os.Getenv(string(name)))
+	if value == "" {
+		return "", errors.New("MCP bearer environment secret is unavailable")
+	}
+	return value, nil
 }
 
 func (c *Client) Connect(ctx context.Context) error {
@@ -106,18 +135,45 @@ func (c *Client) Connect(ctx context.Context) error {
 		c.Close()
 		return fmt.Errorf("initialize MCP %s: %w", c.config.Name, err)
 	}
+	if instructions, ok := result["instructions"].(string); ok {
+		c.instructions = instructions
+	}
+	if err := c.notify(ctx, "notifications/initialized", map[string]any{}); err != nil {
+		c.Close()
+		return err
+	}
 	return nil
 }
 
+func (c *Client) Instructions() string { return c.instructions }
+
 func (c *Client) Tools(ctx context.Context) ([]Tool, error) {
-	var result struct {
-		Tools []Tool `json:"tools"`
+	var tools []Tool
+	cursor := ""
+	for {
+		var result struct {
+			Tools      []Tool `json:"tools"`
+			NextCursor string `json:"nextCursor"`
+		}
+		params := map[string]any{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		if err := c.call(ctx, "tools/list", params, &result); err != nil {
+			return nil, err
+		}
+		for index := range result.Tools {
+			result.Tools[index].Name = c.config.Name + "." + result.Tools[index].Name
+		}
+		tools = append(tools, result.Tools...)
+		if result.NextCursor == "" {
+			return tools, nil
+		}
+		cursor = result.NextCursor
+		if len(tools) > 10000 {
+			return nil, errors.New("MCP tools pagination exceeded safety limit")
+		}
 	}
-	err := c.call(ctx, "tools/list", map[string]any{}, &result)
-	for index := range result.Tools {
-		result.Tools[index].Name = c.config.Name + "." + result.Tools[index].Name
-	}
-	return result.Tools, err
 }
 
 func (c *Client) CallTool(ctx context.Context, namespacedName string, arguments map[string]any) (map[string]any, error) {
@@ -244,17 +300,103 @@ func (c *Client) callHTTP(ctx context.Context, request rpcRequest, response *rpc
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "application/json, text/event-stream")
-	if c.config.Bearer != "" {
-		httpRequest.Header.Set("Authorization", "Bearer "+c.config.Bearer)
+	if c.tokens != nil {
+		token, err := c.tokens.Token(ctx)
+		if err != nil {
+			return err
+		}
+		httpRequest.Header.Set("Authorization", "Bearer "+token)
+	}
+	if c.sessionID != "" {
+		httpRequest.Header.Set("Mcp-Session-Id", c.sessionID)
 	}
 	httpResponse, err := c.http.Do(httpRequest)
 	if err != nil {
 		return err
 	}
 	defer httpResponse.Body.Close()
+	if session := httpResponse.Header.Get("Mcp-Session-Id"); session != "" {
+		c.sessionID = session
+	}
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(httpResponse.Body, 16<<10))
 		return fmt.Errorf("MCP HTTP %d: %s", httpResponse.StatusCode, strings.TrimSpace(string(body)))
 	}
+	if strings.Contains(httpResponse.Header.Get("Content-Type"), "text/event-stream") {
+		return decodeHTTPEventStream(httpResponse.Body, response)
+	}
 	return json.NewDecoder(httpResponse.Body).Decode(response)
+}
+
+func (c *Client) notify(ctx context.Context, method string, params any) error {
+	payload, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
+	if err != nil {
+		return err
+	}
+	switch c.config.Transport {
+	case TransportSTDIO:
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.stdin == nil {
+			return errors.New("MCP STDIO server is not connected")
+		}
+		_, err = c.stdin.Write(append(payload, '\n'))
+		return err
+	case TransportHTTP:
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.config.URL, bytes.NewReader(payload))
+		if err != nil {
+			return err
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Accept", "application/json, text/event-stream")
+		if c.tokens != nil {
+			token, err := c.tokens.Token(ctx)
+			if err != nil {
+				return err
+			}
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		if c.sessionID != "" {
+			request.Header.Set("Mcp-Session-Id", c.sessionID)
+		}
+		response, err := c.http.Do(request)
+		if err != nil {
+			return err
+		}
+		defer response.Body.Close()
+		if session := response.Header.Get("Mcp-Session-Id"); session != "" {
+			c.sessionID = session
+		}
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return fmt.Errorf("MCP notification HTTP %d", response.StatusCode)
+		}
+		return nil
+	default:
+		return errors.New("unsupported MCP transport")
+	}
+}
+
+func decodeHTTPEventStream(reader io.Reader, response *rpcResponse) error {
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 64<<10), 4<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" {
+			continue
+		}
+		if err := json.Unmarshal([]byte(data), response); err != nil {
+			return err
+		}
+		if response.ID != 0 {
+			return nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return errors.New("MCP event stream ended without a response")
 }

@@ -35,6 +35,11 @@ static_resources:
                           - append:
                               append_action: OVERWRITE_IF_EXISTS_OR_ADD
                               header:
+                                key: X-Aether-Ingress
+                                value: worker
+                          - append:
+                              append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                              header:
                                 key: X-Client-Cert-SHA256
                                 value: "%DOWNSTREAM_PEER_FINGERPRINT_256%"
                   - name: envoy.filters.http.router
@@ -64,6 +69,17 @@ static_resources:
                         - match: {prefix: "/"}
                           route: {cluster: control_plane}
                 http_filters:
+                  - name: envoy.filters.http.header_mutation
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation
+                      mutations:
+                        request_mutations:
+                          - append:
+                              append_action: OVERWRITE_IF_EXISTS_OR_ADD
+                              header:
+                                key: X-Aether-Ingress
+                                value: user
+                          - remove: X-Client-Cert-SHA256
                   - name: envoy.filters.http.router
                     typed_config: {"@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router}
   clusters:

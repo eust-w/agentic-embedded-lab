@@ -42,8 +42,8 @@ services:
     environment:
       AEL_DEV_OIDC_ISSUER: http://dev-oidc:8080
       AEL_DEV_OIDC_AUDIENCE: ael-dev
-    entrypoint: ["python", "-m", "ael.dev_oidc"]
-    ports: ["127.0.0.1:8080:8080"]
+    entrypoint: ["/usr/local/bin/aether-server", "--mode", "dev-oidc", "--listen", ":8080"]
+    ports: ["127.0.0.1:18080:8080"]
   control-plane:
     build:
       context: ..
@@ -65,6 +65,11 @@ services:
       postgres: {condition: service_healthy}
       minio-init: {condition: service_completed_successfully}
       dev-oidc: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/aether-server", "--probe", "http://127.0.0.1:8765/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
   envoy:
     image: envoyproxy/envoy:v1.35.3
     command: ["-c", "/etc/envoy/envoy.yaml"]
@@ -104,9 +109,7 @@ services:
       AWS_ACCESS_KEY_ID: ael-development
       AWS_SECRET_ACCESS_KEY: development-only-secret
     entrypoint:
-      - python
-      - -m
-      - ael.worker
+      - /usr/local/bin/aether-worker
       - --control-plane
       - https://envoy:8443
       - --cert
@@ -117,8 +120,8 @@ services:
       - /certs/ca.crt
       - --worker-id
       - compose-worker
-      - --capability
-      - synthetic
+      - --capabilities
+      - health_probe
     depends_on:
       envoy: {condition: service_healthy}
     restart: on-failure:5

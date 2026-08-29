@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-FROM python:3.12-slim-bookworm
-RUN useradd --create-home --uid 10001 ael
-WORKDIR /app
-COPY pyproject.toml README.md LICENSE /app/
-COPY src /app/src
-RUN pip install --no-cache-dir '.[server,mcp]' \
-    && mkdir -p /workspace \
-    && chown -R ael:ael /workspace
-USER 10001
-ENV AEL_WORKSPACE=/workspace
+FROM scratch
+COPY .ael/container-bin/aether-server /usr/local/bin/aether-server
+COPY .ael/container-bin/aether-worker /usr/local/bin/aether-worker
+COPY .ael/container-bin/ael-backend /usr/local/bin/ael-backend
+USER 10001:10001
+WORKDIR /workspace
 EXPOSE 8765
-ENTRYPOINT ["uvicorn", "ael.api:app", "--host", "0.0.0.0", "--port", "8765"]
+ENTRYPOINT ["/usr/local/bin/aether-server"]
+CMD ["--mode", "control-plane", "--listen", ":8765"]

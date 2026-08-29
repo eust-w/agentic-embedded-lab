@@ -28,13 +28,14 @@ type Runtime struct {
 	projectRoots map[string]string
 	tools        *tools.Registry
 	projectTools map[string]*tools.Registry
+	projectHooks map[string]*plugins.HookDispatcher
 	policy       *approval.Engine
 	hooks        *plugins.HookDispatcher
 	approvals    *ApprovalBroker
 }
 
 func NewRuntime(state *store.Store, client *ResponsesClient, bus *events.Bus) *Runtime {
-	return &Runtime{store: state, client: client, bus: bus, runs: make(map[string]context.CancelFunc), projectRoots: make(map[string]string), projectTools: make(map[string]*tools.Registry), approvals: NewApprovalBroker()}
+	return &Runtime{store: state, client: client, bus: bus, runs: make(map[string]context.CancelFunc), projectRoots: make(map[string]string), projectTools: make(map[string]*tools.Registry), projectHooks: make(map[string]*plugins.HookDispatcher), approvals: NewApprovalBroker()}
 }
 
 func (r *Runtime) ConfigureTools(registry *tools.Registry, policy *approval.Engine, hooks *plugins.HookDispatcher) {
@@ -45,7 +46,8 @@ func (r *Runtime) ConfigureProjectTools(projectID string, registry *tools.Regist
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.projectTools[projectID] = registry
-	r.policy, r.hooks = policy, hooks
+	r.projectHooks[projectID] = hooks
+	r.policy = policy
 }
 
 func (r *Runtime) RegisterProject(projectID, root string) {
@@ -98,11 +100,27 @@ func (r *Runtime) CancelTurn(turnID string) bool {
 }
 
 func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn protocol.Turn) {
+	hooks := r.hooksForProject(thread.ProjectID)
+	outcome := "completed"
 	defer func() {
 		r.mu.Lock()
 		delete(r.runs, turn.ID)
 		r.mu.Unlock()
+		if hooks != nil {
+			_, _ = hooks.Dispatch(context.Background(), plugins.HookPayload{Event: plugins.HookStop, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"outcome": outcome}})
+		}
 	}()
+	if hooks != nil {
+		results, err := hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookTurnStart, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"input": turn.Input}})
+		if err != nil || hookBlocked(results) {
+			outcome = "failed"
+			if err == nil {
+				err = errors.New("turn blocked by hook")
+			}
+			r.failTurn(thread.ID, turn.ID, err)
+			return
+		}
+	}
 	_, _ = r.store.AppendItem(ctx, protocol.Item{ThreadID: thread.ID, TurnID: turn.ID, Type: protocol.ItemUserMessage, Payload: map[string]any{"text": turn.Input}})
 	request := ResponseRequest{
 		Model:     thread.Model,
@@ -130,25 +148,29 @@ func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn prot
 			return err
 		})
 		if err != nil {
+			outcome = "failed"
 			r.failTurn(thread.ID, turn.ID, err)
 			return
 		}
 		if len(calls) == 0 {
 			if err := r.store.FinishTurn(context.Background(), thread.ID, turn.ID, protocol.ThreadCompleted, ""); err != nil {
+				outcome = "failed"
 				r.failTurn(thread.ID, turn.ID, err)
 				return
 			}
 			r.bus.Publish(events.Event{Topic: "turn.completed", Data: map[string]any{"turn_id": turn.ID}})
 			return
 		}
-		outputs, err := r.executeFunctionCalls(ctx, thread, turn, calls, registry)
+		outputs, err := r.executeFunctionCalls(ctx, thread, turn, calls, registry, hooks)
 		if err != nil {
+			outcome = "failed"
 			r.failTurn(thread.ID, turn.ID, err)
 			return
 		}
 		request.Input = outputs
 		request.PreviousID = responseID
 	}
+	outcome = "failed"
 	r.failTurn(thread.ID, turn.ID, errors.New("tool loop exceeded 8 steps"))
 }
 
@@ -187,7 +209,7 @@ func collectFunctionEvent(event ResponseEvent, calls map[string]*pendingFunction
 	}
 }
 
-func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thread, turn protocol.Turn, pending map[string]*pendingFunctionCall, registry *tools.Registry) ([]map[string]any, error) {
+func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thread, turn protocol.Turn, pending map[string]*pendingFunctionCall, registry *tools.Registry, hooks *plugins.HookDispatcher) ([]map[string]any, error) {
 	ids := make([]string, 0, len(pending))
 	for id := range pending {
 		ids = append(ids, id)
@@ -212,8 +234,8 @@ func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thre
 		}
 		operation := tool.Operation(arguments)
 		operation.ThreadID, operation.ProjectID = thread.ID, thread.ProjectID
-		if r.hooks != nil {
-			results, err := r.hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookPreToolUse, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"tool": call.Name, "arguments": arguments}})
+		if hooks != nil {
+			results, err := hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookPreToolUse, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"tool": call.Name, "arguments": arguments}})
 			if err != nil {
 				return nil, err
 			}
@@ -237,6 +259,16 @@ func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thre
 		if decision.Decision == approval.DecisionAsk {
 			request := protocol.ApprovalRequest{APIVersion: protocol.APIVersion, ID: uuid.NewString(), ThreadID: thread.ID, TurnID: turn.ID, Tool: call.Name, Reason: decision.Reason, Risk: operation.Risk, Scope: protocol.ApprovalOnce, Resource: operation.Resource, Metadata: map[string]any{"arguments": arguments}, CreatedAt: time.Now().UTC()}
 			r.approvals.Prepare(request.ID)
+			if hooks != nil {
+				results, err := hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookPermissionRequest, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"request": request}})
+				if err != nil {
+					return nil, err
+				}
+				if hookBlocked(results) {
+					outputs = append(outputs, functionOutput(call.CallID, map[string]any{"success": false, "error": "permission request blocked by hook"}))
+					continue
+				}
+			}
 			item, _ := r.store.AppendItem(ctx, protocol.Item{ThreadID: thread.ID, TurnID: turn.ID, Type: protocol.ItemApproval, Payload: map[string]any{"request": request}})
 			r.bus.Publish(events.Event{Topic: "approval.requested", Data: item})
 			allowed, err := r.approvals.Wait(ctx, request.ID)
@@ -266,9 +298,27 @@ func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thre
 			}
 		}
 		_, _ = r.store.AppendItem(ctx, protocol.Item{ThreadID: thread.ID, TurnID: turn.ID, Type: protocol.ItemToolResult, Payload: map[string]any{"tool": call.Name, "result": result}})
+		if hooks != nil {
+			results, err := hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookPostToolUse, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"tool": call.Name, "result": result}})
+			if err != nil {
+				return nil, err
+			}
+			if hookBlocked(results) {
+				return nil, errors.New("tool result blocked by hook")
+			}
+		}
 		outputs = append(outputs, functionOutput(call.CallID, result))
 	}
 	return outputs, nil
+}
+
+func hookBlocked(results []plugins.HookResult) bool {
+	for _, result := range results {
+		if result.Block {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runtime) registryForProject(projectID string) *tools.Registry {
@@ -278,6 +328,15 @@ func (r *Runtime) registryForProject(projectID string) *tools.Registry {
 		return registry
 	}
 	return r.tools
+}
+
+func (r *Runtime) hooksForProject(projectID string) *plugins.HookDispatcher {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if hooks := r.projectHooks[projectID]; hooks != nil {
+		return hooks
+	}
+	return r.hooks
 }
 
 func functionOutput(callID string, output any) map[string]any {

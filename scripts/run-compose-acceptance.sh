@@ -12,6 +12,18 @@ export DOCKER_CONFIG="${docker_config}"
 export DOCKER_HOST="${docker_host}"
 compose=(docker compose --project-name ael-acceptance -f "${workspace}/deploy/compose.yaml")
 
+container_arch="arm64"
+if [[ "$(uname -m)" == "x86_64" ]]; then
+  container_arch="amd64"
+fi
+mkdir -p "${workspace}/.ael/container-bin"
+for command in aether-server aether-worker ael-backend; do
+  CGO_ENABLED=0 GOOS=linux GOARCH="${container_arch}" GOTOOLCHAIN=local \
+    GOCACHE="${AEL_GO_CACHE:-/tmp/aether-go-cache}" \
+    go build -trimpath -ldflags='-s -w' \
+      -o "${workspace}/.ael/container-bin/${command}" "${workspace}/cmd/${command}"
+done
+
 # A previous interrupted acceptance run may still hold the old, in-memory TLS
 # certificate. Tear it down before rotating the ephemeral development CA.
 "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
@@ -24,10 +36,7 @@ cleanup() {
 trap cleanup EXIT
 
 "${compose[@]}" up --build --detach --wait
-python_bin="${AEL_PYTHON:-python3}"
-if [[ -x "${workspace}/.venv/bin/python" ]]; then
-  python_bin="${workspace}/.venv/bin/python"
-fi
-"${python_bin}" "${workspace}/scripts/compose_acceptance.py" \
+GOTOOLCHAIN=local GOCACHE="${AEL_GO_CACHE:-/tmp/aether-go-cache}" \
+  go run "${workspace}/cmd/aether-compose-acceptance" \
   --workspace "${workspace}" \
   --output "${workspace}/.ael/compose-acceptance/report.json"
