@@ -16,6 +16,7 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/launchagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
+	"github.com/eust-w/agentic-embedded-lab/internal/release"
 	"github.com/eust-w/agentic-embedded-lab/internal/secret"
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -24,9 +25,10 @@ import (
 const daemonTokenAccount = "daemon-capability-token"
 
 type Backend struct {
-	ctx     context.Context
-	client  *daemon.Client
-	service launchagent.Service
+	ctx            context.Context
+	client         *daemon.Client
+	service        launchagent.Service
+	currentProject string
 }
 
 type ProjectInfo struct {
@@ -84,12 +86,20 @@ func (b *Backend) SelectProject(permission protocol.PermissionProfile) (ProjectI
 	if err != nil {
 		return ProjectInfo{}, err
 	}
+	b.currentProject = root
 	tools := make([]protocol.ToolDefinition, 0)
 	if value, ok := result["tools"]; ok {
 		payload, _ := json.Marshal(value)
 		_ = json.Unmarshal(payload, &tools)
 	}
 	return ProjectInfo{ID: projectID, Root: root, Permission: permission, Tools: tools}, nil
+}
+
+func (b *Backend) CheckRelease(profile release.Profile) (release.Result, error) {
+	if b.currentProject == "" {
+		return release.Result{}, errors.New("请先选择项目工作区")
+	}
+	return release.Check(b.currentProject, profile)
 }
 
 func (b *Backend) CreateThread(projectID, title string, permission protocol.PermissionProfile) (protocol.Thread, error) {

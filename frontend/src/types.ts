@@ -125,3 +125,10 @@ export interface AELRunRecord {
   created_at: string
   updated_at: string
 }
+
+export interface ReleaseResult {
+  profile: 'foundation' | 'simulation' | 'software' | 'production'
+  passed: boolean
+  failures: string[]
+  checked: string[]
+}

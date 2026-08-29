@@ -1,4 +1,4 @@
-import type { AELRunRecord, AELRunRequest, AgentSpec, Item, PermissionProfile, ProjectInfo, Thread, Turn } from '../types'
+import type { AELRunRecord, AELRunRequest, AgentSpec, Item, PermissionProfile, ProjectInfo, ReleaseResult, Thread, Turn } from '../types'
 
 export interface BackendAPI {
   Health(): Promise<{ status: string; time: string }>
@@ -14,6 +14,7 @@ export interface BackendAPI {
   StartExperiment(request: AELRunRequest): Promise<AELRunRecord>
   GetExperiment(id: string): Promise<AELRunRecord>
   CancelExperiment(id: string): Promise<boolean>
+  CheckRelease(profile: ReleaseResult['profile']): Promise<ReleaseResult>
 }
 
 declare global {

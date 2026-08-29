@@ -143,6 +143,13 @@ func (m *RunManager) execute(ctx context.Context, id, root string, request RunRe
 		if errors.Is(err, context.Canceled) {
 			status = RunCancelled
 		}
+	} else {
+		for _, assertion := range bundle.Assertions {
+			if !assertion.Passed {
+				status, errorMessage = RunFailed, "one or more experiment assertions failed"
+				break
+			}
+		}
 	}
 	m.update(id, status, &struct {
 		EvidencePath string         `json:"evidence_path"`

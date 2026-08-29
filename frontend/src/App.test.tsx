@@ -55,6 +55,7 @@ describe('Aether desktop shell', () => {
       StartExperiment: vi.fn().mockResolvedValue({}),
       GetExperiment: vi.fn().mockResolvedValue({}),
       CancelExperiment: vi.fn().mockResolvedValue(true),
+      CheckRelease: vi.fn().mockImplementation((profile) => Promise.resolve({ profile, passed: profile === 'foundation', failures: profile === 'foundation' ? [] : ['证据缺失'], checked: [] })),
     }
     window.go = { app: { Backend: api } }
     render(<App />)

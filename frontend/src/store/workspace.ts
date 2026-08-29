@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { backend } from '../lib/backend'
-import type { AELRunRecord, AgentStatus, Approval, Item, ProjectInfo, Thread, ThreadSummary, WorkspaceView } from '../types'
+import type { AELRunRecord, AgentStatus, Approval, Item, ProjectInfo, ReleaseResult, Thread, ThreadSummary, WorkspaceView } from '../types'
 
 interface WorkspaceState {
   view: WorkspaceView
@@ -18,6 +18,7 @@ interface WorkspaceState {
   busy: boolean
   activeTurn?: string
   experimentRun?: AELRunRecord
+  releaseGates: Partial<Record<ReleaseResult['profile'], ReleaseResult>>
   backendError?: string
   setView: (view: WorkspaceView) => void
   setRunning: (running: boolean) => void
@@ -32,6 +33,7 @@ interface WorkspaceState {
   resolveLiveApproval: (approvalID: string, allow: boolean) => Promise<void>
   startExperiment: () => Promise<void>
   cancelExperiment: () => Promise<void>
+  checkRelease: () => Promise<void>
 }
 
 const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
@@ -67,6 +69,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   items: [],
   input: '',
   busy: false,
+  releaseGates: {},
   setView: (view) => set({
     view,
     inspectorTab: view === 'simulation' ? 'evidence' : view === 'browser' ? 'context' : 'agents',
@@ -119,6 +122,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const selectedThread = liveThreads[0]?.id ?? ''
       const items = selectedThread ? await api.Items(selectedThread, 0) : []
       set({ project, liveThreads, selectedThread, items, connection: 'ready', backendError: undefined })
+      void get().checkRelease()
     } catch (error) {
       set({ backendError: error instanceof Error ? error.message : String(error) })
     }
@@ -210,5 +214,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     } finally {
       set({ running: false })
     }
+  },
+  checkRelease: async () => {
+    const api = backend()
+    if (!api || !get().project) return
+    const profiles: ReleaseResult['profile'][] = ['foundation', 'simulation', 'software', 'production']
+    const values = await Promise.all(profiles.map(async (profile) => {
+      try { return await api.CheckRelease(profile) } catch (error) { return { profile, passed: false, failures: [error instanceof Error ? error.message : String(error)], checked: [] } }
+    }))
+    set({ releaseGates: Object.fromEntries(values.map((value) => [value.profile, value])) })
   },
 }))

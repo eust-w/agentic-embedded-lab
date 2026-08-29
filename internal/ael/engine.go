@@ -20,6 +20,18 @@ type Engine struct {
 	BackendTimeout    time.Duration
 }
 
+func LoadExperiment(root, path string) (Experiment, error) {
+	var value Experiment
+	err := loadStrictWorkspaceYAML(root, path, &value)
+	return value, err
+}
+
+func LoadSystem(root, path string) (System, error) {
+	var value System
+	err := loadStrictWorkspaceYAML(root, path, &value)
+	return value, err
+}
+
 func (e Engine) RunFiles(ctx context.Context, experimentPath, systemPath, sourceRevision string) (EvidenceBundle, string, error) {
 	root, err := filepath.Abs(e.Workspace)
 	if err != nil {

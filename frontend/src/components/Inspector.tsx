@@ -45,6 +45,16 @@ function AgentInspector({ agents }: { agents: ReturnType<typeof useWorkspace.get
 }
 
 function EvidenceInspector({ compact = false }: { compact?: boolean }) {
+  const project = useWorkspace((state) => state.project)
+  const gates = useWorkspace((state) => state.releaseGates)
+  if (project) {
+    const profiles = ['foundation', 'simulation', 'software', 'production'] as const
+    return <div className={compact ? 'evidence-block compact' : 'inspector-content evidence-content'}>
+      {!compact ? <div className="inspector-heading">发布门</div> : <h3>发布门</h3>}
+      {profiles.map((profile) => { const gate = gates[profile]; const passed = gate?.passed === true; return <div className={`evidence-row ${passed ? 'good' : 'bad'}`} key={profile}>{passed ? <CheckCircle2 size={20}/> : <CircleX size={20}/>}<span><strong>{profile}</strong><small>{gate ? passed ? '已通过' : `${gate.failures.length} 个缺口` : '检查中…'}</small></span></div> })}
+      {!compact && gates.production && !gates.production.passed ? <><p className="fidelity-warning">Production 未通过时不得发布 1.0，也不得声明真机等价。</p><button className="link-button">查看发布门证据</button></> : null}
+    </div>
+  }
   return <div className={compact ? 'evidence-block compact' : 'inspector-content evidence-content'}>
     {!compact ? <div className="inspector-heading">证据</div> : <h3>证据</h3>}
     <div className="evidence-row good"><CheckCircle2 size={20} /><span><strong>仿真已验证</strong><small>Renode 1.16.1 · 刚刚</small></span></div>

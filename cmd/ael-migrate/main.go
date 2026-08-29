@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
+	"github.com/eust-w/agentic-embedded-lab/internal/ael/benchmark"
 	"gopkg.in/yaml.v3"
 )
 
@@ -89,6 +90,30 @@ func main() {
 	if err := migrateExperiments(filepath.Join(*source, "cases"), filepath.Join(*source, "systems"), filepath.Join(*output, "experiments")); err != nil {
 		fatal(err)
 	}
+	if err := migrateCatalog(filepath.Join(*source, "catalog.yaml"), filepath.Join(*output, "catalog.yaml")); err != nil {
+		fatal(err)
+	}
+}
+
+func migrateCatalog(source, output string) error {
+	catalog, err := benchmark.Load(".", source)
+	if err != nil {
+		return err
+	}
+	for index := range catalog.Cases {
+		item := &catalog.Cases[index]
+		prefix := fmt.Sprintf("%02d-%s", item.ID, item.Slug)
+		item.FaultyExperiment = filepath.ToSlash(filepath.Join("benchmarks", "v2", "experiments", prefix+"-faulty.yaml"))
+		item.FixedExperiment = filepath.ToSlash(filepath.Join("benchmarks", "v2", "experiments", prefix+"-fixed.yaml"))
+		item.Experiment = item.FixedExperiment
+		item.FaultyAsset = item.FaultyExperiment
+		item.FixedAsset = item.FixedExperiment
+		if (item.ID >= 4 && item.ID <= 17) || item.ID == 19 || item.ID == 21 || item.ID == 23 || item.ID == 24 {
+			item.Mechanism.FaultyAssets = []string{fmt.Sprintf("firmware/zephyr/conf/case%02d-faulty.conf", item.ID)}
+			item.Mechanism.FixedAssets = []string{fmt.Sprintf("firmware/zephyr/conf/case%02d-fixed.conf", item.ID)}
+		}
+	}
+	return writeYAML(output, catalog)
 }
 
 func migrateSystems(source, output string) error {
