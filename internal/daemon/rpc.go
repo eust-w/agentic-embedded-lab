@@ -14,6 +14,7 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/approval"
 	"github.com/eust-w/agentic-embedded-lab/internal/executor"
+	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/tools"
@@ -38,6 +39,7 @@ type Server struct {
 	SocketPath string
 	Token      string
 	Runtime    *agent.Runtime
+	Agents     *multiagent.Manager
 }
 
 func (s *Server) Listen(ctx context.Context) error {
@@ -130,7 +132,10 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		_ = registry.Register(tools.SearchTool{Workspace: params.Root, MaxResults: 200})
 		_ = registry.Register(tools.CommandTool{Workspace: params.Root, Executor: executor.New(), Profile: params.Permission})
 		s.Runtime.RegisterProject(params.ProjectID, params.Root)
-		s.Runtime.ConfigureTools(registry, approval.New(), plugins.NewHookDispatcher())
+		s.Runtime.ConfigureProjectTools(params.ProjectID, registry, approval.New(), plugins.NewHookDispatcher())
+		if s.Agents != nil {
+			_ = s.Agents.ConfigureProject(params.ProjectID, params.Root, filepath.Join(filepath.Dir(params.Root), ".aether-worktrees"))
+		}
 		response.Result = map[string]any{"project_id": params.ProjectID, "root": params.Root, "tools": registry.Definitions()}
 	case "thread.create":
 		var params struct {
@@ -197,6 +202,75 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 			break
 		}
 		response.Result = map[string]bool{"resolved": s.Runtime.ResolveApproval(params.ApprovalID, params.Allow)}
+	case "agent.spawn":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			Parent protocol.Thread    `json:"parent"`
+			Prompt string             `json:"prompt"`
+			Spec   protocol.AgentSpec `json:"spec"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		handle, err := s.Agents.Spawn(ctx, params.Parent, params.Parent.ProjectID, params.Prompt, params.Spec)
+		response.Result, response.Error = resultOrError(handle, err)
+	case "agent.list":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		response.Result = s.Agents.List()
+	case "agent.message":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID      string `json:"id"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		turn, err := s.Agents.Message(ctx, params.ID, params.Message)
+		response.Result, response.Error = resultOrError(turn, err)
+	case "agent.interrupt":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		response.Result = map[string]bool{"interrupted": s.Agents.Interrupt(params.ID)}
+	case "agent.result":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		result, err := s.Agents.Result(ctx, params.ID)
+		response.Result, response.Error = resultOrError(result, err)
+	case "agent.close":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		err := s.Agents.CloseAgent(ctx, params.ID)
+		response.Result, response.Error = resultOrError(map[string]bool{"closed": err == nil}, err)
 	default:
 		response.Error = "unknown method"
 	}

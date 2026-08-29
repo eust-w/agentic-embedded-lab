@@ -27,17 +27,25 @@ type Runtime struct {
 	runs         map[string]context.CancelFunc
 	projectRoots map[string]string
 	tools        *tools.Registry
+	projectTools map[string]*tools.Registry
 	policy       *approval.Engine
 	hooks        *plugins.HookDispatcher
 	approvals    *ApprovalBroker
 }
 
 func NewRuntime(state *store.Store, client *ResponsesClient, bus *events.Bus) *Runtime {
-	return &Runtime{store: state, client: client, bus: bus, runs: make(map[string]context.CancelFunc), projectRoots: make(map[string]string), approvals: NewApprovalBroker()}
+	return &Runtime{store: state, client: client, bus: bus, runs: make(map[string]context.CancelFunc), projectRoots: make(map[string]string), projectTools: make(map[string]*tools.Registry), approvals: NewApprovalBroker()}
 }
 
 func (r *Runtime) ConfigureTools(registry *tools.Registry, policy *approval.Engine, hooks *plugins.HookDispatcher) {
 	r.tools, r.policy, r.hooks = registry, policy, hooks
+}
+
+func (r *Runtime) ConfigureProjectTools(projectID string, registry *tools.Registry, policy *approval.Engine, hooks *plugins.HookDispatcher) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.projectTools[projectID] = registry
+	r.policy, r.hooks = policy, hooks
 }
 
 func (r *Runtime) RegisterProject(projectID, root string) {
@@ -102,8 +110,9 @@ func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn prot
 		Reasoning: map[string]any{"effort": "high"},
 		Metadata:  map[string]string{"thread_id": thread.ID, "turn_id": turn.ID},
 	}
-	if r.tools != nil {
-		request.Tools = r.tools.Definitions()
+	registry := r.registryForProject(thread.ProjectID)
+	if registry != nil {
+		request.Tools = registry.Definitions()
 	}
 	for step := 0; step < 8; step++ {
 		calls := make(map[string]*pendingFunctionCall)
@@ -128,7 +137,7 @@ func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn prot
 			r.bus.Publish(events.Event{Topic: "turn.completed", Data: map[string]any{"turn_id": turn.ID}})
 			return
 		}
-		outputs, err := r.executeFunctionCalls(ctx, thread, turn, calls)
+		outputs, err := r.executeFunctionCalls(ctx, thread, turn, calls, registry)
 		if err != nil {
 			r.failTurn(thread.ID, turn.ID, err)
 			return
@@ -174,7 +183,7 @@ func collectFunctionEvent(event ResponseEvent, calls map[string]*pendingFunction
 	}
 }
 
-func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thread, turn protocol.Turn, pending map[string]*pendingFunctionCall) ([]map[string]any, error) {
+func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thread, turn protocol.Turn, pending map[string]*pendingFunctionCall, registry *tools.Registry) ([]map[string]any, error) {
 	ids := make([]string, 0, len(pending))
 	for id := range pending {
 		ids = append(ids, id)
@@ -190,7 +199,10 @@ func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thre
 		if err := json.Unmarshal([]byte(call.Arguments.String()), &arguments); err != nil {
 			return nil, fmt.Errorf("decode arguments for %s: %w", call.Name, err)
 		}
-		tool, ok := r.tools.Get(call.Name)
+		if registry == nil {
+			return nil, errors.New("project has no configured tool registry")
+		}
+		tool, ok := registry.Get(call.Name)
 		if !ok {
 			return nil, fmt.Errorf("tool %s is not registered", call.Name)
 		}
@@ -220,6 +232,7 @@ func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thre
 		}
 		if decision.Decision == approval.DecisionAsk {
 			request := protocol.ApprovalRequest{APIVersion: protocol.APIVersion, ID: uuid.NewString(), ThreadID: thread.ID, TurnID: turn.ID, Tool: call.Name, Reason: decision.Reason, Risk: operation.Risk, Scope: protocol.ApprovalOnce, Resource: operation.Resource, Metadata: map[string]any{"arguments": arguments}, CreatedAt: time.Now().UTC()}
+			r.approvals.Prepare(request.ID)
 			item, _ := r.store.AppendItem(ctx, protocol.Item{ThreadID: thread.ID, TurnID: turn.ID, Type: protocol.ItemApproval, Payload: map[string]any{"request": request}})
 			r.bus.Publish(events.Event{Topic: "approval.requested", Data: item})
 			allowed, err := r.approvals.Wait(ctx, request.ID)
@@ -254,6 +267,15 @@ func (r *Runtime) executeFunctionCalls(ctx context.Context, thread protocol.Thre
 	return outputs, nil
 }
 
+func (r *Runtime) registryForProject(projectID string) *tools.Registry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if registry := r.projectTools[projectID]; registry != nil {
+		return registry
+	}
+	return r.tools
+}
+
 func functionOutput(callID string, output any) map[string]any {
 	payload, _ := json.Marshal(output)
 	return map[string]any{"type": "function_call_output", "call_id": callID, "output": string(payload)}
@@ -271,10 +293,21 @@ type ApprovalBroker struct {
 
 func NewApprovalBroker() *ApprovalBroker { return &ApprovalBroker{pending: make(map[string]chan bool)} }
 
-func (b *ApprovalBroker) Wait(ctx context.Context, id string) (bool, error) {
-	channel := make(chan bool, 1)
+func (b *ApprovalBroker) Prepare(id string) {
 	b.mu.Lock()
-	b.pending[id] = channel
+	defer b.mu.Unlock()
+	if b.pending[id] == nil {
+		b.pending[id] = make(chan bool, 1)
+	}
+}
+
+func (b *ApprovalBroker) Wait(ctx context.Context, id string) (bool, error) {
+	b.mu.Lock()
+	channel := b.pending[id]
+	if channel == nil {
+		channel = make(chan bool, 1)
+		b.pending[id] = channel
+	}
 	b.mu.Unlock()
 	defer func() {
 		b.mu.Lock()

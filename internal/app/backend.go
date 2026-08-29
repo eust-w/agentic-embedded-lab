@@ -10,6 +10,7 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
 	"github.com/eust-w/agentic-embedded-lab/internal/launchagent"
+	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/secret"
 	"github.com/google/uuid"
@@ -93,6 +94,47 @@ func (b *Backend) ResolveApproval(approvalID string, allow bool) (bool, error) {
 	params, _ := json.Marshal(map[string]any{"approval_id": approvalID, "allow": allow})
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "approval.resolve", Params: params}, &result)
 	return result["resolved"], err
+}
+
+func (b *Backend) SpawnAgent(parent protocol.Thread, prompt string, spec protocol.AgentSpec) (multiagent.Handle, error) {
+	var handle multiagent.Handle
+	params, _ := json.Marshal(map[string]any{"parent": parent, "prompt": prompt, "spec": spec})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.spawn", Params: params}, &handle)
+	return handle, err
+}
+
+func (b *Backend) ListAgents() ([]multiagent.Handle, error) {
+	var handles []multiagent.Handle
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.list"}, &handles)
+	return handles, err
+}
+
+func (b *Backend) MessageAgent(id, message string) (protocol.Turn, error) {
+	var turn protocol.Turn
+	params, _ := json.Marshal(map[string]string{"id": id, "message": message})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.message", Params: params}, &turn)
+	return turn, err
+}
+
+func (b *Backend) InterruptAgent(id string) (bool, error) {
+	var result map[string]bool
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.interrupt", Params: params}, &result)
+	return result["interrupted"], err
+}
+
+func (b *Backend) AgentResult(id string) (multiagent.Result, error) {
+	var result multiagent.Result
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.result", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) CloseAgent(id string) (bool, error) {
+	var result map[string]bool
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.close", Params: params}, &result)
+	return result["closed"], err
 }
 
 func (b *Backend) BackgroundServiceStatus() launchagent.Status { return b.service.Status() }

@@ -3,13 +3,21 @@ package multiagent
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
+	"github.com/eust-w/agentic-embedded-lab/internal/approval"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
+	"github.com/eust-w/agentic-embedded-lab/internal/executor"
+	aethergit "github.com/eust-w/agentic-embedded-lab/internal/git"
+	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/store"
+	"github.com/eust-w/agentic-embedded-lab/internal/tools"
 	"github.com/google/uuid"
 )
 
@@ -23,32 +31,41 @@ const (
 )
 
 type Handle struct {
-	ID        string             `json:"id"`
-	ParentID  string             `json:"parent_id"`
-	Thread    protocol.Thread    `json:"thread"`
-	TurnID    string             `json:"turn_id"`
-	Spec      protocol.AgentSpec `json:"spec"`
-	Status    Status             `json:"status"`
-	StartedAt time.Time          `json:"started_at"`
-	UpdatedAt time.Time          `json:"updated_at"`
+	ID        string                `json:"id"`
+	ParentID  string                `json:"parent_id"`
+	Thread    protocol.Thread       `json:"thread"`
+	TurnID    string                `json:"turn_id"`
+	Spec      protocol.AgentSpec    `json:"spec"`
+	Status    Status                `json:"status"`
+	StartedAt time.Time             `json:"started_at"`
+	UpdatedAt time.Time             `json:"updated_at"`
+	Worktree  *protocol.WorktreeRef `json:"worktree,omitempty"`
+}
+
+type Result struct {
+	Handle  Handle          `json:"handle"`
+	Items   []protocol.Item `json:"items"`
+	Summary string          `json:"summary"`
 }
 
 type Manager struct {
-	store      *store.Store
-	runtime    *agent.Runtime
-	bus        *events.Bus
-	mu         sync.RWMutex
-	handles    map[string]*Handle
-	turnAgents map[string]string
-	limit      int
-	cancel     func()
+	store        *store.Store
+	runtime      *agent.Runtime
+	bus          *events.Bus
+	mu           sync.RWMutex
+	handles      map[string]*Handle
+	turnAgents   map[string]string
+	limit        int
+	cancel       func()
+	projectRoots map[string]string
+	worktrees    aethergit.WorktreeManager
 }
 
 func New(state *store.Store, runtime *agent.Runtime, bus *events.Bus, limit int) *Manager {
 	if limit < 1 {
 		limit = 4
 	}
-	manager := &Manager{store: state, runtime: runtime, bus: bus, handles: make(map[string]*Handle), turnAgents: make(map[string]string), limit: limit}
+	manager := &Manager{store: state, runtime: runtime, bus: bus, handles: make(map[string]*Handle), turnAgents: make(map[string]string), projectRoots: make(map[string]string), limit: limit}
 	channel, cancel := bus.Subscribe(128)
 	manager.cancel = cancel
 	go manager.observe(channel)
@@ -56,6 +73,21 @@ func New(state *store.Store, runtime *agent.Runtime, bus *events.Bus, limit int)
 }
 
 func (m *Manager) Close() { m.cancel() }
+
+func (m *Manager) ConfigureProject(projectID, root, worktreeRoot string) error {
+	root, err := filepath.Abs(root)
+	if err != nil || projectID == "" {
+		return errors.New("project id and root are required")
+	}
+	if worktreeRoot == "" {
+		worktreeRoot = filepath.Join(filepath.Dir(root), ".aether-worktrees")
+	}
+	m.mu.Lock()
+	m.projectRoots[projectID] = root
+	m.worktrees = aethergit.WorktreeManager{Root: worktreeRoot}
+	m.mu.Unlock()
+	return nil
+}
 
 func (m *Manager) Spawn(ctx context.Context, parent protocol.Thread, projectID, prompt string, spec protocol.AgentSpec) (Handle, error) {
 	if prompt == "" || spec.Name == "" || spec.Role == "" {
@@ -73,21 +105,58 @@ func (m *Manager) Spawn(ctx context.Context, parent protocol.Thread, projectID, 
 		return Handle{}, errors.New("subagent concurrency limit reached")
 	}
 	m.mu.Unlock()
-	thread, err := m.store.CreateChildThread(ctx, parent.ID, projectID, spec.Name, spec.Model, spec.Permission)
+	childProjectID := projectID
+	var worktree *protocol.WorktreeRef
+	if spec.Permission != protocol.PermissionReadOnly {
+		m.mu.RLock()
+		root := m.projectRoots[projectID]
+		manager := m.worktrees
+		m.mu.RUnlock()
+		if root == "" || manager.Root == "" {
+			return Handle{}, errors.New("write-capable subagents require a configured isolated worktree")
+		}
+		repository, err := aethergit.Discover(ctx, root)
+		if err != nil {
+			return Handle{}, err
+		}
+		reference, err := manager.Create(ctx, repository, "HEAD", true)
+		if err != nil {
+			return Handle{}, err
+		}
+		worktree = &reference
+		childProjectID = projectID + ":subagent:" + reference.ID
+		m.runtime.RegisterProject(childProjectID, reference.Path)
+		registry := tools.NewRegistry()
+		_ = registry.Register(tools.FileTool{Workspace: reference.Path})
+		_ = registry.Register(tools.SearchTool{Workspace: reference.Path, MaxResults: 200})
+		_ = registry.Register(tools.CommandTool{Workspace: reference.Path, Executor: executor.New(), Profile: spec.Permission})
+		m.runtime.ConfigureProjectTools(childProjectID, registry, approval.New(), plugins.NewHookDispatcher())
+	}
+	thread, err := m.store.CreateChildThread(ctx, parent.ID, childProjectID, spec.Name, spec.Model, spec.Permission)
 	if err != nil {
+		if worktree != nil {
+			_ = m.worktrees.Remove(context.Background(), *worktree)
+		}
 		return Handle{}, err
 	}
 	turn, err := m.runtime.RunTurn(ctx, thread, prompt)
 	if err != nil {
+		if worktree != nil {
+			_ = m.worktrees.Remove(context.Background(), *worktree)
+		}
 		return Handle{}, err
 	}
 	now := time.Now().UTC()
-	handle := Handle{ID: uuid.NewString(), ParentID: parent.ID, Thread: thread, TurnID: turn.ID, Spec: spec, Status: StatusActive, StartedAt: now, UpdatedAt: now}
+	handle := Handle{ID: uuid.NewString(), ParentID: parent.ID, Thread: thread, TurnID: turn.ID, Spec: spec, Status: StatusActive, StartedAt: now, UpdatedAt: now, Worktree: worktree}
 	m.mu.Lock()
 	m.handles[handle.ID] = &handle
 	m.turnAgents[turn.ID] = handle.ID
 	m.mu.Unlock()
 	return handle, nil
+}
+
+func (m *Manager) Message(ctx context.Context, id, message string) (protocol.Turn, error) {
+	return m.Steer(ctx, id, message)
 }
 
 func (m *Manager) Steer(ctx context.Context, id, message string) (protocol.Turn, error) {
@@ -128,7 +197,51 @@ func (m *Manager) List() []Handle {
 	for _, handle := range m.handles {
 		result = append(result, *handle)
 	}
+	sort.Slice(result, func(i, j int) bool { return result[i].StartedAt.Before(result[j].StartedAt) })
 	return result
+}
+
+func (m *Manager) Result(ctx context.Context, id string) (Result, error) {
+	m.mu.RLock()
+	handle, ok := m.handles[id]
+	m.mu.RUnlock()
+	if !ok {
+		return Result{}, errors.New("subagent not found")
+	}
+	items, err := m.store.Items(ctx, handle.Thread.ID, 0, 500)
+	if err != nil {
+		return Result{}, err
+	}
+	var parts []string
+	for _, item := range items {
+		if item.Type != protocol.ItemAgentMessage {
+			continue
+		}
+		if delta, ok := item.Payload["delta"].(string); ok && delta != "" {
+			parts = append(parts, delta)
+		}
+	}
+	return Result{Handle: *handle, Items: items, Summary: strings.TrimSpace(strings.Join(parts, ""))}, nil
+}
+
+func (m *Manager) CloseAgent(ctx context.Context, id string) error {
+	m.mu.Lock()
+	handle, ok := m.handles[id]
+	if ok {
+		delete(m.handles, id)
+		delete(m.turnAgents, handle.TurnID)
+	}
+	m.mu.Unlock()
+	if !ok {
+		return errors.New("subagent not found")
+	}
+	if handle.Status == StatusActive {
+		m.runtime.CancelTurn(handle.TurnID)
+	}
+	if handle.Worktree != nil {
+		return m.worktrees.Remove(ctx, *handle.Worktree)
+	}
+	return nil
 }
 
 func (m *Manager) Wait(ctx context.Context, id string) (Handle, error) {

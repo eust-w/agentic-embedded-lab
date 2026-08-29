@@ -15,6 +15,15 @@ func TestMemoryRedactsSecretsAndScopesSearch(t *testing.T) {
 	}
 	defer state.Close()
 	repository := New(state)
+	if enabled, err := repository.Enabled(context.Background(), ScopeProject, "p"); err != nil || enabled {
+		t.Fatalf("memory must be disabled by default: %v %v", enabled, err)
+	}
+	if _, err := repository.Save(context.Background(), Memory{Scope: ScopeProject, ProjectID: "p", Content: "must fail"}); err == nil {
+		t.Fatal("memory saved without explicit opt-in")
+	}
+	if err := repository.SetEnabled(context.Background(), ScopeProject, "p", true); err != nil {
+		t.Fatal(err)
+	}
 	saved, err := repository.Save(context.Background(), Memory{Scope: ScopeProject, ProjectID: "p", Content: "Use api_key=test-secret-value for UART", SourceThreadID: "t"})
 	if err != nil {
 		t.Fatal(err)

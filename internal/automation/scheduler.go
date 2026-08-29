@@ -73,7 +73,42 @@ func (s *Scheduler) RunNow(ctx context.Context, automationID string) (string, er
 	return s.enqueue(ctx, automationID, time.Now().UTC())
 }
 
+func (s *Scheduler) Trigger(ctx context.Context, eventSource string) ([]string, error) {
+	if eventSource == "" {
+		return nil, errors.New("event source is required")
+	}
+	specs, err := s.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var jobs []string
+	for _, spec := range specs {
+		if !spec.Enabled || spec.EventSource != eventSource {
+			continue
+		}
+		jobID, err := s.enqueue(ctx, spec.ID, time.Now().UTC())
+		if err != nil {
+			return jobs, err
+		}
+		jobs = append(jobs, jobID)
+	}
+	return jobs, nil
+}
+
+func (s *Scheduler) Cancel(jobID string) bool {
+	s.mu.Lock()
+	cancel, ok := s.running[jobID]
+	s.mu.Unlock()
+	if ok {
+		cancel()
+	}
+	return ok
+}
+
 func (s *Scheduler) Start(ctx context.Context) error {
+	if err := s.recoverExpired(ctx, time.Now().UTC()); err != nil {
+		return err
+	}
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	for {
@@ -164,17 +199,83 @@ func (s *Scheduler) execute(spec protocol.AutomationSpec, jobID string) {
 		}()
 		now := time.Now().UTC()
 		lease := now.Add(2 * time.Minute)
-		_, _ = s.store.DB().Exec(`UPDATE automation_jobs SET status='running', lease_owner=?,
-			lease_expires_at=?, attempt=attempt+1, updated_at=? WHERE id=?`, s.workerID,
+		result, err := s.store.DB().Exec(`UPDATE automation_jobs SET status='running', lease_owner=?,
+			lease_expires_at=?, attempt=attempt+1, updated_at=? WHERE id=? AND status IN ('queued','recovering')`, s.workerID,
 			formatTime(lease), formatTime(now), jobID)
-		err := s.handler(ctx, spec, jobID)
-		status := "completed"
 		if err != nil {
+			return
+		}
+		claimed, _ := result.RowsAffected()
+		if claimed != 1 {
+			return
+		}
+		heartbeatDone := make(chan struct{})
+		go s.heartbeat(ctx, jobID, heartbeatDone)
+		err = s.handler(ctx, spec, jobID)
+		close(heartbeatDone)
+		status := "completed"
+		if errors.Is(err, context.Canceled) {
+			status = "cancelled"
+		} else if err != nil {
 			status = "failed"
 		}
 		_, _ = s.store.DB().Exec(`UPDATE automation_jobs SET status=?, lease_expires_at=NULL,
 			updated_at=? WHERE id=?`, status, formatTime(time.Now().UTC()), jobID)
 	}()
+}
+
+func (s *Scheduler) heartbeat(ctx context.Context, jobID string, done <-chan struct{}) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-done:
+			return
+		case now := <-ticker.C:
+			_, _ = s.store.DB().Exec(`UPDATE automation_jobs SET lease_expires_at=?, updated_at=?
+				WHERE id=? AND lease_owner=? AND status='running'`, formatTime(now.UTC().Add(2*time.Minute)), formatTime(now.UTC()), jobID, s.workerID)
+		}
+	}
+}
+
+func (s *Scheduler) recoverExpired(ctx context.Context, now time.Time) error {
+	rows, err := s.store.DB().QueryContext(ctx, `SELECT j.id, a.spec_json FROM automation_jobs j
+		JOIN automations a ON a.id=j.automation_id
+		WHERE j.status='running' AND j.lease_expires_at IS NOT NULL AND j.lease_expires_at <= ?`, formatTime(now))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type recovery struct {
+		jobID string
+		spec  protocol.AutomationSpec
+	}
+	var recoveries []recovery
+	for rows.Next() {
+		var item recovery
+		var payload []byte
+		if err := rows.Scan(&item.jobID, &payload); err != nil {
+			return err
+		}
+		if err := json.Unmarshal(payload, &item.spec); err != nil {
+			return err
+		}
+		recoveries = append(recoveries, item)
+	}
+	for _, item := range recoveries {
+		result, err := s.store.DB().ExecContext(ctx, `UPDATE automation_jobs SET status='recovering', lease_owner=NULL,
+			lease_expires_at=NULL, updated_at=? WHERE id=? AND status='running' AND lease_expires_at <= ?`, formatTime(now), item.jobID, formatTime(now))
+		if err != nil {
+			return err
+		}
+		changed, _ := result.RowsAffected()
+		if changed == 1 {
+			s.execute(item.spec, item.jobID)
+		}
+	}
+	return rows.Err()
 }
 
 func (s *Scheduler) cancelAll() {

@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -32,6 +34,43 @@ type Repository struct{ store *store.Store }
 
 func New(state *store.Store) *Repository { return &Repository{store: state} }
 
+func (r *Repository) SetEnabled(ctx context.Context, scope Scope, projectID string, enabled bool) error {
+	key, err := enabledKey(scope, projectID)
+	if err != nil {
+		return err
+	}
+	payload, _ := json.Marshal(enabled)
+	_, err = r.store.DB().ExecContext(ctx, `INSERT INTO settings(key, value_json, updated_at) VALUES(?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at`, key, payload, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func (r *Repository) Enabled(ctx context.Context, scope Scope, projectID string) (bool, error) {
+	key, err := enabledKey(scope, projectID)
+	if err != nil {
+		return false, err
+	}
+	var payload []byte
+	if err := r.store.DB().QueryRowContext(ctx, `SELECT value_json FROM settings WHERE key=?`, key).Scan(&payload); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	var enabled bool
+	return enabled, json.Unmarshal(payload, &enabled)
+}
+
+func enabledKey(scope Scope, projectID string) (string, error) {
+	if scope == ScopeGlobal {
+		return "memory.enabled.global", nil
+	}
+	if scope == ScopeProject && projectID != "" {
+		return "memory.enabled.project." + projectID, nil
+	}
+	return "", errors.New("valid memory scope and project id are required")
+}
+
 var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+`),
 	regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{12,}\b`),
@@ -56,13 +95,20 @@ func (r *Repository) Save(ctx context.Context, memory Memory) (Memory, error) {
 	if memory.Scope == ScopeProject && memory.ProjectID == "" {
 		return Memory{}, errors.New("project memory requires project id")
 	}
+	enabled, err := r.Enabled(ctx, memory.Scope, memory.ProjectID)
+	if err != nil {
+		return Memory{}, err
+	}
+	if !enabled {
+		return Memory{}, errors.New("memory is disabled; explicit opt-in is required")
+	}
 	now := time.Now().UTC()
 	if memory.ID == "" {
 		memory.ID = uuid.NewString()
 		memory.CreatedAt = now
 	}
 	memory.UpdatedAt = now
-	_, err := r.store.DB().ExecContext(ctx, `INSERT INTO memories
+	_, err = r.store.DB().ExecContext(ctx, `INSERT INTO memories
 		(id, scope, project_id, content, source_thread_id, created_at, updated_at)
 		VALUES (?, ?, NULLIF(?, ''), ?, NULLIF(?, ''), ?, ?)
 		ON CONFLICT(id) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at`,

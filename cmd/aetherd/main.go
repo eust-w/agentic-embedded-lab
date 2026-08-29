@@ -16,6 +16,7 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
+	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/secret"
 	"github.com/eust-w/agentic-embedded-lab/internal/store"
 )
@@ -39,8 +40,11 @@ func main() {
 	}
 	defer state.Close()
 	client := agent.NewResponsesClient(agent.KeychainAPIKey{Store: keychain})
-	runtime := agent.NewRuntime(state, client, events.New())
-	server := daemon.Server{SocketPath: *socketPath, Token: token, Runtime: runtime}
+	bus := events.New()
+	runtime := agent.NewRuntime(state, client, bus)
+	agents := multiagent.New(state, runtime, bus, 4)
+	defer agents.Close()
+	server := daemon.Server{SocketPath: *socketPath, Token: token, Runtime: runtime, Agents: agents}
 	if err := server.Listen(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("run daemon: %v", err)
 	}
