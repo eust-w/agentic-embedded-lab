@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/protocol/turn",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "thread_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "input": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "thread_id",
+    "status",
+    "input",
+    "started_at"
+  ]
+}

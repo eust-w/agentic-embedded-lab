@@ -9,6 +9,13 @@
 .ruff_cache/
 .venv/
 __pycache__/
+frontend/node_modules/
+frontend/dist/
+frontend/src/bindings/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/eslint.config.d.ts
 aether/desktop/node_modules/
 aether/desktop/dist/
 aether/desktop/out/

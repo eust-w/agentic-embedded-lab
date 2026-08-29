@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/system",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "components": {
+      "items": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "backend": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "step_us": {
+            "type": "integer"
+          },
+          "rollback": {
+            "type": "boolean"
+          },
+          "event_driven": {
+            "type": "boolean"
+          },
+          "ports": {
+            "items": {
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "direction": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "name",
+                "direction",
+                "type"
+              ]
+            },
+            "type": "array"
+          },
+          "properties": {
+            "type": "object"
+          },
+          "fidelity": {
+            "properties": {
+              "firmware": {
+                "type": "string"
+              },
+              "register": {
+                "type": "string"
+              },
+              "protocol": {
+                "type": "string"
+              },
+              "timing": {
+                "type": "string"
+              },
+              "physical": {
+                "type": "string"
+              },
+              "hardware_validated": {
+                "type": "boolean"
+              },
+              "limitations": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "firmware",
+              "register",
+              "protocol",
+              "timing",
+              "physical",
+              "hardware_validated",
+              "limitations"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "backend",
+          "model",
+          "step_us",
+          "rollback",
+          "event_driven",
+          "ports",
+          "properties",
+          "fidelity"
+        ]
+      },
+      "type": "array"
+    },
+    "connections": {
+      "items": {
+        "properties": {
+          "source_component": {
+            "type": "string"
+          },
+          "source_port": {
+            "type": "string"
+          },
+          "target_component": {
+            "type": "string"
+          },
+          "target_port": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_component",
+          "source_port",
+          "target_component",
+          "target_port"
+        ]
+      },
+      "type": "array"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "components",
+    "connections"
+  ]
+}

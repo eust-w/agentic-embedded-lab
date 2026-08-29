@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/protocol/thread",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "permission": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "parent_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "project_id",
+    "title",
+    "model",
+    "permission",
+    "status",
+    "created_at",
+    "updated_at"
+  ]
+}

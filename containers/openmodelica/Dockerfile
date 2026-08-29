@@ -1,4 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
+FROM golang:1.24-bookworm AS ael-worker
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ael-backend ./cmd/ael-backend
+COPY internal/ael ./internal/ael
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ael-backend ./cmd/ael-backend
+
 FROM ubuntu:24.04
 ARG OPENMODELICA_VERSION=1.27.0
 ARG OMSIMULATOR_VERSION=2.1.3
@@ -17,8 +25,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && omc --version | grep -F "${OPENMODELICA_VERSION}" \
     && OMSimulator --version | grep -F "${OMSIMULATOR_VERSION}"
 WORKDIR /workspace
-COPY pyproject.toml README.md LICENSE /workspace/
-COPY src /workspace/src
-RUN python3 -m pip install --break-system-packages --no-cache-dir .
+COPY --from=ael-worker /out/ael-backend /usr/local/bin/ael-backend
 ENV AEL_OPENMODELICA_BIN=/usr/bin/omc AEL_OMSIMULATOR_BIN=/usr/bin/OMSimulator AEL_WORKSPACE=/workspace
-CMD ["python3", "-m", "ael.backend_workers.modelica"]
+CMD ["/usr/local/bin/ael-backend", "--backend", "openmodelica", "--workspace", "/workspace"]

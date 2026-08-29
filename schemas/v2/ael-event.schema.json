@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/event",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer"
+    },
+    "virtual_time_us": {
+      "type": "integer"
+    },
+    "source": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    },
+    "causal_parents": {
+      "items": {
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "fidelity_ref": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "sequence",
+    "virtual_time_us",
+    "source",
+    "type",
+    "payload",
+    "fidelity_ref"
+  ]
+}

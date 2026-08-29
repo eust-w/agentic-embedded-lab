@@ -1,4 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
+FROM golang:1.24-bookworm AS ael-worker
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ael-backend ./cmd/ael-backend
+COPY internal/ael ./internal/ael
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ael-backend ./cmd/ael-backend
+
 FROM ubuntu:24.04 AS build
 ARG NS3_VERSION=3.47
 ARG AEL_DOWNLOAD_PROXY
@@ -53,11 +61,9 @@ COPY --from=build /opt/ael-bin /opt/ael-bin
 RUN printf '%s\n' "${NS3_VERSION}" > "/opt/ns-${NS3_VERSION}/.ael-version" \
     && ln -s "/opt/ns-${NS3_VERSION}/ns3" /usr/local/bin/ns3
 WORKDIR /workspace
-COPY pyproject.toml README.md LICENSE /workspace/
-COPY src /workspace/src
-RUN python3 -m pip install --break-system-packages --no-cache-dir .
+COPY --from=ael-worker /out/ael-backend /usr/local/bin/ael-backend
 ENV AEL_NS3_BIN=/usr/local/bin/ns3 AEL_WORKSPACE=/workspace \
     AEL_NS3_PRECOMPILED=/opt/ael-bin/ael-network \
     AEL_NS3_MODEL_SHA256=/opt/ael-bin/ael-network.sha256 \
     LD_LIBRARY_PATH=/opt/ns-${NS3_VERSION}/build/lib
-ENTRYPOINT ["python3", "-m", "ael.backend_workers.ns3"]
+ENTRYPOINT ["/usr/local/bin/ael-backend", "--backend", "ns3", "--workspace", "/workspace"]

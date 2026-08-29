@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/experiment",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "system_id": {
+      "type": "string"
+    },
+    "duration_us": {
+      "type": "integer"
+    },
+    "macro_step_us": {
+      "type": "integer"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "timeout": {
+      "type": "integer"
+    },
+    "stimuli": {
+      "items": {
+        "properties": {
+          "at_us": {
+            "type": "integer"
+          },
+          "target": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "at_us",
+          "target",
+          "value"
+        ]
+      },
+      "type": "array"
+    },
+    "faults": {
+      "items": {
+        "properties": {
+          "at_us": {
+            "type": "integer"
+          },
+          "target": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "at_us",
+          "target",
+          "kind",
+          "parameters"
+        ]
+      },
+      "type": "array"
+    },
+    "assertions": {
+      "items": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "operator": {
+            "type": "string"
+          },
+          "expected": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "metric",
+          "operator",
+          "expected"
+        ]
+      },
+      "type": "array"
+    },
+    "required_fidelity": {
+      "properties": {
+        "firmware": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "timing": {
+          "type": "string"
+        },
+        "physical": {
+          "type": "string"
+        },
+        "hardware_validated": {
+          "type": "boolean"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "firmware",
+        "register",
+        "protocol",
+        "timing",
+        "physical",
+        "hardware_validated",
+        "limitations"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "system_id",
+    "duration_us",
+    "macro_step_us",
+    "seed",
+    "timeout",
+    "stimuli",
+    "faults",
+    "assertions",
+    "required_fidelity"
+  ]
+}

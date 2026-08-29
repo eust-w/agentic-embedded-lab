@@ -1,4 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
+FROM golang:1.24-bookworm AS ael-worker
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ael-backend ./cmd/ael-backend
+COPY internal/ael ./internal/ael
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ael-backend ./cmd/ael-backend
+
 FROM ubuntu:24.04
 
 ARG ZEPHYR_VERSION=4.4.2
@@ -51,10 +59,8 @@ RUN case "${TARGETARCH}" in \
     && rm "/tmp/${SDK_ARCHIVE}"
 
 WORKDIR /workspace
-COPY pyproject.toml README.md LICENSE /workspace/
-COPY src /workspace/src
-RUN python3 -m pip install --break-system-packages --no-cache-dir . \
-    && grep -F 'VERSION_MAJOR = 4' /opt/zephyrproject/zephyr/VERSION \
+COPY --from=ael-worker /out/ael-backend /usr/local/bin/ael-backend
+RUN grep -F 'VERSION_MAJOR = 4' /opt/zephyrproject/zephyr/VERSION \
     && grep -F 'VERSION_MINOR = 4' /opt/zephyrproject/zephyr/VERSION \
     && grep -F 'PATCHLEVEL = 2' /opt/zephyrproject/zephyr/VERSION
 
@@ -64,4 +70,4 @@ ENV AEL_WORKSPACE=/workspace \
     ZEPHYR_TOOLCHAIN_VARIANT=zephyr \
     ZEPHYR_TOOLCHAIN_CAPABILITY_CACHE_DIR=/tmp/zephyr-toolchain-cache
 
-ENTRYPOINT ["python3", "-m", "ael.backend_workers.zephyr_build"]
+ENTRYPOINT ["/usr/local/bin/ael-backend", "--backend", "zephyr_build", "--workspace", "/workspace"]

@@ -6,17 +6,22 @@ All notable changes to Agentic Embedded Lab are documented here.
 
 ### Added
 
-- Added the experimental Aether Native desktop/server companion, plugin registry,
-  working memory, streamed agent events, diff review, and development harness.
-- Generalized Zephyr, ngspice, Modelica, FMI workspace, backend process, provider,
-  and server-storage behavior with regression coverage.
+- Replaced the active Python/Electron implementation with a Wails v2,
+  React/TypeScript and Go desktop/daemon foundation.
+- Added versioned thread events, SQLite/CAS, OpenAI Responses streaming,
+  Keychain, approvals, Git/worktrees, AGENTS discovery and typed execution.
+- Added signed plugins, Skills, Hooks, MCP, redacted Memory, multi-agent threads,
+  RRULE automation, controlled Chromium and macOS Computer Use permissions.
+- Added AEL v2 Go contracts, deterministic scheduling, evidence hashing and the
+  Go backend JSONL worker runtime.
 
 ### Security
 
-- Removed embedded provider credentials and made all model keys environment-only.
-- Restricted Aether to loopback by default, validated path identifiers, replaced
-  arbitrary shell execution with fixed diagnostics, and disabled in-process
-  evolution by default.
+- OpenAI keys and daemon capability tokens are Keychain-only.
+- Model output can use only typed tools; commands are argument vectors evaluated
+  by the approval and Seatbelt policy layers.
+- Browser sites, macOS applications and external effects require separately
+  persisted permissions.
 
 ### Documentation
 

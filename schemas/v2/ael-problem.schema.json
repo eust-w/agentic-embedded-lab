@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/problem",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "phenomenon": {
+      "type": "string"
+    },
+    "goal": {
+      "type": "string"
+    },
+    "constraints": {
+      "type": "object"
+    },
+    "expected_claim": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "category",
+    "phenomenon",
+    "goal",
+    "constraints",
+    "expected_claim"
+  ]
+}

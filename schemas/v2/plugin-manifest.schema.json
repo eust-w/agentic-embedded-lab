@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/plugins/manifest",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "permissions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "skills": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "hooks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "mcp": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "wasm": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "process": {
+      "properties": {
+        "executable": {
+          "type": "string"
+        },
+        "arguments": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "protocol": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "executable",
+        "protocol"
+      ]
+    },
+    "key_id": {
+      "type": "string"
+    },
+    "signature": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "name",
+    "version",
+    "description",
+    "permissions"
+  ]
+}

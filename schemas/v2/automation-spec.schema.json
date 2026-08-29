@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/protocol/automation-spec",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "rrule": {
+      "type": "string"
+    },
+    "event_source": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "use_worktree": {
+      "type": "boolean"
+    },
+    "permission": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "stop_policy": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "name",
+    "prompt",
+    "project_id",
+    "use_worktree",
+    "permission",
+    "enabled"
+  ]
+}

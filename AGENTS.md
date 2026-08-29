@@ -1,54 +1,48 @@
 # Agent instructions
 
-## Project boundary
+## Product boundary
 
-AEL is a general embedded-systems lab. Do not introduce robotics-specific
-concepts into core contracts. Robotics belongs in optional adapters or examples.
+Aether Desktop is a macOS-only local engineering agent. AEL Engine is a general
+embedded-systems laboratory. Keep robotics-specific concepts in optional
+adapters or examples, never in core contracts.
 
 ## Required checks
 
-Before reporting a change as complete, run:
+Before reporting a Go or desktop change as complete, run:
 
 ```bash
-.venv/bin/ruff check .
-.venv/bin/pytest
-.venv/bin/ael doctor
+go fmt ./...
+go vet ./...
+go test ./...
+npm --prefix frontend run lint
+npm --prefix frontend run test
+npm --prefix frontend run build
 ```
 
-For contract changes also regenerate and diff JSON schemas:
+For contract changes also regenerate and diff schemas:
 
 ```bash
-.venv/bin/ael schema export schemas/v1
-```
-
-For the local software topology, use the scoped acceptance script. It creates
-ephemeral development certificates, tears down project containers/volumes, and
-does not produce hardware evidence:
-
-```bash
-scripts/run-compose-acceptance.sh
+go run ./cmd/schema-export --output schemas/v2
 ```
 
 ## Evidence language
 
-- A passing unit test proves code behavior only.
-- A synthetic backend run does not prove a simulator or physical system.
-- A simulator pass does not prove hardware behavior.
-- A mechanism benchmark proves only the named tool-executed mechanism and its
-  declared oracle; it does not prove peripheral, timing, electrical or physical
-  equivalence beyond the recorded fidelity boundary.
-- Hardware equivalence is claim-scoped and valid only inside its signed
-  Validation Envelope.
-- Never silently replace a missing backend or model with a stub.
-- An agent may promote generated models only through `conformance_validated`.
-  Hardware and production states require hardware evidence and a human actor.
+- Passing unit tests prove only the tested software behavior.
+- Browser automation does not prove behavior on every website or browser build.
+- Simulator success does not prove hardware behavior.
+- Hardware equivalence is claim-scoped and valid only in a signed Validation
+  Envelope.
+- Missing tools, models, permissions, or hardware must block explicitly; never
+  replace them silently with a mock.
 
 ## Safety
 
-- Resolve all user paths against the workspace root and reject escapes.
-- Do not expose arbitrary shell, simulator monitor, SCPI, or host-device access
-  through MCP or HTTP.
-- Generated code runs only through the sandbox abstraction with networking off.
-- Provider keys come only from environment/Secret injection and must never be
-  written to receipts, evidence, fixtures, prompts, logs, or the Registry.
-- Preserve unrelated user changes and never reset the worktree.
+- Resolve paths against an explicit workspace root and reject escapes and
+  symlink traversal.
+- Model output may invoke only typed tools. Never expose arbitrary shell,
+  simulator monitor, SCPI, database, or host-device access through MCP or UI.
+- Commands run through the executor and permission engine with the narrowest
+  possible profile.
+- OpenAI credentials live only in macOS Keychain and never in config, logs,
+  prompts, evidence, fixtures, or plugin manifests.
+- Preserve unrelated user changes and never reset or discard a dirty worktree.

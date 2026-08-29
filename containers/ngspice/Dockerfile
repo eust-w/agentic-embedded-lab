@@ -1,4 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
+FROM golang:1.24-bookworm AS ael-worker
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ael-backend ./cmd/ael-backend
+COPY internal/ael ./internal/ael
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ael-backend ./cmd/ael-backend
+
 FROM ubuntu:24.04 AS build
 ARG NGSPICE_VERSION=46
 ARG AEL_DOWNLOAD_PROXY
@@ -30,9 +38,7 @@ COPY --from=build /opt/ngspice /opt/ngspice
 RUN ln -s /opt/ngspice/bin/ngspice /usr/local/bin/ngspice \
     && ngspice --version | grep -F "ngspice-${NGSPICE_VERSION}"
 WORKDIR /workspace
-COPY pyproject.toml README.md LICENSE /workspace/
-COPY src /workspace/src
-RUN python3 -m pip install --break-system-packages --no-cache-dir .
+COPY --from=ael-worker /out/ael-backend /usr/local/bin/ael-backend
 ENV AEL_NGSPICE_BIN=/usr/local/bin/ngspice AEL_WORKSPACE=/workspace \
     LD_LIBRARY_PATH=/opt/ngspice/lib
-ENTRYPOINT ["python3", "-m", "ael.backend_workers.ngspice"]
+ENTRYPOINT ["/usr/local/bin/ael-backend", "--backend", "ngspice", "--workspace", "/workspace"]

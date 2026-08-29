@@ -1,4 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
+FROM golang:1.24-bookworm AS ael-worker
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ael-backend ./cmd/ael-backend
+COPY internal/ael ./internal/ael
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ael-backend ./cmd/ael-backend
+
 FROM ubuntu:24.04 AS build
 ARG OPENEMS_VERSION=0.0.36
 ARG AEL_DOWNLOAD_PROXY
@@ -54,8 +62,6 @@ RUN octave-cli --no-gui --quiet --eval \
        assert(isempty(strfind(out,'error while loading shared libraries'))); \
        assert(!isempty(strfind(out,'version v${OPENEMS_VERSION}')));"
 WORKDIR /workspace
-COPY pyproject.toml README.md LICENSE /workspace/
-COPY src /workspace/src
-RUN python3 -m pip install --break-system-packages --no-cache-dir .
+COPY --from=ael-worker /out/ael-backend /usr/local/bin/ael-backend
 ENV AEL_OPENEMS_BIN=/opt/openems/bin/openEMS AEL_WORKSPACE=/workspace
-ENTRYPOINT ["python3", "-m", "ael.backend_workers.openems"]
+ENTRYPOINT ["/usr/local/bin/ael-backend", "--backend", "openems", "--workspace", "/workspace"]

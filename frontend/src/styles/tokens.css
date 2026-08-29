@@ -1,0 +1,36 @@
+:root {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  color: #dce4ed;
+  background: #090d12;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  --bg: #090d12;
+  --surface: #0d131a;
+  --surface-2: #111923;
+  --surface-3: #151f2a;
+  --border: #263240;
+  --border-strong: #364657;
+  --text: #dce4ed;
+  --muted: #8290a1;
+  --faint: #596777;
+  --blue: #2f8cff;
+  --blue-soft: rgba(47, 140, 255, .14);
+  --cyan: #37c7dc;
+  --green: #3ccf7c;
+  --orange: #f6a623;
+  --red: #ef5b5b;
+  --violet: #9c68ff;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --toolbar-height: 50px;
+  --sidebar-width: 300px;
+  --inspector-width: 334px;
+  --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button, input { font: inherit; }
+button { color: inherit; }
+code, pre, kbd { font-family: var(--mono); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }

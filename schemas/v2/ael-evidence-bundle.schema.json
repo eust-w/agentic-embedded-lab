@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/evidence-bundle",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "experiment": {
+      "properties": {
+        "api_version": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "system_id": {
+          "type": "string"
+        },
+        "duration_us": {
+          "type": "integer"
+        },
+        "macro_step_us": {
+          "type": "integer"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "timeout": {
+          "type": "integer"
+        },
+        "stimuli": {
+          "items": {
+            "properties": {
+              "at_us": {
+                "type": "integer"
+              },
+              "target": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "at_us",
+              "target",
+              "value"
+            ]
+          },
+          "type": "array"
+        },
+        "faults": {
+          "items": {
+            "properties": {
+              "at_us": {
+                "type": "integer"
+              },
+              "target": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "parameters": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "at_us",
+              "target",
+              "kind",
+              "parameters"
+            ]
+          },
+          "type": "array"
+        },
+        "assertions": {
+          "items": {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "metric": {
+                "type": "string"
+              },
+              "operator": {
+                "type": "string"
+              },
+              "expected": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "metric",
+              "operator",
+              "expected"
+            ]
+          },
+          "type": "array"
+        },
+        "required_fidelity": {
+          "properties": {
+            "firmware": {
+              "type": "string"
+            },
+            "register": {
+              "type": "string"
+            },
+            "protocol": {
+              "type": "string"
+            },
+            "timing": {
+              "type": "string"
+            },
+            "physical": {
+              "type": "string"
+            },
+            "hardware_validated": {
+              "type": "boolean"
+            },
+            "limitations": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "firmware",
+            "register",
+            "protocol",
+            "timing",
+            "physical",
+            "hardware_validated",
+            "limitations"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "api_version",
+        "id",
+        "system_id",
+        "duration_us",
+        "macro_step_us",
+        "seed",
+        "timeout",
+        "stimuli",
+        "faults",
+        "assertions",
+        "required_fidelity"
+      ]
+    },
+    "system": {
+      "properties": {
+        "api_version": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "components": {
+          "items": {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "backend": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "step_us": {
+                "type": "integer"
+              },
+              "rollback": {
+                "type": "boolean"
+              },
+              "event_driven": {
+                "type": "boolean"
+              },
+              "ports": {
+                "items": {
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "direction",
+                    "type"
+                  ]
+                },
+                "type": "array"
+              },
+              "properties": {
+                "type": "object"
+              },
+              "fidelity": {
+                "properties": {
+                  "firmware": {
+                    "type": "string"
+                  },
+                  "register": {
+                    "type": "string"
+                  },
+                  "protocol": {
+                    "type": "string"
+                  },
+                  "timing": {
+                    "type": "string"
+                  },
+                  "physical": {
+                    "type": "string"
+                  },
+                  "hardware_validated": {
+                    "type": "boolean"
+                  },
+                  "limitations": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "firmware",
+                  "register",
+                  "protocol",
+                  "timing",
+                  "physical",
+                  "hardware_validated",
+                  "limitations"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "backend",
+              "model",
+              "step_us",
+              "rollback",
+              "event_driven",
+              "ports",
+              "properties",
+              "fidelity"
+            ]
+          },
+          "type": "array"
+        },
+        "connections": {
+          "items": {
+            "properties": {
+              "source_component": {
+                "type": "string"
+              },
+              "source_port": {
+                "type": "string"
+              },
+              "target_component": {
+                "type": "string"
+              },
+              "target_port": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "source_component",
+              "source_port",
+              "target_component",
+              "target_port"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "api_version",
+        "id",
+        "components",
+        "connections"
+      ]
+    },
+    "events": {
+      "items": {
+        "properties": {
+          "api_version": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer"
+          },
+          "virtual_time_us": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "causal_parents": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "payload": {
+            "type": "object"
+          },
+          "fidelity_ref": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "api_version",
+          "sequence",
+          "virtual_time_us",
+          "source",
+          "type",
+          "payload",
+          "fidelity_ref"
+        ]
+      },
+      "type": "array"
+    },
+    "assertions": {
+      "items": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "observed": {
+            "type": "number"
+          },
+          "expected": {
+            "type": "number"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "passed",
+          "observed",
+          "expected",
+          "message"
+        ]
+      },
+      "type": "array"
+    },
+    "artifacts": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "source_revision": {
+      "type": "string"
+    },
+    "trace_sha256": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fidelity": {
+      "properties": {
+        "firmware": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "timing": {
+          "type": "string"
+        },
+        "physical": {
+          "type": "string"
+        },
+        "hardware_validated": {
+          "type": "boolean"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "firmware",
+        "register",
+        "protocol",
+        "timing",
+        "physical",
+        "hardware_validated",
+        "limitations"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "run_id",
+    "experiment",
+    "system",
+    "events",
+    "assertions",
+    "artifacts",
+    "source_revision",
+    "trace_sha256",
+    "started_at",
+    "finished_at",
+    "fidelity"
+  ]
+}

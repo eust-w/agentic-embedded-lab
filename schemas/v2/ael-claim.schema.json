@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/claim",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "statement": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "evidence_run_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "envelope": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "hardware_revision": {
+          "type": "string"
+        },
+        "conditions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "tolerances": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        "evidence_run_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "signed_by": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "id",
+        "model_id",
+        "hardware_revision",
+        "conditions",
+        "tolerances",
+        "evidence_run_ids",
+        "signed_by",
+        "signature"
+      ]
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "hardware_validated": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "id",
+    "statement",
+    "status",
+    "evidence_run_ids",
+    "limitations",
+    "hardware_validated"
+  ]
+}
