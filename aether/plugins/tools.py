@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import subprocess
 import sys
 import time
@@ -396,5 +397,113 @@ class EvolvePluginToolPlugin:
                 "test_results": res.test_results,
             },
             error=None if res.success else res.message,
+            execution_time_ms=(time.monotonic() - start) * 1000,
+        )
+
+
+class AskQuestionToolPlugin:
+    """Interactive decision & clarification tool that presents structured choices to the user."""
+
+    def __init__(self) -> None:
+        self.metadata = PluginMetadata(
+            id="ask_question",
+            name="Interactive User Question & Decision Tool",
+            version="1.0.0",
+            type=PluginType.TOOL,
+            description=(
+                "Prompt the user with structured choices, selection, and custom feedback cards."
+            ),
+            author=PluginAuthor.SYSTEM,
+            tags=["core", "interactive", "human-in-the-loop", "decision"],
+        )
+        self.context: PluginContext | None = None
+
+    def on_load(self, context: PluginContext) -> None:
+        self.context = context
+
+    def on_unload(self) -> None:
+        self.context = None
+
+    def get_schema(self) -> dict[str, Any]:
+        return {
+            "name": "ask_question",
+            "description": (
+                "Render an interactive decision/question card to ask the user for clarification, "
+                "option selection, or design approval."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The question or decision prompt to ask the user.",
+                    },
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of selectable options for the user.",
+                    },
+                    "is_multi_select": {
+                        "type": "boolean",
+                        "description": "Whether multiple options can be chosen (default False).",
+                    },
+                    "allow_custom": {
+                        "type": "boolean",
+                        "description": "Whether to allow write-in custom text (default True).",
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": "Optional background or explanation context.",
+                    },
+                },
+                "required": ["question", "options"],
+            },
+        }
+
+    def self_test(self) -> dict[str, Any]:
+        return {"passed": True}
+
+    def execute(
+        self,
+        question: str,
+        options: list[str] | None = None,
+        is_multi_select: bool = False,
+        allow_custom: bool = True,
+        context: str = "",
+        **kwargs: Any,
+    ) -> ToolResult:
+        start = time.monotonic()
+        if not question:
+            return ToolResult(
+                call_id="call_ask",
+                tool_name="ask_question",
+                success=False,
+                output=None,
+                error="Question cannot be empty.",
+                execution_time_ms=(time.monotonic() - start) * 1000,
+            )
+
+        final_options = options if options else ["确认继续", "取消操作"]
+
+        payload = {
+            "question": question,
+            "options": final_options,
+            "is_multi_select": is_multi_select,
+            "allow_custom": allow_custom,
+            "context": context,
+        }
+
+        return ToolResult(
+            call_id="call_ask",
+            tool_name="ask_question",
+            success=True,
+            output={
+                "status": "awaiting_user_input",
+                **payload,
+            },
+            artifacts={
+                "ask_card": json.dumps(payload, ensure_ascii=False),
+            },
+            error=None,
             execution_time_ms=(time.monotonic() - start) * 1000,
         )

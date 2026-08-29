@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
 
-from aether.core.agent import AetherAgent
+from aether.core.agent import AetherAgent, SubagentReviewer, TaskQueueManager
 from aether.core.contracts import (
+    DiffChunk,
     EvolutionRequest,
     PluginAuthor,
     PluginType,
@@ -23,6 +25,7 @@ from aether.plugins.models import (
     OpenAIModelPlugin,
 )
 from aether.plugins.tools import (
+    AskQuestionToolPlugin,
     AstAnalyzerToolPlugin,
     BashToolPlugin,
     EvolvePluginToolPlugin,
@@ -315,3 +318,160 @@ def test_provider_plugins_require_explicit_credentials(monkeypatch: Any) -> None
     assert DeepSeekModelPlugin().self_test()["passed"] is False
     assert OpenAIModelPlugin().self_test()["passed"] is False
     assert AnthropicModelPlugin().self_test()["passed"] is False
+
+
+def test_ask_question_tool_plugin() -> None:
+    tool = AskQuestionToolPlugin()
+    assert tool.self_test()["passed"] is True
+    schema = tool.get_schema()
+    assert schema["name"] == "ask_question"
+    assert "question" in schema["parameters"]["required"]
+
+    # Test execution with valid choices
+    res = tool.execute(
+        question="请选择底层内核架构：",
+        options=["方案 A: 微内核", "方案 B: 单体内核"],
+        is_multi_select=False,
+        allow_custom=True,
+        context="影响编译与仿真管线",
+    )
+    assert res.success is True
+    assert res.output["question"] == "请选择底层内核架构："
+    assert len(res.output["options"]) == 2
+    parsed_card = json.loads(res.artifacts["ask_card"])
+    assert parsed_card["options"] == ["方案 A: 微内核", "方案 B: 单体内核"]
+
+    # Test execution with empty question
+    res_err = tool.execute(question="")
+    assert res_err.success is False
+    assert "cannot be empty" in str(res_err.error)
+
+
+def test_agent_runs_ask_question_interactive_turn(tmp_path: Path) -> None:
+    agent = AetherAgent(workspace=str(tmp_path))
+    assert agent.registry.get("ask_question") is not None
+
+    async def _run() -> list[Any]:
+        events = []
+        async for ev in agent.run_turn("请针对当前内核方案发起提问和选择卡片"):
+            events.append(ev)
+        return events
+
+    events = asyncio.run(_run())
+    event_types = [ev.event_type for ev in events]
+    assert "turn_start" in event_types
+    assert "ask_question" in event_types
+    assert "turn_complete" in event_types
+
+    ask_ev = next(ev for ev in events if ev.event_type == "ask_question")
+    assert "方案" in ask_ev.data["question"]
+    assert len(ask_ev.data["options"]) >= 2
+
+
+def test_agent_resolves_at_file_mentions(tmp_path: Path) -> None:
+    test_file = tmp_path / "hello.py"
+    test_file.write_text("print('Aether Native')", encoding="utf-8")
+
+    agent = AetherAgent(workspace=str(tmp_path))
+    resolved = agent._resolve_at_mentions("请阅读 @hello.py 并优化")
+    assert "print('Aether Native')" in resolved
+    assert "[Attached File Context from @hello.py]" in resolved
+
+    # Non-existent mention is safely skipped
+    resolved_none = agent._resolve_at_mentions("请阅读 @non_existent.py")
+    assert resolved_none == "请阅读 @non_existent.py"
+
+
+def test_task_queue_manager_lifecycle() -> None:
+    queue = TaskQueueManager()
+    assert queue.size() == 0
+
+    async def _test() -> None:
+        t1 = await queue.push("任务 1: 编写单元测试", priority=0)
+        t2 = await queue.push("任务 2: 紧急修复 Bug", priority=10)
+        assert queue.size() == 2
+
+        # Priority 10 should come first
+        peeked = await queue.peek()
+        assert peeked is not None
+        assert peeked.task_id == t2.task_id
+
+        # Pop should pop t2
+        popped = await queue.pop()
+        assert popped is not None
+        assert popped.task_id == t2.task_id
+        assert queue.size() == 1
+
+        # Remove t1
+        removed = await queue.remove(t1.task_id)
+        assert removed is True
+        assert queue.size() == 0
+
+        # Push and clear
+        await queue.push("任务 3")
+        await queue.push("任务 4")
+        cleared = await queue.clear()
+        assert cleared == 2
+        assert queue.size() == 0
+
+    asyncio.run(_test())
+
+
+def test_subagent_reviewer_pipeline() -> None:
+    sandbox = PluginSandbox()
+    reviewer = SubagentReviewer(sandbox)
+
+    # Clean diff
+    clean_diff = DiffChunk(
+        chunk_id="chunk-1",
+        file_path="aether/core/agent.py",
+        old_start=1,
+        old_lines=5,
+        new_start=1,
+        new_lines=5,
+        diff_text="+ def calculate(a, b):\n+     return a + b\n",
+    )
+    rep_clean = reviewer.review_diff(clean_diff)
+    assert rep_clean.score == 100
+    assert rep_clean.status == "completed"
+    assert any("安全检查" in f for f in rep_clean.findings)
+
+    # Dangerous diff with eval
+    risky_diff = DiffChunk(
+        chunk_id="chunk-2",
+        file_path="aether/risky.py",
+        old_start=1,
+        old_lines=5,
+        new_start=1,
+        new_lines=5,
+        diff_text="+ res = eval('1+1')\n",
+    )
+    rep_risky = reviewer.review_diff(risky_diff)
+    assert rep_risky.score < 100
+    assert any("eval" in f.lower() for f in rep_risky.findings)
+
+
+def test_queue_and_subagent_api_endpoints() -> None:
+    client = TestClient(app)
+
+    # 1. Push queue
+    res_push = client.post("/api/queue/push", json={"prompt": "API 排队测试任务", "priority": 5})
+    assert res_push.status_code == 200
+    task_id = res_push.json()["task"]["task_id"]
+
+    # 2. List queue
+    res_list = client.get("/api/queue")
+    assert res_list.status_code == 200
+    tasks = res_list.json()
+    assert any(t["task_id"] == task_id for t in tasks)
+
+    # 3. Pop queue
+    res_pop = client.post("/api/queue/pop")
+    assert res_pop.status_code == 200
+    assert res_pop.json()["task"]["task_id"] == task_id
+
+    # 4. Clear queue
+    client.post("/api/queue/push", json={"prompt": "待清空任务"})
+    res_clear = client.post("/api/queue/clear")
+    assert res_clear.status_code == 200
+    assert res_clear.json()["status"] == "success"

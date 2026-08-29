@@ -137,3 +137,32 @@ class EvolutionResult(StrictModel):
     test_results: dict[str, Any] = Field(default_factory=dict)
     snapshot_id: str | None = None
     evolved_plugin_metadata: PluginMetadata | None = None
+
+
+class QueueTaskItem(StrictModel):
+    task_id: str
+    prompt: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    status: str = "queued"  # queued, running, completed, cancelled
+    priority: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlanStepItem(StrictModel):
+    step_id: str
+    title: str
+    description: str = ""
+    status: str = "pending"  # pending, running, completed, failed, skipped
+    tool_name: str | None = None
+    result_summary: str | None = None
+
+
+class SubagentReport(StrictModel):
+    subagent_id: str
+    role: str  # "reviewer", "security_auditor", "tester"
+    status: str = "completed"  # running, completed, error
+    score: int = 100
+    findings: list[str] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
+    diff_id: str | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))

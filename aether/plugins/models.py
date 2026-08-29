@@ -443,6 +443,38 @@ class MockCognitiveModelPlugin:
             )
             return
 
+        ask_keywords = [
+            "ask", "提问", "方案", "决策", "选择", "选哪个", "卡片", "decision", "clarify"
+        ]
+        if any(w in prompt_lower for w in ask_keywords):
+            yield ModelResponseChunk(
+                thought="1. Analyzing user query: architecture decision detected.\n"
+            )
+            yield ModelResponseChunk(
+                thought="2. Formulating structured decision options for interactive card...\n"
+            )
+            yield ModelResponseChunk(
+                thought="3. Invoking `ask_question` tool card to present selectable paths.\n",
+                tool_calls=[
+                    ToolCall(
+                        call_id="call_" + os.urandom(4).hex(),
+                        tool_name="ask_question",
+                        arguments={
+                            "question": "检测到多个微内核扩展与固件仿真适配方案，请选择底层架构：",
+                            "options": [
+                                "方案 A: Microkernel 微内核插件化架构（低耦合、支持热重载）",
+                                "方案 B: Monolithic 单体嵌入式架构（极致精简、零运行时开销）",
+                                "方案 C: Hybrid 混合架构（核心常驻微内核 + 动态沙箱协同）",
+                            ],
+                            "is_multi_select": False,
+                            "allow_custom": True,
+                            "context": "选定的底层架构将直接决定代码脚手架生成策略与仿真验证门禁。",
+                        },
+                    )
+                ],
+            )
+            return
+
         yield ModelResponseChunk(
             thought=(
                 "Analyzing user query in multi-plugin reasoning loop...\n"

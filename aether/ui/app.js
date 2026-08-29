@@ -84,7 +84,20 @@ class AetherDesktopEngine {
     this.currentModelIdx = 0;
     this.currentEffort = "极高";
 
+    // Terminal Multi-Tab: per-tab output buffers
+    this.terminalBuffers = {
+      'main': '> Aether Sandbox Terminal Ready.\n$ ',
+      'build': '> Build Log Terminal Ready.\n$ ',
+    };
+    this.activeTerminalTab = 'main';
+
     this.initDOMElements();
+
+    // Load saved theme
+    const savedTheme = localStorage.getItem('aether_theme') || 'dark';
+    document.body.dataset.theme = savedTheme;
+    if (this.settingsThemeSelect) this.settingsThemeSelect.value = savedTheme;
+
     this.initResizableDividers();
     this.bindEvents();
     this.startGoalTimer();
@@ -92,11 +105,14 @@ class AetherDesktopEngine {
     this.loadWorkspaceTree();
     this.refreshPlugins();
     this.refreshDiffs();
+    this.refreshQueue();
+    this.loadSessionHistory();
   }
 
   initDOMElements() {
     this.chatThreadContainer = document.getElementById('chat-thread-container');
     this.composerMainInput = document.getElementById('composer-main-input');
+    this.dropZoneOverlay = document.getElementById('drop-zone-overlay');
     this.btnSendOrStop = document.getElementById('btn-send-or-stop');
     this.sendIconSvg = document.querySelector('.send-icon-svg');
     this.stopIconSquare = document.querySelector('.stop-icon-square');
@@ -105,6 +121,8 @@ class AetherDesktopEngine {
     this.btnNewTask = document.getElementById('btn-new-task');
     this.btnAddProject = document.getElementById('btn-add-project');
     this.sidebarProjectTree = document.getElementById('sidebar-project-tree');
+    this.sessionHistoryList = document.getElementById('session-history-list');
+    this.sessionCountBadge = document.getElementById('session-count-badge');
 
     // Top Navigation & Menus
     this.btnNavBack = document.getElementById('btn-nav-back');
@@ -132,6 +150,14 @@ class AetherDesktopEngine {
     this.btnToggleSplitView = document.getElementById('btn-toggle-split-view');
     this.btnToggleDiffPanel = document.getElementById('btn-toggle-diff-panel');
     this.btnTogglePluginMesh = document.getElementById('btn-toggle-plugin-mesh');
+    this.btnBrowseMarketplace = document.getElementById('btn-browse-marketplace');
+    this.btnConnectMcp = document.getElementById('btn-connect-mcp');
+    this.marketplacePanel = document.getElementById('marketplace-panel');
+    this.marketplaceList = document.getElementById('marketplace-list');
+    this.mcpServersList = document.getElementById('mcp-servers-list');
+    this.mcpServerName = document.getElementById('mcp-server-name');
+    this.mcpServerCmd = document.getElementById('mcp-server-cmd');
+    this.btnMcpConnect = document.getElementById('btn-mcp-connect');
     this.btnToggleTerminalPane = document.getElementById('btn-toggle-terminal-pane');
     this.btnToggleOutline = document.getElementById('btn-toggle-outline');
     this.btnCloseCanvas = document.getElementById('btn-close-canvas');
@@ -158,6 +184,9 @@ class AetherDesktopEngine {
     this.btnComposerActions = document.getElementById('btn-composer-actions');
     this.composerActionsMenu = document.getElementById('composer-actions-menu');
     this.slashAutocompleteMenu = document.getElementById('slash-autocomplete-menu');
+    this.atAutocompleteMenu = document.getElementById('at-autocomplete-menu');
+    this.atMenuItemsContainer = document.getElementById('at-menu-items-container');
+    this.cachedWorkspaceFiles = [];
 
     this.btnAttachContext = document.getElementById('btn-attach-context');
     this.contextAttachMenu = document.getElementById('context-attach-menu');
@@ -180,6 +209,35 @@ class AetherDesktopEngine {
     this.btnExecutePlan = document.getElementById('btn-execute-plan');
     this.btnDismissPlan = document.getElementById('btn-dismiss-plan');
 
+    // Queue Drawer & Controls
+    this.queueDrawer = document.getElementById('aether-queue-drawer');
+    this.queueCountBadge = document.getElementById('queue-count-badge');
+    this.queueTasksList = document.getElementById('queue-tasks-list');
+    this.btnClearQueue = document.getElementById('btn-clear-queue');
+    this.btnToggleQueue = document.getElementById('btn-toggle-queue');
+    this.btnQueueTask = document.getElementById('btn-queue-task');
+
+    // Subagent Review Elements
+    this.subagentReviewCard = document.getElementById('subagent-review-card');
+    this.subagentScoreBadge = document.getElementById('subagent-score-badge');
+    this.subagentFindingsList = document.getElementById('subagent-findings-list');
+
+    this.terminalTabsNav = document.getElementById('terminal-tabs-nav');
+
+    // Git Panel Elements
+    this.gitBranchLabel = document.getElementById('git-branch-label');
+    this.gitStatusList = document.getElementById('git-status-list');
+    this.gitLogList = document.getElementById('git-log-list');
+    this.gitCommitMsg = document.getElementById('git-commit-msg');
+    this.btnGitCommit = document.getElementById('btn-git-commit');
+    this.btnGitRefresh = document.getElementById('btn-git-refresh');
+
+    // Code Editor Elements
+    this.editorTextarea = document.getElementById('editor-textarea');
+    this.editorFileTitle = document.getElementById('editor-file-title');
+    this.btnSaveEditor = document.getElementById('btn-save-editor');
+    this.editorCurrentPath = null;
+
     // Modals
     this.modalPalette = document.getElementById('modal-command-palette');
     this.paletteSearchInput = document.getElementById('palette-search-input');
@@ -195,6 +253,8 @@ class AetherDesktopEngine {
     this.settingsDefaultPermission = document.getElementById('settings-default-permission');
     this.settingsUserName = document.getElementById('settings-user-name');
     this.settingsFeedback = document.getElementById('settings-feedback-alert');
+    this.settingsThemeSelect = document.getElementById('settings-theme-select');
+    this.settingsVoiceLang = document.getElementById('settings-voice-lang');
 
     this.modalStudio = document.getElementById('modal-evolution-studio');
     this.btnCloseStudio = document.getElementById('btn-close-studio-modal');
@@ -385,6 +445,9 @@ class AetherDesktopEngine {
         if (e.target.closest('.task-actions')) return;
         this.switchTask(item.dataset.taskId, item.dataset.project, item.dataset.title);
       });
+      const fileEl = item;
+      const filePath = item.dataset.title;
+      fileEl.addEventListener('dblclick', () => this.openFileInEditor(filePath));
     });
 
     // Bind Add Session (+) per project
@@ -514,6 +577,21 @@ class AetherDesktopEngine {
         });
       }
     });
+
+    // Marketplace & MCP Events
+    if (this.btnBrowseMarketplace) {
+      this.btnBrowseMarketplace.addEventListener('click', () => {
+        this.toggleMarketplace();
+      });
+    }
+    if (this.btnConnectMcp) {
+      this.btnConnectMcp.addEventListener('click', () => {
+        this.toggleMarketplace();
+      });
+    }
+    if (this.btnMcpConnect) {
+      this.btnMcpConnect.addEventListener('click', () => this.connectMcpServer());
+    }
 
     // 1. Brand dropdown popover
     this.brandDropdownBtn.addEventListener('click', (e) => {
@@ -750,13 +828,12 @@ class AetherDesktopEngine {
       item.addEventListener('click', () => this.executePaletteAction(item.dataset.action));
     });
 
-    // 10. Interactive Terminal CLI
+    // 10. Interactive Terminal CLI (with per-tab buffer isolation)
     const executeTerminalCmd = async () => {
       const cmd = this.terminalCliInput.value.trim();
       if (!cmd) return;
       this.terminalCliInput.value = '';
-      this.terminalViewOutput.textContent += `\n$ ${cmd}\n`;
-      this.terminalViewOutput.scrollTop = this.terminalViewOutput.scrollHeight;
+      this.appendToTerminalBuffer(`\n$ ${cmd}\n`);
 
       try {
         const res = await fetch('/api/terminal/exec', {
@@ -765,9 +842,9 @@ class AetherDesktopEngine {
           body: JSON.stringify({command: cmd})
         });
         const data = await res.json();
-        this.terminalViewOutput.textContent += `${data.output || '(No output)'}\n`;
+        this.appendToTerminalBuffer(`${data.output || '(No output)'}\n`);
       } catch (e) {
-        this.terminalViewOutput.textContent += `Error: ${e.message}\n`;
+        this.appendToTerminalBuffer(`Error: ${e.message}\n`);
       }
       this.terminalViewOutput.scrollTop = this.terminalViewOutput.scrollHeight;
     };
@@ -850,13 +927,32 @@ class AetherDesktopEngine {
       });
     });
 
-    // Slash command typing detection
-    this.composerMainInput.addEventListener('input', () => {
+    // Slash command and @ Context Mention typing detection
+    this.composerMainInput.addEventListener('input', async () => {
       const val = this.composerMainInput.value;
+      const cursorPos = this.composerMainInput.selectionStart || val.length;
+      const textBeforeCursor = val.slice(0, cursorPos);
+
+      if (this.isStreaming && val.trim().length > 0) {
+        if (this.btnQueueTask) this.btnQueueTask.style.display = 'inline-flex';
+      } else {
+        if (this.btnQueueTask) this.btnQueueTask.style.display = 'none';
+      }
+
       if (val.startsWith('/') || val.includes('\n/')) {
         this.slashAutocompleteMenu.style.display = 'block';
+        if (this.atAutocompleteMenu) this.atAutocompleteMenu.style.display = 'none';
       } else {
         this.slashAutocompleteMenu.style.display = 'none';
+      }
+
+      // Check if cursor is right after an '@' token e.g. '@' or '@app'
+      const atMatch = textBeforeCursor.match(/@([a-zA-Z0-9_\-\.\/]*)$/);
+      if (atMatch && !val.startsWith('/')) {
+        const query = atMatch[1].toLowerCase();
+        await this.showAtAutocomplete(query, atMatch[0]);
+      } else {
+        if (this.atAutocompleteMenu) this.atAutocompleteMenu.style.display = 'none';
       }
     });
 
@@ -868,6 +964,59 @@ class AetherDesktopEngine {
         this.composerMainInput.focus();
       });
     });
+
+    // Queue Controls
+    if (this.btnQueueTask) {
+      this.btnQueueTask.addEventListener('click', async () => {
+        const text = this.composerMainInput.value.trim();
+        if (text) {
+          await this.pushQueueTask(text);
+          this.composerMainInput.value = '';
+          this.btnQueueTask.style.display = 'none';
+        }
+      });
+    }
+
+    if (this.btnClearQueue) {
+      this.btnClearQueue.addEventListener('click', () => this.clearQueue());
+    }
+
+    if (this.btnToggleQueue) {
+      this.btnToggleQueue.addEventListener('click', () => {
+        const isHidden = this.queueTasksList.style.display === 'none';
+        this.queueTasksList.style.display = isHidden ? 'flex' : 'none';
+      });
+    }
+
+    // Terminal Tabs Navigation with per-tab output isolation
+    if (this.terminalTabsNav) {
+      this.terminalTabsNav.querySelectorAll('.terminal-tab-item').forEach(tab => {
+        tab.addEventListener('click', () => this.switchTerminalTab(tab.dataset.tab, tab));
+      });
+      const btnClear = document.getElementById('btn-clear-term');
+      if (btnClear) {
+        btnClear.addEventListener('click', () => {
+          this.terminalBuffers[this.activeTerminalTab] = `> Terminal cleared.\n$ `;
+          this.terminalViewOutput.textContent = this.terminalBuffers[this.activeTerminalTab];
+        });
+      }
+      const btnAdd = document.getElementById('btn-add-term-tab');
+      if (btnAdd) {
+        btnAdd.addEventListener('click', () => {
+          const tabId = `tab-${Date.now()}`;
+          const tabCount = this.terminalTabsNav.querySelectorAll('.terminal-tab-item').length + 1;
+          this.terminalBuffers[tabId] = `> 终端 #${tabCount} Ready.\n$ `;
+          const newTab = document.createElement('button');
+          newTab.className = 'terminal-tab-item';
+          newTab.dataset.tab = tabId;
+          newTab.innerHTML = `<span>终端 #${tabCount}</span>`;
+          newTab.onclick = () => this.switchTerminalTab(tabId, newTab);
+          this.terminalTabsNav.insertBefore(newTab, btnAdd);
+          // Immediately switch to the new tab
+          this.switchTerminalTab(tabId, newTab);
+        });
+      }
+    }
 
     this.btnExecutePlan.addEventListener('click', () => {
       const planPrompt = `请立即执行已确认的实施计划，按步骤调用相关工具并在沙箱中验证。`;
@@ -882,7 +1031,10 @@ class AetherDesktopEngine {
 
     // 15. Global Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && this.editorCurrentPath) {
+        e.preventDefault();
+        this.saveEditorFile();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         this.openCommandPalette();
       } else if ((e.metaKey || e.ctrlKey) && e.key === ',') {
@@ -946,6 +1098,19 @@ class AetherDesktopEngine {
     this.btnCloseCanvas.addEventListener('click', () => this.toggleRightCanvas());
     this.btnMaximizeCanvas.addEventListener('click', () => this.aetherRightCanvas.classList.toggle('maximized'));
 
+    // Git Panel Events
+    if (this.btnGitCommit) {
+      this.btnGitCommit.addEventListener('click', () => this.gitCommit());
+    }
+    if (this.btnGitRefresh) {
+      this.btnGitRefresh.addEventListener('click', () => this.refreshGitPanel());
+    }
+
+    // Code Editor Events
+    if (this.btnSaveEditor) {
+      this.btnSaveEditor.addEventListener('click', () => this.saveEditorFile());
+    }
+
     this.btnEditGoal.addEventListener('click', () => {
       const newGoal = prompt("编辑当前目标 (Edit Active Goal):", this.activeGoalText.textContent);
       if (newGoal) this.activeGoalText.textContent = newGoal;
@@ -971,10 +1136,27 @@ class AetherDesktopEngine {
     this.btnCloseStudio.addEventListener('click', () => this.modalStudio.classList.remove('show'));
     this.btnCancelStudio.addEventListener('click', () => this.modalStudio.classList.remove('show'));
     this.btnExecuteHotswap.addEventListener('click', () => this.executeHotSwap());
+
+    // Theme Toggle
+    if (this.settingsThemeSelect) {
+      this.settingsThemeSelect.addEventListener('change', (e) => {
+        const theme = e.target.value;
+        document.body.dataset.theme = theme;
+        localStorage.setItem('aether_theme', theme);
+      });
+    }
+
+    if (this.settingsVoiceLang) {
+      this.settingsVoiceLang.addEventListener('change', (e) => {
+        localStorage.setItem('aether_voice_lang', e.target.value);
+      });
+    }
   }
 
   triggerComposerAction(action) {
-    if (action === 'plan') {
+    if (action === 'ask') {
+      this.composerMainInput.value = `/ask 请针对当前技术方案提供交互式决策选项卡片`;
+    } else if (action === 'plan') {
       this.isPlanMode = true;
       this.btnTogglePlan.classList.add('active', 'mode-plan');
       this.activePlanBanner.style.display = 'flex';
@@ -1006,6 +1188,7 @@ class AetherDesktopEngine {
     this.effortPickerMenu.style.display = 'none';
     this.composerActionsMenu.style.display = 'none';
     this.slashAutocompleteMenu.style.display = 'none';
+    if (this.atAutocompleteMenu) this.atAutocompleteMenu.style.display = 'none';
   }
 
   closeAllModals() {
@@ -1096,7 +1279,7 @@ class AetherDesktopEngine {
       this.recognition = new SpeechRecognition();
       this.recognition.continuous = true;
       this.recognition.interimResults = true;
-      this.recognition.lang = 'zh-CN';
+      this.recognition.lang = this.settingsVoiceLang?.value || localStorage.getItem('aether_voice_lang') || 'zh-CN';
 
       this.recognition.onresult = (event) => {
         let transcript = '';
@@ -1120,6 +1303,27 @@ class AetherDesktopEngine {
       this.isRecordingVoice = true;
       this.btnMic.classList.add('is-recording');
     }
+
+    // File Drag & Drop Upload
+    const composerArea = this.composerMainInput.closest('.composer-main-area') || this.composerMainInput.parentElement;
+    composerArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (this.dropZoneOverlay) this.dropZoneOverlay.style.display = 'flex';
+    });
+    composerArea.addEventListener('dragleave', (e) => {
+      if (!composerArea.contains(e.relatedTarget)) {
+        if (this.dropZoneOverlay) this.dropZoneOverlay.style.display = 'none';
+      }
+    });
+    composerArea.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      if (this.dropZoneOverlay) this.dropZoneOverlay.style.display = 'none';
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+      for (const file of files) {
+        await this.handleFileUpload(file);
+      }
+    });
   }
 
   openEvolutionStudio() {
@@ -1192,6 +1396,7 @@ class SQLiteMonitorPlugin(AetherPlugin):
           history_html: this.chatThreadContainer.innerHTML,
         })
       });
+      this.loadSessionHistory();
     } catch (e) {
       console.warn("Session auto-save failed", e);
     }
@@ -1275,6 +1480,12 @@ class SQLiteMonitorPlugin(AetherPlugin):
     this.composerMainInput.value = '';
     this.composerMainInput.style.height = 'auto';
     this.slashAutocompleteMenu.style.display = 'none';
+
+    if (text.startsWith('/compare')) {
+      const promptText = text.replace('/compare', '').trim();
+      this.startABComparison(promptText);
+      return;
+    }
 
     if (this.isPlanMode && !text.startsWith('/plan') && !text.startsWith('[Plan')) {
       this.activePlanSummary.textContent = text.slice(0, 45) + '...';
@@ -1397,11 +1608,21 @@ class SQLiteMonitorPlugin(AetherPlugin):
       step.textContent = `✓ [Step ${data.step || 1}: ${data.tool_name}] ${JSON.stringify(data.arguments || {})}`;
       details.appendChild(step);
       traceEl.textContent = `[Step ${data.step || 1}] Executing tool: ${data.tool_name}...`;
+    } else if (type === 'ask_question') {
+      this.renderAskCard(data, proseEl);
+    } else if (type === 'tool_call_done' && data.tool_name === 'ask_question' && data.artifacts && data.artifacts.ask_card) {
+      if (!proseEl.querySelector(`[data-call-id="${data.call_id}"]`)) {
+        this.renderAskCard({ ...data.artifacts.ask_card, call_id: data.call_id, step: data.step }, proseEl);
+      }
     } else if (type === 'plugin_evolved') {
       this.refreshPlugins();
     } else if (type === 'diff_generated') {
       this.refreshDiffs();
       this.switchRightCanvasTab('diff');
+    } else if (type === 'plan_checklist') {
+      this.renderPlanChecklist(data, proseEl);
+    } else if (type === 'subagent_review') {
+      this.renderSubagentReview(data);
     } else if (type === 'turn_complete') {
       traceEl.textContent = `Completed in ${this.elapsedSeconds}s (${data.tool_calls_count || 0} tool calls).`;
       this.refreshPlugins();
@@ -1412,6 +1633,7 @@ class SQLiteMonitorPlugin(AetherPlugin):
 
   finishExecutionTurn() {
     this.isStreaming = false;
+    if (this.btnQueueTask) this.btnQueueTask.style.display = 'none';
     if (this.tokenBuffer) this.tokenBuffer.flush();
     if (this.streamTimer) {
       clearInterval(this.streamTimer);
@@ -1420,6 +1642,9 @@ class SQLiteMonitorPlugin(AetherPlugin):
     this.sendIconSvg.style.display = 'block';
     this.stopIconSquare.style.display = 'none';
     this.saveCurrentSessionToServer();
+
+    // Auto-dequeue next task in execution queue
+    this.checkAndAutoDequeue();
   }
 
   stopStreaming() {
@@ -1465,14 +1690,41 @@ class SQLiteMonitorPlugin(AetherPlugin):
           `;
         } else {
           this.diffStreamContainer.innerHTML = diffs.map(d => `
-            <div style="background: #181920; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 10px; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11.5px;">
+            <div class="diff-chunk-card" data-chunk-id="${d.chunk_id}" style="background: #181920; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; margin-bottom: 10px; font-family: var(--font-mono); font-size: 11.5px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <div style="color: #f0f2f7; font-weight: bold;">📄 ${d.file_path}</div>
-                <button class="btn-sm-accept" onclick="alert('已合并该代码变更！')">合并此项</button>
+                <div style="color: #f0f2f7; font-weight: bold;">📄 ${this.escapeHtml(d.file_path)} <span style="font-size:10px;color:${d.status === 'accepted' ? '#34d399' : (d.status === 'rejected' ? '#f87171' : '#a5b4fc')};">(${d.status})</span></div>
+                <div style="display: flex; gap: 4px;">
+                  <button class="btn-sm-accept btn-chunk-accept" data-chunk-id="${d.chunk_id}" style="padding: 2px 8px; font-size: 11px;">✓ 接受</button>
+                  <button class="btn-sm-reject btn-chunk-reject" data-chunk-id="${d.chunk_id}" style="padding: 2px 8px; font-size: 11px;">✕ 拒绝</button>
+                </div>
               </div>
-              <pre style="color: #34d399; white-space: pre-wrap;">${this.escapeHtml(d.diff_text)}</pre>
+              <pre style="color: #34d399; white-space: pre-wrap; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; overflow-x: auto;">${this.escapeHtml(d.diff_text)}</pre>
             </div>
           `).join('');
+
+          this.diffStreamContainer.querySelectorAll('.btn-chunk-accept').forEach(btn => {
+            btn.onclick = async () => {
+              const chunkId = btn.dataset.chunkId;
+              await fetch('/api/diffs/action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chunk_id: chunkId, action: 'accept' })
+              });
+              await this.refreshDiffs();
+            };
+          });
+
+          this.diffStreamContainer.querySelectorAll('.btn-chunk-reject').forEach(btn => {
+            btn.onclick = async () => {
+              const chunkId = btn.dataset.chunkId;
+              await fetch('/api/diffs/action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chunk_id: chunkId, action: 'reject' })
+              });
+              await this.refreshDiffs();
+            };
+          });
         }
       }
     } catch (e) {
@@ -1535,7 +1787,654 @@ class SQLiteMonitorPlugin(AetherPlugin):
 
     return processed;
   }
+
+  renderAskCard(data, proseEl) {
+    const question = data.question || "请确认接下来的执行方案：";
+    const options = data.options || ["确认继续", "取消操作"];
+    const isMulti = Boolean(data.is_multi_select);
+    const allowCustom = data.allow_custom !== false;
+    const context = data.context || "";
+    const callId = data.call_id || `ask-${Date.now()}`;
+    const cardId = `ask-card-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    // Avoid duplicate cards
+    if (proseEl.querySelector(`[data-call-id="${callId}"]`)) {
+      return;
+    }
+
+    const card = document.createElement('div');
+    card.className = 'aether-ask-card';
+    card.id = cardId;
+    card.dataset.callId = callId;
+
+    let optionsHtml = '';
+    options.forEach((opt, idx) => {
+      const optId = `${cardId}-opt-${idx}`;
+      const inputType = isMulti ? 'checkbox' : 'radio';
+      const inputName = `${cardId}-choice`;
+      optionsHtml += `
+        <label class="aether-ask-option-item ${idx === 0 && !isMulti ? 'selected' : ''}" for="${optId}">
+          <input type="${inputType}" id="${optId}" name="${inputName}" value="${this.escapeHtml(opt)}" ${idx === 0 && !isMulti ? 'checked' : ''} />
+          <div class="aether-ask-option-content">
+            <span class="aether-ask-option-label">${this.escapeHtml(opt)}</span>
+          </div>
+        </label>
+      `;
+    });
+
+    card.innerHTML = `
+      <div class="aether-ask-header">
+        <div class="aether-ask-badge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          决策与确认 / Decision Required
+        </div>
+        ${data.step ? `<span class="aether-ask-step">Step ${data.step}</span>` : ''}
+      </div>
+      <div class="aether-ask-question">${this.escapeHtml(question)}</div>
+      ${context ? `<div class="aether-ask-context">${this.escapeHtml(context)}</div>` : ''}
+      <div class="aether-ask-options-list">
+        ${optionsHtml}
+      </div>
+      ${allowCustom ? `
+        <div class="aether-ask-custom-wrapper">
+          <input type="text" class="aether-ask-custom-input" placeholder="输入自定义意见或补充说明 (可选)..." />
+        </div>
+      ` : ''}
+      <div class="aether-ask-actions">
+        <button class="aether-ask-submit-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          确认并继续
+        </button>
+        <button class="aether-ask-skip-btn">跳过</button>
+      </div>
+    `;
+
+    proseEl.appendChild(card);
+    this.smoothScrollToBottom();
+
+    // Bind selection highlight
+    const optionLabels = card.querySelectorAll('.aether-ask-option-item');
+    const updateSelectedStyles = () => {
+      optionLabels.forEach(lbl => {
+        const inp = lbl.querySelector('input');
+        if (inp && inp.checked) {
+          lbl.classList.add('selected');
+        } else {
+          lbl.classList.remove('selected');
+        }
+      });
+    };
+    optionLabels.forEach(lbl => {
+      lbl.addEventListener('change', updateSelectedStyles);
+    });
+
+    // Bind submit action
+    const submitBtn = card.querySelector('.aether-ask-submit-btn');
+    const skipBtn = card.querySelector('.aether-ask-skip-btn');
+    const customInput = card.querySelector('.aether-ask-custom-input');
+
+    const handleSubmit = (isSkip = false) => {
+      let selectedValues = [];
+      if (!isSkip) {
+        const checkedInputs = card.querySelectorAll('.aether-ask-options-list input:checked');
+        checkedInputs.forEach(inp => selectedValues.push(inp.value));
+        const customVal = customInput ? customInput.value.trim() : '';
+        if (customVal) {
+          selectedValues.push(`补充说明: ${customVal}`);
+        }
+      }
+
+      const responseText = isSkip ? "已跳过该决策，按默认流程继续。" : `已选定决策: ${selectedValues.join("；")}`;
+
+      // Update card state to answered
+      card.classList.add('answered');
+      card.innerHTML = `
+        <div class="aether-ask-answered-banner">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>${this.escapeHtml(responseText)}</span>
+        </div>
+      `;
+
+      this.saveCurrentSessionToServer();
+
+      // Submit user choice back to the agent turn
+      this.composerMainInput.value = responseText;
+      this.handleSendOrStop();
+    };
+
+    submitBtn.addEventListener('click', () => handleSubmit(false));
+    skipBtn.addEventListener('click', () => handleSubmit(true));
+  }
+
+  async showAtAutocomplete(query, fullToken) {
+    if (!this.atAutocompleteMenu || !this.atMenuItemsContainer) return;
+
+    if (this.cachedWorkspaceFiles.length === 0) {
+      try {
+        const res = await fetch('/api/workspace/files');
+        this.cachedWorkspaceFiles = await res.json();
+      } catch (err) {
+        console.warn("Failed to load workspace files for @ mention", err);
+      }
+    }
+
+    let itemsHtml = '';
+    // Standard context options
+    const contextOptions = [
+      { id: 'files', label: '@Files', desc: '浏览并引用工作区文件', icon: '📄' },
+      { id: 'terminal', label: '@Terminal', desc: '引用终端执行日志', icon: '🖥️' },
+      { id: 'diff', label: '@Diff', desc: '引用当前代码变更差异', icon: '🔀' },
+      { id: 'plugins', label: '@Plugins', desc: '引用微内核插件网格', icon: '🧪' },
+    ];
+
+    const matchedContext = contextOptions.filter(o =>
+      !query || o.label.toLowerCase().includes(query) || o.desc.toLowerCase().includes(query)
+    );
+    matchedContext.forEach(opt => {
+      itemsHtml += `
+        <div class="menu-action-item at-select-item" data-at-type="${opt.id}" data-at-label="${opt.label}">
+          <span class="action-icon">${opt.icon}</span>
+          <span><strong>${this.escapeHtml(opt.label)}</strong> - ${this.escapeHtml(opt.desc)}</span>
+        </div>
+      `;
+    });
+
+    // Matched workspace files
+    const matchedFiles = this.cachedWorkspaceFiles.filter(f =>
+      !query || f.path.toLowerCase().includes(query) || f.name.toLowerCase().includes(query)
+    ).slice(0, 8);
+
+    if (matchedFiles.length > 0) {
+      itemsHtml += `<div class="menu-divider" style="height:1px;background:rgba(255,255,255,0.06);margin:4px 0;"></div>`;
+      matchedFiles.forEach(f => {
+        itemsHtml += `
+          <div class="menu-action-item at-select-item" data-at-type="file" data-at-path="${this.escapeHtml(f.path)}">
+            <span class="action-icon">📄</span>
+            <span><strong>@${this.escapeHtml(f.name)}</strong> <small style="color:#64748b;font-size:11px;margin-left:4px;">${this.escapeHtml(f.path)}</small></span>
+          </div>
+        `;
+      });
+    }
+
+    this.atMenuItemsContainer.innerHTML = itemsHtml;
+    this.atAutocompleteMenu.style.display = 'block';
+
+    // Bind click events on at-select-item
+    this.atMenuItemsContainer.querySelectorAll('.at-select-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const type = item.dataset.atType;
+        const val = this.composerMainInput.value;
+        const cursorPos = this.composerMainInput.selectionStart || val.length;
+        const textBefore = val.slice(0, cursorPos);
+        const textAfter = val.slice(cursorPos);
+        const replacedBefore = textBefore.replace(/@([a-zA-Z0-9_\-\.\/]*)$/, '');
+
+        if (type === 'file') {
+          const filePath = item.dataset.atPath;
+          this.composerMainInput.value = `${replacedBefore}@${filePath} ${textAfter}`;
+        } else if (type === 'terminal') {
+          const logs = this.terminalViewOutput.textContent.slice(-500);
+          this.composerMainInput.value = `${replacedBefore}\n\`\`\`terminal_output\n${logs}\n\`\`\`\n${textAfter}`;
+        } else if (type === 'diff') {
+          this.composerMainInput.value = `${replacedBefore}@Diff ${textAfter}`;
+        } else if (type === 'plugins') {
+          this.composerMainInput.value = `${replacedBefore}@Plugins ${textAfter}`;
+        } else if (type === 'files') {
+          this.composerMainInput.value = `${replacedBefore}@${this.cachedWorkspaceFiles[0]?.path || 'file'} ${textAfter}`;
+        }
+
+        this.atAutocompleteMenu.style.display = 'none';
+        this.composerMainInput.focus();
+      });
+    });
+  }
+
+  switchTerminalTab(tabId, tabEl) {
+    if (!this.terminalTabsNav) return;
+    // Save current tab's output to its buffer
+    this.terminalBuffers[this.activeTerminalTab] = this.terminalViewOutput.textContent;
+    // Switch active
+    this.activeTerminalTab = tabId;
+    this.terminalTabsNav.querySelectorAll('.terminal-tab-item').forEach(t => t.classList.remove('active'));
+    if (tabEl) tabEl.classList.add('active');
+    // Load new tab's buffer
+    if (!this.terminalBuffers[tabId]) {
+      this.terminalBuffers[tabId] = `> Terminal Ready.\n$ `;
+    }
+    this.terminalViewOutput.textContent = this.terminalBuffers[tabId];
+    this.terminalViewOutput.scrollTop = this.terminalViewOutput.scrollHeight;
+  }
+
+  appendToTerminalBuffer(text) {
+    // Write to both the active display and the buffer
+    this.terminalViewOutput.textContent += text;
+    this.terminalBuffers[this.activeTerminalTab] = this.terminalViewOutput.textContent;
+  }
+
+  async refreshQueue() {
+    if (!this.queueDrawer || !this.queueTasksList) return;
+    try {
+      const res = await fetch('/api/queue');
+      const tasks = await res.json();
+      this.queueCountBadge.textContent = tasks.length;
+
+      if (tasks.length === 0) {
+        this.queueDrawer.style.display = 'none';
+        this.queueTasksList.innerHTML = '';
+        return;
+      }
+
+      this.queueDrawer.style.display = 'block';
+      this.queueTasksList.innerHTML = tasks.map((t, idx) => `
+        <div class="queue-task-item" data-task-id="${t.task_id}">
+          <span class="queue-task-text"><strong>#${idx + 1}</strong> ${this.escapeHtml(t.prompt)}</span>
+          <button class="queue-task-remove" data-task-id="${t.task_id}" title="移除此任务">✕</button>
+        </div>
+      `).join('');
+
+      this.queueTasksList.querySelectorAll('.queue-task-remove').forEach(btn => {
+        btn.onclick = async (e) => {
+          e.stopPropagation();
+          await this.removeQueueTask(btn.dataset.taskId);
+        };
+      });
+    } catch (e) {
+      console.warn("Failed to refresh queue", e);
+    }
+  }
+
+  async pushQueueTask(prompt) {
+    try {
+      await fetch('/api/queue/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, priority: 0 })
+      });
+      await this.refreshQueue();
+    } catch (e) {
+      console.warn("Failed to push queue", e);
+    }
+  }
+
+  async removeQueueTask(taskId) {
+    try {
+      await fetch('/api/queue/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: taskId })
+      });
+      await this.refreshQueue();
+    } catch (e) {
+      console.warn("Failed to remove queue task", e);
+    }
+  }
+
+  async clearQueue() {
+    try {
+      await fetch('/api/queue/clear', { method: 'POST' });
+      await this.refreshQueue();
+    } catch (e) {
+      console.warn("Failed to clear queue", e);
+    }
+  }
+
+  async checkAndAutoDequeue() {
+    try {
+      const res = await fetch('/api/queue/pop', { method: 'POST' });
+      const data = await res.json();
+      await this.refreshQueue();
+      if (data.task && data.task.prompt) {
+        setTimeout(() => {
+          this.startAgentExecutionTurn(data.task.prompt);
+        }, 400);
+      }
+    } catch (e) {
+      console.warn("Failed to pop queue", e);
+    }
+  }
+
+  renderPlanChecklist(data, proseEl) {
+    const steps = data.steps || [];
+    if (steps.length === 0) return;
+
+    const checklistCard = document.createElement('div');
+    checklistCard.className = 'plan-checklist-card';
+    checklistCard.innerHTML = `
+      <div class="plan-checklist-header">
+        <span>📋 Plan 逐步实施清单 (${steps.length} 步骤)</span>
+        <span style="font-size: 11px; color: #34d399;">● 自动调度中</span>
+      </div>
+      <div class="plan-checklist-items">
+        ${steps.map((s, idx) => `
+          <div class="checklist-step-item ${s.status}">
+            <span>${s.status === 'completed' ? '🟢' : (s.status === 'running' ? '🟡' : '⚪')}</span>
+            <span><strong>第 ${idx + 1} 步:</strong> ${this.escapeHtml(s.title)}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    proseEl.appendChild(checklistCard);
+    this.smoothScrollToBottom();
+  }
+
+  renderSubagentReview(data) {
+    if (!this.subagentReviewCard) return;
+    const score = data.score !== undefined ? data.score : 100;
+    const findings = data.findings || [];
+    const suggestions = data.suggestions || [];
+
+    if (this.subagentScoreBadge) {
+      this.subagentScoreBadge.textContent = `安全分: ${score}`;
+      this.subagentScoreBadge.style.color = score >= 80 ? '#34d399' : '#f87171';
+    }
+
+    if (this.subagentFindingsList) {
+      let html = findings.map(f => `<div class="subagent-finding-item">${this.escapeHtml(f)}</div>`).join('');
+      if (suggestions.length > 0) {
+        html += suggestions.map(s => `<div class="subagent-finding-item" style="color:#94a3b8;">💡 ${this.escapeHtml(s)}</div>`).join('');
+      }
+      this.subagentFindingsList.innerHTML = html;
+    }
+
+    this.subagentReviewCard.style.display = 'block';
+  }
+
+  async loadSessionHistory() {
+    if (!this.sessionHistoryList) return;
+    try {
+      const res = await fetch('/api/workspace/sessions');
+      const sessions = await res.json();
+      this.sessionCountBadge.textContent = sessions.length;
+
+      if (sessions.length === 0) {
+        this.sessionHistoryList.innerHTML = '<div style="color:#6b7280;font-size:11.5px;padding:8px 12px;">暂无历史会话</div>';
+        return;
+      }
+
+      this.sessionHistoryList.innerHTML = sessions.map(s => {
+        const timeStr = s.updated_at ? new Date(s.updated_at).toLocaleString('zh-CN', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+        return `
+          <div class="session-history-item" data-task-id="${s.id}" data-project="${s.project}" data-title="${this.escapeHtml(s.title)}">
+            <div class="session-item-title">${this.escapeHtml(s.title)}</div>
+            <div class="session-item-meta">${timeStr}</div>
+          </div>
+        `;
+      }).join('');
+
+      this.sessionHistoryList.querySelectorAll('.session-history-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const taskId = item.dataset.taskId;
+          const project = item.dataset.project;
+          const title = item.dataset.title;
+          this.switchTask(taskId, project, title);
+        });
+      });
+    } catch (e) {
+      console.warn('Failed to load session history', e);
+    }
+  }
+
+  async handleFileUpload(file) {
+    if (file.type.startsWith('image/')) {
+      // Read image as base64 and inject into prompt
+      const reader = new FileReader();
+      reader.onload = () => {
+        const b64 = reader.result;
+        this.composerMainInput.value += `\n[Attached Image: ${file.name}]\n`;
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Upload text file to server
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success && data.preview) {
+          const preview = data.preview.length > 3000 ? data.preview.slice(0, 3000) + '\n... [truncated]' : data.preview;
+          this.composerMainInput.value += `\n[Attached File: ${data.filename}]\n\`\`\`\n${preview}\n\`\`\`\n`;
+        }
+      } catch (e) {
+        console.warn('File upload failed', e);
+      }
+    }
+    this.composerMainInput.focus();
+  }
+
+  async refreshGitPanel() {
+    try {
+      const [statusRes, logRes] = await Promise.all([
+        fetch('/api/git/status'),
+        fetch('/api/git/log'),
+      ]);
+      const status = await statusRes.json();
+      const log = await logRes.json();
+
+      if (this.gitBranchLabel) {
+        this.gitBranchLabel.textContent = `分支: ${status.branch || 'unknown'}`;
+      }
+
+      if (this.gitStatusList) {
+        if (status.clean) {
+          this.gitStatusList.innerHTML = '<div style="color:#34d399;padding:6px 0;">✓ 工作区干净</div>';
+        } else {
+          this.gitStatusList.innerHTML = (status.files || []).map(f => {
+            const color = f.status === 'M' ? '#fbbf24' : (f.status === 'A' || f.status === '?' ? '#34d399' : '#f87171');
+            return `<div style="padding:3px 0;"><span style="color:${color};font-weight:600;width:24px;display:inline-block;">${this.escapeHtml(f.status)}</span> ${this.escapeHtml(f.path)}</div>`;
+          }).join('');
+        }
+      }
+
+      if (this.gitLogList) {
+        this.gitLogList.innerHTML = (Array.isArray(log) ? log : []).filter(c => !c.error).map(c =>
+          `<div style="padding:3px 0;color:#9ca3af;"><span style="color:#a5b4fc;">${this.escapeHtml(c.short_hash)}</span> ${this.escapeHtml(c.message)} <span style="color:#6b7280;">${this.escapeHtml(c.time_ago)}</span></div>`
+        ).join('');
+      }
+    } catch (e) {
+      console.warn('Failed to refresh git panel', e);
+    }
+  }
+
+  async gitCommit() {
+    const msg = this.gitCommitMsg?.value?.trim();
+    if (!msg) return;
+    try {
+      const res = await fetch('/api/git/commit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg}),
+      });
+      const data = await res.json();
+      if (data.success) {
+        this.gitCommitMsg.value = '';
+        await this.refreshGitPanel();
+      }
+    } catch (e) {
+      console.warn('Git commit failed', e);
+    }
+  }
+
+  async openFileInEditor(filePath) {
+    try {
+      const res = await fetch(`/api/workspace/read_file?path=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      if (data.error) {
+        console.warn('Failed to open file:', data.error);
+        return;
+      }
+      this.editorCurrentPath = filePath;
+      if (this.editorFileTitle) this.editorFileTitle.textContent = filePath;
+      if (this.editorTextarea) this.editorTextarea.value = data.content;
+      this.switchRightCanvasTab('editor');
+    } catch (e) {
+      console.warn('Failed to open file in editor', e);
+    }
+  }
+
+  async saveEditorFile() {
+    if (!this.editorCurrentPath || !this.editorTextarea) return;
+    try {
+      const res = await fetch('/api/workspace/write_file', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          path: this.editorCurrentPath,
+          content: this.editorTextarea.value,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && this.editorFileTitle) {
+        this.editorFileTitle.textContent = `${this.editorCurrentPath} ✓`;
+      }
+    } catch (e) {
+      console.warn('Failed to save file', e);
+    }
+  }
+  async startABComparison(prompt) {
+    if (!prompt || this.models.length < 2) return;
+    const modelA = this.models[0];
+    const modelB = this.models[1];
+
+    const comparisonHtml = `
+      <div class="ab-comparison-card" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0;">
+        <div class="ab-column" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:12px;">
+          <div style="color:#a5b4fc;font-weight:600;font-size:12px;margin-bottom:8px;">${modelA.badge}</div>
+          <div class="ab-response-a" id="ab-response-a" style="color:#d1d5db;font-size:13px;line-height:1.6;">Generating...</div>
+        </div>
+        <div class="ab-column" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);border-radius:10px;padding:12px;">
+          <div style="color:#6ee7b7;font-weight:600;font-size:12px;margin-bottom:8px;">${modelB.badge}</div>
+          <div class="ab-response-b" id="ab-response-b" style="color:#d1d5db;font-size:13px;line-height:1.6;">Generating...</div>
+        </div>
+      </div>
+    `;
+
+    this.appendUserMessage(`[A/B 对比] ${prompt}`);
+
+    const compDiv = document.createElement('div');
+    compDiv.innerHTML = comparisonHtml;
+    this.chatThreadContainer.appendChild(compDiv);
+    this.chatThreadContainer.scrollTop = this.chatThreadContainer.scrollHeight;
+
+    const respA = compDiv.querySelector('#ab-response-a');
+    const respB = compDiv.querySelector('#ab-response-b');
+
+    // Fetch both models in parallel
+    const fetchModel = async (modelId, targetEl) => {
+      try {
+        const evtSource = new EventSource(`/api/chat/stream?prompt=${encodeURIComponent(prompt)}&model=${encodeURIComponent(modelId)}`);
+        let text = '';
+        evtSource.addEventListener('text_chunk', (e) => {
+          const data = JSON.parse(e.data);
+          text += data.chunk || '';
+          targetEl.textContent = text;
+        });
+        evtSource.addEventListener('turn_complete', () => {
+          evtSource.close();
+        });
+        evtSource.onerror = () => evtSource.close();
+      } catch (e) {
+        targetEl.textContent = `Error: ${e.message}`;
+      }
+    };
+
+    fetchModel(modelA.id, respA);
+    fetchModel(modelB.id, respB);
+  }
+
+  toggleMarketplace() {
+    if (!this.marketplacePanel) return;
+    const isHidden = this.marketplacePanel.style.display === 'none';
+    this.marketplacePanel.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+      this.loadMarketplace();
+      this.loadMcpServers();
+    }
+  }
+
+  async loadMarketplace() {
+    if (!this.marketplaceList) return;
+    try {
+      const res = await fetch('/api/plugins/marketplace');
+      const plugins = await res.json();
+      this.marketplaceList.innerHTML = plugins.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;margin:4px 0;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+          <div>
+            <div style="color:#e2e8f0;font-size:12px;font-weight:600;">${this.escapeHtml(p.name)}</div>
+            <div style="color:#6b7280;font-size:11px;margin-top:2px;">${this.escapeHtml(p.description)}</div>
+          </div>
+          <button class="btn-sm-accept" onclick="window.aetherApp.installPlugin('${p.id}')" style="font-size:10px;white-space:nowrap;">${p.installed ? '✓ 已安装' : '安装'}</button>
+        </div>
+      `).join('');
+    } catch (e) {
+      console.warn('Failed to load marketplace', e);
+    }
+  }
+
+  async installPlugin(pluginId) {
+    try {
+      await fetch('/api/plugins/install', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({plugin_id: pluginId}),
+      });
+      this.loadMarketplace();
+    } catch (e) {
+      console.warn('Plugin install failed', e);
+    }
+  }
+
+  async loadMcpServers() {
+    if (!this.mcpServersList) return;
+    try {
+      const res = await fetch('/api/mcp/servers');
+      const servers = await res.json();
+      if (servers.length === 0) {
+        this.mcpServersList.innerHTML = '<div style="color:#6b7280;font-size:11px;padding:4px 0;">未连接任何 MCP 服务器</div>';
+        return;
+      }
+      this.mcpServersList.innerHTML = servers.map(s => {
+        const statusColor = s.status === 'connected' ? '#34d399' : (s.status === 'error' ? '#f87171' : '#6b7280');
+        const toolsText = s.tools.map(t => t.name).join(', ') || '无工具';
+        return `
+          <div style="padding:6px 8px;margin:3px 0;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.06);">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:#e2e8f0;font-size:12px;font-weight:600;">${this.escapeHtml(s.name)}</span>
+              <span style="color:${statusColor};font-size:10px;">● ${s.status}</span>
+            </div>
+            <div style="color:#6b7280;font-size:10px;margin-top:3px;">工具: ${this.escapeHtml(toolsText)}</div>
+            ${s.error ? `<div style="color:#f87171;font-size:10px;margin-top:2px;">${this.escapeHtml(s.error)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      console.warn('Failed to load MCP servers', e);
+    }
+  }
+
+  async connectMcpServer() {
+    const name = this.mcpServerName?.value?.trim();
+    const cmd = this.mcpServerCmd?.value?.trim();
+    if (!name || !cmd) return;
+    try {
+      const res = await fetch('/api/mcp/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, command: cmd.split(/\\s+/)}),
+      });
+      await res.json();
+      this.mcpServerName.value = '';
+      this.mcpServerCmd.value = '';
+      this.loadMcpServers();
+    } catch (e) {
+      console.warn('MCP connect failed', e);
+    }
+  }
 }
 
 // Global App Instance
 const aetherEngine = new AetherDesktopEngine();
+window.aetherApp = aetherEngine;
