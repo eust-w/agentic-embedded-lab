@@ -1,0 +1,53 @@
+api_version: ael.dev/v2
+components:
+    - backend: openmodelica
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: plant
+      model: benchmarks/models/modelica/domain.mos
+      ports:
+        - direction: input
+          name: thermal_resistance_K_per_W
+          type: real
+          unit: K/W
+        - direction: input
+          name: sleep_current_A
+          type: real
+          unit: A
+        - direction: input
+          name: duty_cycle
+          type: real
+          unit: "1"
+        - direction: input
+          name: input_power
+          type: real
+          unit: W
+        - direction: input
+          name: rf_retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+        - direction: output
+          name: temperature
+          type: real
+          unit: Cel
+        - direction: output
+          name: battery_hours
+          type: real
+          unit: h
+      properties: null
+      rollback: false
+      step_us: 1000
+connections: null
+id: openmodelica-continuous-domain

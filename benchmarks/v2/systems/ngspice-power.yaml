@@ -1,0 +1,49 @@
+api_version: ael.dev/v2
+components:
+    - backend: ngspice
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: circuit
+      model: benchmarks/models/ngspice/power_path.cir
+      ports:
+        - direction: input
+          name: source_resistance_ohm
+          type: real
+          unit: Ohm
+        - direction: input
+          name: capacitance_uF
+          type: real
+          unit: uF
+        - direction: input
+          name: load_microamp
+          type: real
+          unit: uA
+        - direction: input
+          name: rf_retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+        - direction: output
+          name: supply_voltage
+          type: real
+          unit: V
+        - direction: output
+          name: power
+          type: real
+          unit: W
+      properties: null
+      rollback: false
+      step_us: 1000
+connections: null
+id: ngspice-power-reference

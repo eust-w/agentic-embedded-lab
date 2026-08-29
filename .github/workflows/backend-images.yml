@@ -41,10 +41,10 @@ jobs:
         env:
           BACKEND: ${{ matrix.backend }}
         run: |
-          request='{"api_version":"ael.dev/backend/v1","request_id":"probe","operation":"probe","payload":{}}'
+          request='{"api_version":"ael.backend/v2","id":"probe","operation":"probe","payload":{}}'
           response=$(printf '%s\n' "$request" | docker run --rm -i "ael-${BACKEND}:ci")
           printf '%s\n' "$response" | tee "${BACKEND}-probe.json"
-          python -c 'import json,sys; d=json.load(sys.stdin); assert d["ok"] and d["outputs"]["available"]' <<<"$response"
+          jq -e '.ok == true and .outputs.available == 1' <<<"$response"
           if [ "$BACKEND" = ns3 ]; then
             output=$(docker run --rm --entrypoint /opt/ael-bin/ael-network ael-ns3:ci \
               --stopUs=1000 --protocol=0 --interference_dbm=-95 \

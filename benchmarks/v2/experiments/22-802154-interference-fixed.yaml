@@ -1,0 +1,36 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: network.failure
+      operator: ==
+duration_us: 3000
+faults: null
+id: 22-802154-interference-fixed
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1022
+stimuli:
+    - at_us: 0
+      target: network.interference_dbm
+      unit: dBm
+      value: -95
+    - at_us: 0
+      target: network.partition_ms
+      unit: ms
+      value: 0
+    - at_us: 0
+      target: network.retry_limit
+      value: 8
+    - at_us: 0
+      target: network.protocol
+      value: 0
+system_id: ns3-network-reference
+timeout: 3e+11

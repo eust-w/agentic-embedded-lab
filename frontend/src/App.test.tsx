@@ -13,15 +13,15 @@ beforeEach(() => {
 describe('Aether desktop shell', () => {
   it('switches between coding and simulation workspaces', () => {
     render(<App />)
-    expect(screen.getByText('Fixing embedded firmware timing issue')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Simulation' }))
-    expect(screen.getByText('Experiment timeline')).toBeInTheDocument()
-    expect(screen.getByText('Hardware unverified')).toBeInTheDocument()
+    expect(screen.getByText('正在修复嵌入式固件时序问题')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '仿真' }))
+    expect(screen.getByText('实验时间线')).toBeInTheDocument()
+    expect(screen.getByText('硬件尚未验证')).toBeInTheDocument()
   })
 
   it('records an approval decision in local UI state', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Approve once' }))
-    expect(screen.getByText('Approved for this turn')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '仅批准本次' }))
+    expect(screen.getByText('已批准当前轮次')).toBeInTheDocument()
   })
 })

@@ -137,6 +137,12 @@ type AssertionResult struct {
 	Message  string  `json:"message"`
 }
 
+type RunFailure struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+}
+
 type EvidenceBundle struct {
 	APIVersion     string            `json:"api_version"`
 	RunID          string            `json:"run_id"`
@@ -150,6 +156,7 @@ type EvidenceBundle struct {
 	StartedAt      time.Time         `json:"started_at"`
 	FinishedAt     time.Time         `json:"finished_at"`
 	Fidelity       Fidelity          `json:"fidelity"`
+	Failure        *RunFailure       `json:"failure,omitempty"`
 }
 
 type ValidationEnvelope struct {

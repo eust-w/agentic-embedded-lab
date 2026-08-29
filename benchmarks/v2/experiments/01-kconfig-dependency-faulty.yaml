@@ -1,0 +1,22 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: build.failure
+      operator: ==
+duration_us: 1000
+faults: null
+id: 01-kconfig-dependency-faulty
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1001
+stimuli: null
+system_id: zephyr-build-case01-faulty
+timeout: 3e+11

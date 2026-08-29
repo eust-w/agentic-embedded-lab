@@ -7,7 +7,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <section className="sidebar-section worktree-section">
-        <div className="section-label">WORKTREE</div>
+        <div className="section-label">工作树</div>
         <button className="project-card">
           <span><strong>agentic-embedded-lab</strong><small>/Users/dev/agentic-embedded-lab</small></span>
           <span className="status-dot online" />
@@ -15,7 +15,7 @@ export function Sidebar() {
         </button>
       </section>
       <section className="sidebar-section thread-section">
-        <label className="search-field"><Search size={14} /><input aria-label="Search threads" placeholder="Search threads..." /><kbd>⌘K</kbd></label>
+        <label className="search-field"><Search size={14} /><input aria-label="搜索任务" placeholder="搜索任务…" /><kbd>⌘K</kbd></label>
         <div className="thread-list">
           {threads.map((thread) => (
             <button key={thread.id} className={`thread-row ${selectedThread === thread.id ? 'selected' : ''}`}>
@@ -25,18 +25,18 @@ export function Sidebar() {
         </div>
       </section>
       <section className="sidebar-section compact-section">
-        <div className="section-label">SCHEDULED</div>
-        <div className="utility-row"><CalendarClock size={14} /><span>Nightly HIL sweep</span><time>02:00</time></div>
-        <div className="utility-row"><CalendarClock size={14} /><span>Weekly static analysis</span><time>Sun</time></div>
+        <div className="section-label">自动化任务</div>
+        <div className="utility-row"><CalendarClock size={14} /><span>夜间 HIL 扫描</span><time>02:00</time></div>
+        <div className="utility-row"><CalendarClock size={14} /><span>每周静态分析</span><time>周日</time></div>
       </section>
       <section className="sidebar-section compact-section plugins-section">
-        <div className="section-label">PLUGINS</div>
+        <div className="section-label">插件</div>
         {['STM32Cube', 'pyOCD', 'Renode', 'clang-tidy'].map((name, index) => (
           <div className="utility-row" key={name}><Cpu size={14} /><span>{name}</span><span className={`status-dot ${index < 3 ? 'online' : ''}`} /></div>
         ))}
-        <button className="add-plugin"><Plus size={14} /> Add plugin</button>
+        <button className="add-plugin"><Plus size={14} /> 添加插件</button>
       </section>
-      <footer className="sidebar-footer"><span className="status-dot online" /> All systems operational</footer>
+      <footer className="sidebar-footer"><span className="status-dot online" /> 所有系统运行正常</footer>
     </aside>
   )
 }

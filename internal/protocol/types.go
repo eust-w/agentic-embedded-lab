@@ -81,6 +81,13 @@ type ToolCall struct {
 	IdempotencyKey string         `json:"idempotency_key"`
 }
 
+type ToolDefinition struct {
+	Type        string         `json:"type"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
 type ToolResult struct {
 	CallID      string         `json:"call_id"`
 	Success     bool           `json:"success"`

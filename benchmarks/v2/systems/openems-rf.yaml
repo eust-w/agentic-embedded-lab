@@ -1,0 +1,41 @@
+api_version: ael.dev/v2
+components:
+    - backend: openems
+      event_driven: true
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: antenna
+      model: benchmarks/models/openems/antenna_detuning.m
+      ports:
+        - direction: input
+          name: detune
+          type: real
+          unit: mm
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+        - direction: output
+          name: rf_loss_db
+          type: real
+          unit: dB
+        - direction: output
+          name: resonance_hz
+          type: real
+          unit: Hz
+        - direction: output
+          name: s11_db
+          type: real
+          unit: dB
+      properties: null
+      rollback: false
+      step_us: 0
+connections: null
+id: openems-antenna-reference

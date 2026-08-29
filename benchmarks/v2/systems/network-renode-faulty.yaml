@@ -1,0 +1,91 @@
+api_version: ael.dev/v2
+components:
+    - backend: ns3
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: network
+      model: benchmarks/models/ns3/ael-network.cc
+      ports:
+        - direction: input
+          name: interference_dbm
+          type: real
+          unit: dBm
+        - direction: input
+          name: partition_ms
+          type: real
+          unit: ms
+        - direction: input
+          name: retry_limit
+          type: integer
+          unit: "1"
+        - direction: input
+          name: protocol
+          type: integer
+          unit: "1"
+        - direction: input
+          name: rf_loss_db
+          type: real
+          unit: dB
+        - direction: output
+          name: retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+      properties:
+        program: scratch/ael-network
+      rollback: false
+      step_us: 1000
+    - backend: renode
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: mcu
+      model: benchmarks/models/renode/stm32f4-ael.repl
+      ports:
+        - direction: input
+          name: case_id
+          type: integer
+        - direction: input
+          name: network_retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: integer
+      properties:
+        firmware: firmware/zephyr/build-stm32-faulty/zephyr/zephyr.elf
+        input_registers:
+            case_id: 5.3700096e+08
+            network_retries: 5.3700098e+08
+        model_state: conformance_validated
+        output_registers:
+            failure: 5.37000968e+08
+        output_sentinels:
+            failure: 4.294967295e+09
+      rollback: false
+      step_us: 1000
+connections:
+    - source_component: network
+      source_port: retries
+      target_component: mcu
+      target_port: network_retries
+      unit: "1"
+id: firmware-network-cross-domain-faulty

@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 )
 
 const DefaultModel = "gpt-5.6"
@@ -29,27 +31,20 @@ func (s StaticAPIKey) APIKey(context.Context) (string, error) {
 	return string(s), nil
 }
 
-type ToolDefinition struct {
-	Type        string         `json:"type"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
-}
-
 type ImageInput struct {
 	MimeType string `json:"mime_type"`
 	DataURL  string `json:"data_url"`
 }
 
 type ResponseRequest struct {
-	Model      string            `json:"model"`
-	Input      []map[string]any  `json:"input"`
-	Tools      []ToolDefinition  `json:"tools,omitempty"`
-	Stream     bool              `json:"stream"`
-	Store      bool              `json:"store"`
-	PreviousID string            `json:"previous_response_id,omitempty"`
-	Reasoning  map[string]any    `json:"reasoning,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
+	Model      string                    `json:"model"`
+	Input      []map[string]any          `json:"input"`
+	Tools      []protocol.ToolDefinition `json:"tools,omitempty"`
+	Stream     bool                      `json:"stream"`
+	Store      bool                      `json:"store"`
+	PreviousID string                    `json:"previous_response_id,omitempty"`
+	Reasoning  map[string]any            `json:"reasoning,omitempty"`
+	Metadata   map[string]string         `json:"metadata,omitempty"`
 }
 
 type ResponseEvent struct {

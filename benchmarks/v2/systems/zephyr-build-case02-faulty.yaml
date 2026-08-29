@@ -1,0 +1,28 @@
+api_version: ael.dev/v2
+components:
+    - backend: zephyr_build
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: build
+      model: ""
+      ports:
+        - direction: output
+          name: failure
+          type: integer
+      properties:
+        case_id: 2
+        source: firmware/zephyr-build
+        timeout_s: 300
+        variant: faulty
+      rollback: false
+      step_us: 1000
+connections: null
+id: zephyr-build-case02-faulty

@@ -1,0 +1,92 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: antenna.failure
+      operator: ==
+    - expected: 0
+      id: A02
+      metric: network.failure
+      operator: ==
+    - expected: 0
+      id: A03
+      metric: mcu.failure
+      operator: ==
+    - expected: 0
+      id: A04
+      metric: circuit.failure
+      operator: ==
+    - expected: 0
+      id: A05
+      metric: plant.failure
+      operator: ==
+duration_us: 6000
+faults: null
+id: 24-antenna-cross-domain-fixed
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1024
+stimuli:
+    - at_us: 0
+      target: mcu.case_id
+      value: 24
+    - at_us: 0
+      target: circuit.source_resistance_ohm
+      unit: Ohm
+      value: 0.15
+    - at_us: 0
+      target: circuit.capacitance_uF
+      unit: uF
+      value: 47
+    - at_us: 0
+      target: circuit.load_microamp
+      unit: uA
+      value: 60000
+    - at_us: 0
+      target: circuit.rf_retries
+      value: 0
+    - at_us: 0
+      target: plant.thermal_resistance_K_per_W
+      unit: K/W
+      value: 18
+    - at_us: 0
+      target: plant.sleep_current_A
+      unit: A
+      value: 8e-06
+    - at_us: 0
+      target: plant.duty_cycle
+      value: 0.01
+    - at_us: 0
+      target: plant.input_power
+      unit: W
+      value: 0.18
+    - at_us: 0
+      target: plant.rf_retries
+      value: 0
+    - at_us: 0
+      target: network.interference_dbm
+      unit: dBm
+      value: -95
+    - at_us: 0
+      target: network.partition_ms
+      unit: ms
+      value: 0
+    - at_us: 0
+      target: network.retry_limit
+      value: 8
+    - at_us: 0
+      target: network.protocol
+      value: 0
+    - at_us: 0
+      target: antenna.detune
+      unit: mm
+      value: 0
+system_id: antenna-retry-power-thermal-five-domain-fixed
+timeout: 1.8e+12

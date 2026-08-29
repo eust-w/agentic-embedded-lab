@@ -1,0 +1,80 @@
+api_version: ael.dev/v2
+components:
+    - backend: renode
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: mcu
+      model: benchmarks/models/renode/stm32f4-ael.repl
+      ports:
+        - direction: input
+          name: case_id
+          type: integer
+        - direction: output
+          name: failure
+          type: integer
+      properties:
+        firmware: firmware/zephyr/build-stm32-faulty/zephyr/zephyr.elf
+        input_registers:
+            case_id: 5.3700096e+08
+        model_state: conformance_validated
+        output_registers:
+            failure: 5.37000968e+08
+        output_sentinels:
+            failure: 4.294967295e+09
+      rollback: false
+      step_us: 1000
+    - backend: openmodelica
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: plant
+      model: benchmarks/models/modelica/domain.mos
+      ports:
+        - direction: input
+          name: thermal_resistance_K_per_W
+          type: real
+          unit: K/W
+        - direction: input
+          name: sleep_current_A
+          type: real
+          unit: A
+        - direction: input
+          name: duty_cycle
+          type: real
+          unit: "1"
+        - direction: input
+          name: input_power
+          type: real
+          unit: W
+        - direction: input
+          name: rf_retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+        - direction: output
+          name: temperature
+          type: real
+          unit: Cel
+      properties: null
+      rollback: false
+      step_us: 1000
+connections: null
+id: firmware-thermal-cross-domain-faulty

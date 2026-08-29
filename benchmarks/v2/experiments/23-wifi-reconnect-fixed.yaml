@@ -1,0 +1,43 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: network.failure
+      operator: ==
+    - expected: 0
+      id: A02
+      metric: mcu.failure
+      operator: ==
+duration_us: 6000
+faults: null
+id: 23-wifi-reconnect-fixed
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1023
+stimuli:
+    - at_us: 0
+      target: mcu.case_id
+      value: 23
+    - at_us: 0
+      target: network.interference_dbm
+      unit: dBm
+      value: -95
+    - at_us: 0
+      target: network.partition_ms
+      unit: ms
+      value: 0
+    - at_us: 0
+      target: network.retry_limit
+      value: 8
+    - at_us: 0
+      target: network.protocol
+      value: 1
+system_id: firmware-network-cross-domain-fixed
+timeout: 3e+11

@@ -10,6 +10,7 @@ require (
 	github.com/teambition/rrule-go v1.8.2
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/wailsapp/wails/v2 v2.12.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.39.1
 )
 

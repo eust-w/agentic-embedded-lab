@@ -1,0 +1,40 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: circuit.failure
+      operator: ==
+duration_us: 6000
+faults: null
+id: 19-decoupling-brownout-faulty
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1019
+stimuli:
+    - at_us: 0
+      target: mcu.case_id
+      value: 19
+    - at_us: 0
+      target: circuit.source_resistance_ohm
+      unit: Ohm
+      value: 12
+    - at_us: 0
+      target: circuit.capacitance_uF
+      unit: uF
+      value: 2.2
+    - at_us: 0
+      target: circuit.load_microamp
+      unit: uA
+      value: 160000
+    - at_us: 0
+      target: circuit.rf_retries
+      value: 0
+system_id: firmware-power-cross-domain-faulty
+timeout: 3e+11

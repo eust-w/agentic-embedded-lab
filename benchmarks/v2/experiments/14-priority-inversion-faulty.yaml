@@ -1,0 +1,25 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: mcu.failure
+      operator: ==
+duration_us: 3000
+faults: null
+id: 14-priority-inversion-faulty
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1014
+stimuli:
+    - at_us: 0
+      target: mcu.case_id
+      value: 14
+system_id: renode-zephyr-dual-architecture-reference-faulty
+timeout: 3e+11

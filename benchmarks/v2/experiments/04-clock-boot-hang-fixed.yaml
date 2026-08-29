@@ -1,0 +1,25 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: mcu.failure
+      operator: ==
+duration_us: 3000
+faults: null
+id: 04-clock-boot-hang-fixed
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1004
+stimuli:
+    - at_us: 0
+      target: mcu.case_id
+      value: 4
+system_id: renode-zephyr-dual-architecture-reference-fixed
+timeout: 3e+11

@@ -12,7 +12,11 @@ import (
 	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
+	"github.com/eust-w/agentic-embedded-lab/internal/approval"
+	"github.com/eust-w/agentic-embedded-lab/internal/executor"
+	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
+	"github.com/eust-w/agentic-embedded-lab/internal/tools"
 )
 
 type Request struct {
@@ -106,6 +110,28 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 	switch request.Method {
 	case "health":
 		response.Result = map[string]any{"status": "ready", "time": time.Now().UTC()}
+	case "project.open":
+		var params struct {
+			ProjectID  string                     `json:"project_id"`
+			Root       string                     `json:"root"`
+			Permission protocol.PermissionProfile `json:"permission"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil || params.ProjectID == "" || !filepath.IsAbs(params.Root) {
+			response.Error = "project id and absolute root are required"
+			break
+		}
+		info, err := os.Stat(params.Root)
+		if err != nil || !info.IsDir() {
+			response.Error = "project root is not an accessible directory"
+			break
+		}
+		registry := tools.NewRegistry()
+		_ = registry.Register(tools.FileTool{Workspace: params.Root})
+		_ = registry.Register(tools.SearchTool{Workspace: params.Root, MaxResults: 200})
+		_ = registry.Register(tools.CommandTool{Workspace: params.Root, Executor: executor.New(), Profile: params.Permission})
+		s.Runtime.RegisterProject(params.ProjectID, params.Root)
+		s.Runtime.ConfigureTools(registry, approval.New(), plugins.NewHookDispatcher())
+		response.Result = map[string]any{"project_id": params.ProjectID, "root": params.Root, "tools": registry.Definitions()}
 	case "thread.create":
 		var params struct {
 			ProjectID  string                     `json:"project_id"`
@@ -161,6 +187,16 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 			break
 		}
 		response.Result = map[string]bool{"cancelled": s.Runtime.CancelTurn(params.TurnID)}
+	case "approval.resolve":
+		var params struct {
+			ApprovalID string `json:"approval_id"`
+			Allow      bool   `json:"allow"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		response.Result = map[string]bool{"resolved": s.Runtime.ResolveApproval(params.ApprovalID, params.Allow)}
 	default:
 		response.Error = "unknown method"
 	}

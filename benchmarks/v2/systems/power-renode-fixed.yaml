@@ -1,0 +1,86 @@
+api_version: ael.dev/v2
+components:
+    - backend: renode
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: mcu
+      model: benchmarks/models/renode/stm32f4-ael.repl
+      ports:
+        - direction: input
+          name: case_id
+          type: integer
+        - direction: output
+          name: current
+          type: real
+          unit: uA
+        - direction: output
+          name: failure
+          type: integer
+      properties:
+        firmware: firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf
+        input_registers:
+            case_id: 5.3700096e+08
+        model_state: conformance_validated
+        output_registers:
+            current: 5.37000976e+08
+            failure: 5.37000968e+08
+        output_sentinels:
+            failure: 4.294967295e+09
+      rollback: false
+      step_us: 1000
+    - backend: ngspice
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: circuit
+      model: benchmarks/models/ngspice/power_path.cir
+      ports:
+        - direction: input
+          name: load_microamp
+          type: real
+          unit: uA
+        - direction: input
+          name: source_resistance_ohm
+          type: real
+          unit: Ohm
+        - direction: input
+          name: capacitance_uF
+          type: real
+          unit: uF
+        - direction: input
+          name: rf_retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+        - direction: output
+          name: supply_voltage
+          type: real
+          unit: V
+      properties: null
+      rollback: false
+      step_us: 1000
+connections:
+    - source_component: mcu
+      source_port: current
+      target_component: circuit
+      target_port: load_microamp
+      unit: uA
+id: firmware-power-cross-domain-fixed

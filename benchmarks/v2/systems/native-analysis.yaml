@@ -1,0 +1,33 @@
+api_version: ael.dev/v2
+components:
+    - backend: native
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: analysis
+      model: benchmarks/models/native/build-analysis.json
+      ports:
+        - direction: input
+          name: case_id
+          type: integer
+        - direction: input
+          name: fixed
+          type: boolean
+        - direction: output
+          name: failure
+          type: integer
+        - direction: output
+          name: diagnostic
+          type: string
+      properties: null
+      rollback: false
+      step_us: 1000
+connections: null
+id: native-build-analysis

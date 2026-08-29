@@ -1,0 +1,58 @@
+api_version: ael.dev/v2
+components:
+    - backend: ns3
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: network
+      model: benchmarks/models/ns3/ael-network.cc
+      ports:
+        - direction: input
+          name: interference_dbm
+          type: real
+          unit: dBm
+        - direction: input
+          name: partition_ms
+          type: real
+          unit: ms
+        - direction: input
+          name: retry_limit
+          type: integer
+          unit: "1"
+        - direction: input
+          name: protocol
+          type: integer
+          unit: "1"
+        - direction: input
+          name: rf_loss_db
+          type: real
+          unit: dB
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+        - direction: output
+          name: packet_loss
+          type: real
+          unit: "1"
+        - direction: output
+          name: retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: latency_ms
+          type: real
+          unit: ms
+      properties:
+        program: scratch/ael-network
+      rollback: false
+      step_us: 1000
+connections: null
+id: ns3-network-reference

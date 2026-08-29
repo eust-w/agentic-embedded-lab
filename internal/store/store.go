@@ -334,6 +334,60 @@ func (s *Store) Items(ctx context.Context, threadID string, after int64, limit i
 
 func (s *Store) DB() *sql.DB { return s.db }
 
+func (s *Store) BeginToolCall(ctx context.Context, call protocol.ToolCall) (bool, protocol.ToolResult, error) {
+	arguments, err := json.Marshal(call.Arguments)
+	if err != nil {
+		return false, protocol.ToolResult{}, err
+	}
+	now := formatTime(time.Now().UTC())
+	result, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO tool_calls
+		(id, thread_id, turn_id, name, idempotency_key, arguments_json, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)`, call.ID, call.ThreadID, call.TurnID,
+		call.Name, call.IdempotencyKey, arguments, now, now)
+	if err != nil {
+		return false, protocol.ToolResult{}, err
+	}
+	rows, _ := result.RowsAffected()
+	if rows > 0 {
+		return true, protocol.ToolResult{}, nil
+	}
+	var payload []byte
+	var status string
+	if err := s.db.QueryRowContext(ctx, `SELECT status, COALESCE(result_json, '{}') FROM tool_calls
+		WHERE idempotency_key = ?`, call.IdempotencyKey).Scan(&status, &payload); err != nil {
+		return false, protocol.ToolResult{}, err
+	}
+	var cached protocol.ToolResult
+	if status == "completed" || status == "failed" {
+		if err := json.Unmarshal(payload, &cached); err != nil {
+			return false, protocol.ToolResult{}, err
+		}
+		return false, cached, nil
+	}
+	return false, protocol.ToolResult{}, errors.New("tool call with this idempotency key is already running")
+}
+
+func (s *Store) FinishToolCall(ctx context.Context, idempotencyKey string, result protocol.ToolResult) error {
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	status := "completed"
+	if !result.Success {
+		status = "failed"
+	}
+	updated, err := s.db.ExecContext(ctx, `UPDATE tool_calls SET status=?, result_json=?, updated_at=?
+		WHERE idempotency_key=?`, status, payload, formatTime(time.Now().UTC()), idempotencyKey)
+	if err != nil {
+		return err
+	}
+	rows, _ := updated.RowsAffected()
+	if rows != 1 {
+		return errors.New("tool call was not found")
+	}
+	return nil
+}
+
 func formatTime(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
 
 func parseTime(value string) (time.Time, error) {

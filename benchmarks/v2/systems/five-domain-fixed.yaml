@@ -1,0 +1,243 @@
+api_version: ael.dev/v2
+components:
+    - backend: openems
+      event_driven: true
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: antenna
+      model: benchmarks/models/openems/antenna_detuning.m
+      ports:
+        - direction: input
+          name: detune
+          type: real
+          unit: mm
+        - direction: output
+          name: rf_loss_db
+          type: real
+          unit: dB
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+      properties: null
+      rollback: false
+      step_us: 0
+    - backend: ns3
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: network
+      model: benchmarks/models/ns3/ael-network.cc
+      ports:
+        - direction: input
+          name: rf_loss_db
+          type: real
+          unit: dB
+        - direction: input
+          name: interference_dbm
+          type: real
+          unit: dBm
+        - direction: input
+          name: partition_ms
+          type: real
+          unit: ms
+        - direction: input
+          name: retry_limit
+          type: integer
+          unit: "1"
+        - direction: input
+          name: protocol
+          type: integer
+          unit: "1"
+        - direction: output
+          name: retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+      properties:
+        program: scratch/ael-network
+      rollback: false
+      step_us: 1000
+    - backend: renode
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: mcu
+      model: benchmarks/models/renode/stm32f4-ael.repl
+      ports:
+        - direction: input
+          name: case_id
+          type: integer
+        - direction: input
+          name: network_retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: retries
+          type: real
+          unit: "1"
+        - direction: output
+          name: current
+          type: real
+          unit: uA
+        - direction: output
+          name: failure
+          type: integer
+      properties:
+        firmware: firmware/zephyr/build-stm32-fixed/zephyr/zephyr.elf
+        input_registers:
+            case_id: 5.3700096e+08
+            network_retries: 5.3700098e+08
+        model_state: conformance_validated
+        output_registers:
+            current: 5.37000976e+08
+            failure: 5.37000968e+08
+            retries: 5.37000972e+08
+        output_scales:
+            retries: 0.001
+        output_sentinels:
+            failure: 4.294967295e+09
+      rollback: false
+      step_us: 1000
+    - backend: ngspice
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: circuit
+      model: benchmarks/models/ngspice/power_path.cir
+      ports:
+        - direction: input
+          name: load_microamp
+          type: real
+          unit: uA
+        - direction: input
+          name: rf_retries
+          type: real
+          unit: "1"
+        - direction: input
+          name: source_resistance_ohm
+          type: real
+          unit: Ohm
+        - direction: input
+          name: capacitance_uF
+          type: real
+          unit: uF
+        - direction: output
+          name: power
+          type: real
+          unit: W
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+      properties: null
+      rollback: false
+      step_us: 1000
+    - backend: openmodelica
+      event_driven: false
+      fidelity:
+        firmware: functional
+        hardware_validated: false
+        limitations:
+            - migrated functional model; no hardware calibration
+        physical: unsupported
+        protocol: functional
+        register: synthetic
+        timing: functional
+      id: plant
+      model: benchmarks/models/modelica/domain.mos
+      ports:
+        - direction: input
+          name: input_power
+          type: real
+          unit: W
+        - direction: input
+          name: rf_retries
+          type: real
+          unit: "1"
+        - direction: input
+          name: thermal_resistance_K_per_W
+          type: real
+          unit: K/W
+        - direction: input
+          name: sleep_current_A
+          type: real
+          unit: A
+        - direction: input
+          name: duty_cycle
+          type: real
+          unit: "1"
+        - direction: output
+          name: temperature
+          type: real
+          unit: Cel
+        - direction: output
+          name: failure
+          type: real
+          unit: "1"
+      properties: null
+      rollback: false
+      step_us: 1000
+connections:
+    - source_component: antenna
+      source_port: rf_loss_db
+      target_component: network
+      target_port: rf_loss_db
+      unit: dB
+    - source_component: network
+      source_port: retries
+      target_component: mcu
+      target_port: network_retries
+      unit: "1"
+    - source_component: mcu
+      source_port: current
+      target_component: circuit
+      target_port: load_microamp
+      unit: uA
+    - source_component: mcu
+      source_port: retries
+      target_component: circuit
+      target_port: rf_retries
+      unit: "1"
+    - source_component: mcu
+      source_port: retries
+      target_component: plant
+      target_port: rf_retries
+      unit: "1"
+    - source_component: circuit
+      source_port: power
+      target_component: plant
+      target_port: input_power
+      unit: W
+id: antenna-retry-power-thermal-five-domain-fixed

@@ -9,6 +9,7 @@ import (
 
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
+	"github.com/eust-w/agentic-embedded-lab/internal/launchagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/secret"
 	"github.com/google/uuid"
@@ -17,11 +18,12 @@ import (
 const daemonTokenAccount = "daemon-capability-token"
 
 type Backend struct {
-	ctx    context.Context
-	client *daemon.Client
+	ctx     context.Context
+	client  *daemon.Client
+	service launchagent.Service
 }
 
-func NewBackend() *Backend { return &Backend{} }
+func NewBackend() *Backend { return &Backend{service: launchagent.New()} }
 
 func (b *Backend) Startup(ctx context.Context) {
 	b.ctx = ctx
@@ -36,6 +38,13 @@ func (b *Backend) Health() (map[string]any, error) {
 	}
 	var result map[string]any
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "health"}, &result)
+	return result, err
+}
+
+func (b *Backend) OpenProject(projectID, root string, permission protocol.PermissionProfile) (map[string]any, error) {
+	var result map[string]any
+	params, _ := json.Marshal(map[string]any{"project_id": projectID, "root": root, "permission": permission})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "project.open", Params: params}, &result)
 	return result, err
 }
 
@@ -78,6 +87,19 @@ func (b *Backend) CancelTurn(turnID string) (bool, error) {
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "turn.cancel", Params: params}, &result)
 	return result["cancelled"], err
 }
+
+func (b *Backend) ResolveApproval(approvalID string, allow bool) (bool, error) {
+	var result map[string]bool
+	params, _ := json.Marshal(map[string]any{"approval_id": approvalID, "allow": allow})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "approval.resolve", Params: params}, &result)
+	return result["resolved"], err
+}
+
+func (b *Backend) BackgroundServiceStatus() launchagent.Status { return b.service.Status() }
+
+func (b *Backend) InstallBackgroundService() error { return b.service.Register() }
+
+func (b *Backend) UninstallBackgroundService() error { return b.service.Unregister() }
 
 func defaultSocketPath() string {
 	home, err := os.UserHomeDir()

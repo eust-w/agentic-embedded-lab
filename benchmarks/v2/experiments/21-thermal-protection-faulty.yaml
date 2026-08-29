@@ -1,0 +1,43 @@
+api_version: ael.dev/v2
+assertions:
+    - expected: 0
+      id: A01
+      metric: plant.failure
+      operator: ==
+duration_us: 6000
+faults: null
+id: 21-thermal-protection-faulty
+macro_step_us: 1000
+required_fidelity:
+    firmware: functional
+    hardware_validated: false
+    limitations: null
+    physical: unsupported
+    protocol: functional
+    register: synthetic
+    timing: functional
+seed: 1021
+stimuli:
+    - at_us: 0
+      target: mcu.case_id
+      value: 21
+    - at_us: 0
+      target: plant.thermal_resistance_K_per_W
+      unit: K/W
+      value: 95
+    - at_us: 0
+      target: plant.sleep_current_A
+      unit: A
+      value: 0.0012
+    - at_us: 0
+      target: plant.duty_cycle
+      value: 0.2
+    - at_us: 0
+      target: plant.input_power
+      unit: W
+      value: 0.65
+    - at_us: 0
+      target: plant.rf_retries
+      value: 0
+system_id: firmware-thermal-cross-domain-faulty
+timeout: 3e+11
