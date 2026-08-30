@@ -2,7 +2,9 @@ package release
 
 import (
 	"bufio"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,15 +14,20 @@ import (
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/benchmark"
+	"github.com/eust-w/agentic-embedded-lab/internal/packaging"
 )
 
 type Profile string
 
 const (
-	Foundation Profile = "foundation"
-	Simulation Profile = "simulation"
-	Software   Profile = "software"
-	Production Profile = "production"
+	Foundation           Profile = "foundation"
+	Desktop              Profile = "desktop"
+	Agent                Profile = "agent"
+	Simulation           Profile = "simulation"
+	SimulationExtensions Profile = "simulation-extensions"
+	Software             Profile = "software"
+	DevelopmentPackage   Profile = "development-package"
+	Production           Profile = "production"
 )
 
 type Result struct {
@@ -47,6 +54,30 @@ func Check(workspace string, profile Profile) (Result, error) {
 		result.Passed = len(result.Failures) == 0
 		return result, nil
 	}
+	if profile == DevelopmentPackage {
+		report := packaging.CheckBundle(filepath.Join(root, "build", "bin", "Aether Desktop.app"), false)
+		result.Checked = append(result.Checked, "build/bin/Aether Desktop.app")
+		if !report.Passed {
+			result.Failures = append(result.Failures, report.Error().Error())
+		}
+		result.Passed = len(result.Failures) == 0
+		return result, nil
+	}
+	if profile == Desktop || profile == Agent {
+		manifest, err := loadManifest(filepath.Join(root, "acceptance", "v2", "capabilities.json"))
+		if err != nil {
+			result.Failures = append(result.Failures, "capability evidence: "+err.Error())
+		} else {
+			required := []string{"desktop.shell", "engineering.git-terminal", "browser.computer-use"}
+			if profile == Agent {
+				required = []string{"agent.runtime", "security.approval-sandbox", "customization.plugins-mcp", "multiagent.automation", "modeling.behavior-ir"}
+			}
+			result.Failures = append(result.Failures, validateEntries(root, manifest, required)...)
+			result.Checked = append(result.Checked, "acceptance/v2/capabilities.json")
+		}
+		result.Passed = len(result.Failures) == 0
+		return result, nil
+	}
 	catalog, err := benchmark.Load(root, "benchmarks/v2/catalog.yaml")
 	if err != nil {
 		return Result{}, err
@@ -65,6 +96,24 @@ func Check(workspace string, profile Profile) (Result, error) {
 	if profile == Simulation {
 		result.Passed = len(result.Failures) == 0
 		return result, nil
+	}
+	extensions, extensionsErr := loadManifest(filepath.Join(root, "acceptance", "v2", "extensions.json"))
+	if extensionsErr != nil {
+		result.Failures = append(result.Failures, "simulation extension evidence: "+extensionsErr.Error())
+	} else {
+		result.Failures = append(result.Failures, validateEntries(root, extensions, []string{"extension:rtl", "extension:motor", "extension:battery", "extension:sensor", "extension:pcb", "extension:emc"})...)
+		result.Checked = append(result.Checked, "acceptance/v2/extensions.json")
+	}
+	if profile == SimulationExtensions {
+		result.Passed = len(result.Failures) == 0
+		return result, nil
+	}
+	capabilities, capabilityErr := loadManifest(filepath.Join(root, "acceptance", "v2", "capabilities.json"))
+	if capabilityErr != nil {
+		result.Failures = append(result.Failures, "capability evidence: "+capabilityErr.Error())
+	} else {
+		result.Failures = append(result.Failures, validateEntries(root, capabilities, []string{"desktop.shell", "agent.runtime", "engineering.git-terminal", "security.approval-sandbox", "customization.plugins-mcp", "multiagent.automation", "browser.computer-use", "modeling.behavior-ir", "server.worker-storage"})...)
+		result.Checked = append(result.Checked, "acceptance/v2/capabilities.json")
 	}
 	software, err := loadManifest(filepath.Join(root, "acceptance", "v2", "software.json"))
 	if err != nil {
@@ -151,6 +200,76 @@ func validateEntries(root string, manifest benchmark.AcceptanceManifest, require
 		if strings.HasPrefix(name, "benchmark:") {
 			failures = append(failures, validateCaseRuns(root, path, manifest.SourceRevision)...)
 		}
+		if strings.HasPrefix(name, "extension:") {
+			failures = append(failures, validateExtensionRuns(root, path, manifest.SourceRevision)...)
+		}
+		if strings.HasPrefix(name, "hardware:") || strings.HasPrefix(name, "calibration:") || strings.HasPrefix(name, "claims:") {
+			failures = append(failures, validateProductionEvidence(root, path)...)
+		}
+	}
+	return failures
+}
+
+func validateProductionEvidence(root, path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	var evidence struct {
+		HardwareValidated bool                   `json:"hardware_validated"`
+		HumanApproved     bool                   `json:"human_approved"`
+		Envelope          ael.ValidationEnvelope `json:"envelope"`
+	}
+	if json.Unmarshal(data, &evidence) != nil || !evidence.HardwareValidated || !evidence.HumanApproved || evidence.Envelope.SignedBy == "" || evidence.Envelope.Signature == "" || len(evidence.Envelope.EvidenceRunIDs) == 0 {
+		return []string{"production evidence lacks hardware validation, human approval, runs, or signature: " + path}
+	}
+	keysData, err := os.ReadFile(filepath.Join(root, "lab", "trusted-reviewers.json"))
+	if err != nil {
+		return []string{"trusted production reviewer registry is missing"}
+	}
+	var keys map[string]string
+	if json.Unmarshal(keysData, &keys) != nil {
+		return []string{"trusted reviewer registry is invalid"}
+	}
+	publicRaw, err := base64.StdEncoding.DecodeString(keys[evidence.Envelope.SignedBy])
+	if err != nil || len(publicRaw) != ed25519.PublicKeySize {
+		return []string{"production reviewer is not trusted: " + evidence.Envelope.SignedBy}
+	}
+	signature, err := base64.StdEncoding.DecodeString(evidence.Envelope.Signature)
+	if err != nil {
+		return []string{"production signature is invalid base64"}
+	}
+	envelope := evidence.Envelope
+	envelope.Signature = ""
+	payload, _ := json.Marshal(envelope)
+	if !ed25519.Verify(ed25519.PublicKey(publicRaw), payload, signature) {
+		return []string{"production envelope signature verification failed"}
+	}
+	return nil
+}
+
+func validateExtensionRuns(root, path, revision string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	var evidence struct {
+		SourceRevision string `json:"source_revision"`
+		Checks         []struct {
+			RunPath string `json:"run_path"`
+			Passed  bool   `json:"passed"`
+		} `json:"checks"`
+	}
+	if json.Unmarshal(data, &evidence) != nil || evidence.SourceRevision != revision {
+		return []string{"invalid or stale extension evidence: " + path}
+	}
+	var failures []string
+	for _, check := range evidence.Checks {
+		if !check.Passed || filepath.IsAbs(check.RunPath) || !strings.HasPrefix(check.RunPath, "runs/") {
+			failures = append(failures, "invalid extension run reference: "+check.RunPath)
+			continue
+		}
+		failures = append(failures, validateRunBundle(filepath.Join(root, filepath.FromSlash(check.RunPath)), revision)...)
 	}
 	return failures
 }

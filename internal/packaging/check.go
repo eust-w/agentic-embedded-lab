@@ -38,7 +38,7 @@ func CheckBundle(app string, release bool) Report {
 	infoPath := filepath.Join(app, "Contents", "Info.plist")
 	info, infoErr := os.ReadFile(infoPath)
 	add("bundle:info-plist", infoErr == nil && strings.Contains(string(info), "dev.aether.desktop") && strings.Contains(string(info), "14.0"), infoPath)
-	for _, name := range []string{"Aether Desktop", "aetherd", "ael-backend", "aether-chrome-host"} {
+	for _, name := range []string{"Aether Desktop", "aetherd", "ael-backend", "aether-chrome-host", "aether-mcp"} {
 		path := filepath.Join(app, "Contents", "MacOS", name)
 		file, err := macho.Open(path)
 		passed := err == nil && file.Cpu == macho.CpuArm64

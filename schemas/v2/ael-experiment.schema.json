@@ -102,6 +102,18 @@
           },
           "to_us": {
             "type": "integer"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "related_event_type": {
+            "type": "string"
+          },
+          "deadline_us": {
+            "type": "integer"
+          },
+          "minimum_duration_us": {
+            "type": "integer"
           }
         },
         "additionalProperties": false,

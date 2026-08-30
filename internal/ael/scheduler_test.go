@@ -11,6 +11,8 @@ type fakeAdapter struct {
 	inputs    map[string]any
 	steps     []int64
 	snapshots int
+	restores  int
+	failOnce  bool
 }
 
 func (f *fakeAdapter) Prepare(context.Context, Component, int64) error { return nil }
@@ -22,6 +24,10 @@ func (f *fakeAdapter) Inject(ctx context.Context, target string, value any, at i
 	return []Event{{Type: "stimulus.injected", Payload: map[string]any{"target": target, "value": value}}}, nil
 }
 func (f *fakeAdapter) Step(ctx context.Context, at, step int64) (StepResult, error) {
+	if f.failOnce {
+		f.failOnce = false
+		return StepResult{}, context.DeadlineExceeded
+	}
 	f.steps = append(f.steps, step)
 	result := StepResult{Metrics: map[string]float64{"failure": 0}, Events: []Event{{Type: "component.stepped", FidelityRef: "functional", Payload: map[string]any{"step_us": step}}}}
 	if f.component.ID == "source" {
@@ -34,6 +40,7 @@ func (f *fakeAdapter) Step(ctx context.Context, at, step int64) (StepResult, err
 	}
 	return result, nil
 }
+func (f *fakeAdapter) Restore(context.Context, string) error { f.restores++; return nil }
 func (f *fakeAdapter) Snapshot(context.Context, int64) (string, error) {
 	f.snapshots++
 	return "snapshot", nil
@@ -140,7 +147,7 @@ func TestTemporalAssertionsUseWindowedMaxAndPercentile(t *testing.T) {
 	results := evaluateAssertions([]Assertion{
 		{ID: "max", Metric: "m.current", Operator: "==", Expected: 4, Aggregation: "max", FromUS: &from, ToUS: &to},
 		{ID: "p95", Metric: "m.current", Operator: "==", Expected: 4, Aggregation: "p95", FromUS: &from, ToUS: &to},
-	}, metrics, samples)
+	}, metrics, samples, nil)
 	if !results[0].Passed || !results[1].Passed || results[0].ObservedAtUS != 2000 {
 		t.Fatalf("unexpected temporal assertions: %#v", results)
 	}
@@ -191,5 +198,65 @@ func TestTraceOrderingDoesNotDependOnGoMapIteration(t *testing.T) {
 		} else if bundle.TraceSHA256 != expected {
 			t.Fatalf("trace order changed: %s != %s", bundle.TraceSHA256, expected)
 		}
+	}
+}
+
+func TestRollbackRestoresAndRetriesExactlyOnce(t *testing.T) {
+	adapter := &fakeAdapter{component: Component{ID: "plant"}, failOnce: true}
+	system := System{APIVersion: APIVersion, ID: "rollback", Components: []Component{{ID: "plant", Backend: BackendModelica, Rollback: true}}}
+	experiment := Experiment{APIVersion: APIVersion, ID: "rollback", SystemID: system.ID, DurationUS: 1000, MacroStepUS: 1000, Timeout: time.Second}
+	bundle, err := (Scheduler{Factories: map[Backend]AdapterFactory{BackendModelica: func(Component) (Adapter, error) { return adapter, nil }}}).Run(context.Background(), experiment, system, "revision")
+	if err != nil || adapter.restores != 1 || len(adapter.steps) != 1 {
+		t.Fatalf("rollback bundle=%#v restores=%d steps=%v err=%v", bundle, adapter.restores, adapter.steps, err)
+	}
+	found := false
+	for _, event := range bundle.Events {
+		found = found || event.Type == "scheduler.rollback_retry"
+	}
+	if !found {
+		t.Fatal("rollback event missing")
+	}
+}
+
+func TestEventAssertionsCoverCountOrderDeadlineAndDuration(t *testing.T) {
+	deadline, duration := int64(1500), int64(1000)
+	events := []Event{{Sequence: 1, VirtualTimeUS: 500, Type: "start"}, {Sequence: 2, VirtualTimeUS: 1000, Type: "tick"}, {Sequence: 3, VirtualTimeUS: 2000, Type: "tick"}, {Sequence: 4, VirtualTimeUS: 2500, Type: "stop"}}
+	results := evaluateAssertions([]Assertion{
+		{ID: "count", Aggregation: "event_count", EventType: "tick", Operator: "==", Expected: 2},
+		{ID: "order", Aggregation: "event_before", EventType: "start", RelatedEventType: "stop", Operator: "==", Expected: 1},
+		{ID: "deadline", Aggregation: "event_deadline", EventType: "start", DeadlineUS: &deadline, Operator: "==", Expected: 1},
+		{ID: "duration", Aggregation: "event_duration", EventType: "tick", MinimumDurationUS: &duration, Operator: ">=", Expected: 1000},
+	}, nil, nil, events)
+	for _, result := range results {
+		if !result.Passed {
+			t.Fatalf("event assertion failed: %#v", results)
+		}
+	}
+}
+
+type algebraicAdapter struct{ input float64 }
+
+func (*algebraicAdapter) Prepare(context.Context, Component, int64) error { return nil }
+func (a *algebraicAdapter) Inject(_ context.Context, _ string, value any, _ int64) ([]Event, error) {
+	a.input = value.(float64)
+	return nil, nil
+}
+func (a *algebraicAdapter) Step(context.Context, int64, int64) (StepResult, error) {
+	return StepResult{Outputs: map[string]float64{"out": (a.input + 1) / 2}}, nil
+}
+func (*algebraicAdapter) Snapshot(context.Context, int64) (string, error) { return "checkpoint", nil }
+func (*algebraicAdapter) Restore(context.Context, string) error           { return nil }
+func (*algebraicAdapter) Shutdown(context.Context) error                  { return nil }
+
+func TestRollbackFixedPointAlgebraicLoopConverges(t *testing.T) {
+	a, b := &algebraicAdapter{}, &algebraicAdapter{}
+	system := System{APIVersion: APIVersion, ID: "loop", AlgebraicSolver: &AlgebraicSolver{Method: "fixed_point", Tolerance: 0.001, MaxIterations: 20}, Components: []Component{
+		{ID: "a", Backend: BackendNgspice, Rollback: true, Ports: []Port{{Name: "in", Direction: "input", Type: "real", Unit: "1"}, {Name: "out", Direction: "output", Type: "real", Unit: "1"}}},
+		{ID: "b", Backend: BackendModelica, Rollback: true, Ports: []Port{{Name: "in", Direction: "input", Type: "real", Unit: "1"}, {Name: "out", Direction: "output", Type: "real", Unit: "1"}}},
+	}, Connections: []Connection{{SourceComponent: "a", SourcePort: "out", TargetComponent: "b", TargetPort: "in", Unit: "1"}, {SourceComponent: "b", SourcePort: "out", TargetComponent: "a", TargetPort: "in", Unit: "1"}}}
+	experiment := Experiment{APIVersion: APIVersion, ID: "loop", SystemID: system.ID, DurationUS: 1000, MacroStepUS: 1000, Timeout: time.Second, Assertions: []Assertion{{ID: "fixed", Metric: "a.out", Operator: ">", Expected: 0.99}}}
+	bundle, err := (Scheduler{Factories: map[Backend]AdapterFactory{BackendNgspice: func(Component) (Adapter, error) { return a, nil }, BackendModelica: func(Component) (Adapter, error) { return b, nil }}}).Run(context.Background(), experiment, system, "revision")
+	if err != nil || !bundle.Assertions[0].Passed {
+		t.Fatalf("algebraic result=%#v err=%v", bundle.Assertions, err)
 	}
 }

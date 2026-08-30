@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
+	"github.com/eust-w/agentic-embedded-lab/internal/release"
 )
 
 type WorkerConfig struct {
@@ -110,6 +111,16 @@ func (w *Worker) handle(ctx context.Context, task Task) (map[string]any, error) 
 		}
 		bundle, evidence, err := (ael.Engine{Workspace: w.config.Workspace, BackendExecutable: w.config.BackendExecutable}).RunFiles(ctx, experiment, system, revision)
 		return map[string]any{"status": statusFor(err), "evidence_path": evidence, "bundle": bundle}, err
+	case "acceptance":
+		profile, _ := task.Payload["profile"].(string)
+		result, err := release.Check(w.config.Workspace, release.Profile(profile))
+		if err != nil {
+			return nil, err
+		}
+		if !result.Passed {
+			return map[string]any{"status": "failed", "acceptance": result}, errors.New("acceptance profile failed")
+		}
+		return map[string]any{"status": "passed", "acceptance": result}, nil
 	default:
 		return nil, fmt.Errorf("unsupported worker task kind %q", kind)
 	}

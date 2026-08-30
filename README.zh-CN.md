@@ -57,6 +57,10 @@ go run ./cmd/schema-export --output schemas/v2
 ./scripts/fetch_macos_dependencies.sh
 ./scripts/build_mac_app.sh --development
 go run ./cmd/aether-package-check
+go run ./cmd/aether-capability-acceptance
+go run ./cmd/ael-extension-acceptance --workspace .
+go run ./cmd/ael capabilities list
+go run ./cmd/ael acceptance report
 go run ./cmd/ael release check --profile foundation
 go run ./cmd/ael release check --profile simulation
 go run ./cmd/ael release check --profile software

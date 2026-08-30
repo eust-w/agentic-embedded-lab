@@ -40,6 +40,7 @@ CGO_LDFLAGS='-framework UniformTypeIdentifiers' GOPROXY=off GOCACHE="${GOCACHE:-
 GOCACHE="${GOCACHE:-/private/tmp/aether-go-build-cache}" go build -trimpath -o "$MACOS/aetherd" ./cmd/aetherd
 GOCACHE="${GOCACHE:-/private/tmp/aether-go-build-cache}" go build -trimpath -o "$MACOS/ael-backend" ./cmd/ael-backend
 GOCACHE="${GOCACHE:-/private/tmp/aether-go-build-cache}" go build -trimpath -o "$MACOS/aether-chrome-host" ./cmd/aether-chrome-host
+GOCACHE="${GOCACHE:-/private/tmp/aether-go-build-cache}" go build -trimpath -o "$MACOS/aether-mcp" ./cmd/aether-mcp
 popd >/dev/null
 
 cp "$ROOT/packaging/macos/dev.aether.desktop.daemon.plist" "$LAUNCH_AGENTS/"
@@ -86,7 +87,7 @@ fi
 /usr/libexec/PlistBuddy -c "Add :SUFeedURL string $AETHER_SPARKLE_FEED_URL" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $AETHER_SPARKLE_PUBLIC_KEY" "$CONTENTS/Info.plist"
 
-for binary in "$MACOS/aetherd" "$MACOS/ael-backend" "$MACOS/aether-chrome-host"; do
+for binary in "$MACOS/aetherd" "$MACOS/ael-backend" "$MACOS/aether-chrome-host" "$MACOS/aether-mcp"; do
   codesign --force --timestamp --options runtime --sign "$AETHER_SIGN_IDENTITY" "$binary"
 done
 if [[ -d "$RESOURCES/Chromium.app" ]]; then

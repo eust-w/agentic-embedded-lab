@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/acceptance/capability-acceptance",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "implementation_status": {
+      "type": "string"
+    },
+    "test_status": {
+      "type": "string"
+    },
+    "evidence_status": {
+      "type": "string"
+    },
+    "fidelity": {
+      "type": "string"
+    },
+    "supported_platforms": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "known_limitations": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "external_requirements": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "source_revision": {
+      "type": "string"
+    },
+    "evidence_sha256": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "category",
+    "implementation_status",
+    "test_status",
+    "evidence_status",
+    "fidelity",
+    "supported_platforms",
+    "known_limitations",
+    "external_requirements",
+    "source_revision",
+    "evidence_sha256"
+  ]
+}

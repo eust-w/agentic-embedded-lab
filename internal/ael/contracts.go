@@ -77,10 +77,16 @@ type Connection struct {
 }
 
 type System struct {
-	APIVersion  string       `json:"api_version"`
-	ID          string       `json:"id"`
-	Components  []Component  `json:"components"`
-	Connections []Connection `json:"connections"`
+	APIVersion      string           `json:"api_version"`
+	ID              string           `json:"id"`
+	Components      []Component      `json:"components"`
+	Connections     []Connection     `json:"connections"`
+	AlgebraicSolver *AlgebraicSolver `json:"algebraic_solver,omitempty"`
+}
+type AlgebraicSolver struct {
+	Method        string  `json:"method"`
+	Tolerance     float64 `json:"tolerance"`
+	MaxIterations int     `json:"max_iterations"`
 }
 
 type Stimulus struct {
@@ -98,14 +104,18 @@ type Fault struct {
 }
 
 type Assertion struct {
-	ID          string  `json:"id"`
-	Metric      string  `json:"metric"`
-	Operator    string  `json:"operator"`
-	Expected    float64 `json:"expected"`
-	Unit        string  `json:"unit,omitempty"`
-	Aggregation string  `json:"aggregation,omitempty"`
-	FromUS      *int64  `json:"from_us,omitempty"`
-	ToUS        *int64  `json:"to_us,omitempty"`
+	ID                string  `json:"id"`
+	Metric            string  `json:"metric"`
+	Operator          string  `json:"operator"`
+	Expected          float64 `json:"expected"`
+	Unit              string  `json:"unit,omitempty"`
+	Aggregation       string  `json:"aggregation,omitempty"`
+	FromUS            *int64  `json:"from_us,omitempty"`
+	ToUS              *int64  `json:"to_us,omitempty"`
+	EventType         string  `json:"event_type,omitempty"`
+	RelatedEventType  string  `json:"related_event_type,omitempty"`
+	DeadlineUS        *int64  `json:"deadline_us,omitempty"`
+	MinimumDurationUS *int64  `json:"minimum_duration_us,omitempty"`
 }
 
 type Experiment struct {

@@ -32,6 +32,10 @@ type Implementation interface {
 	Prepare(context.Context, *State) error
 	Step(context.Context, *State, int64) (ael.StepResult, error)
 }
+type Checkpointable interface {
+	Checkpoint() map[string]any
+	RestoreCheckpoint(map[string]any) error
+}
 
 type VersionDetector interface {
 	DetectVersion(context.Context, string, string) string
@@ -153,11 +157,45 @@ func (s *Server) handle(ctx context.Context, request ael.BackendRequest) (respon
 		response.Outputs, response.Metrics, response.Events, response.Artifacts = result.Outputs, result.Metrics, result.Events, result.Artifacts
 	case "snapshot":
 		path := filepath.Join(s.state.RuntimeDir, fmt.Sprintf("snapshot-%d.json", s.state.VirtualTimeUS))
-		payload, _ := json.MarshalIndent(s.state, "", "  ")
+		implementation := map[string]any{}
+		if checkpointable, ok := s.implementation.(Checkpointable); ok {
+			implementation = checkpointable.Checkpoint()
+		}
+		payload, _ := json.MarshalIndent(map[string]any{"state": s.state, "implementation": implementation}, "", "  ")
 		if err := os.WriteFile(path, payload, 0o600); err != nil {
 			return failure(request.ID, err.Error())
 		}
 		response.Artifacts = map[string]string{"snapshot": relativeArtifact(&s.state, path)}
+	case "restore":
+		reference, _ := request.Payload["snapshot"].(string)
+		if !strings.HasPrefix(reference, "ael-runtime://") {
+			return failure(request.ID, "invalid snapshot reference")
+		}
+		path := filepath.Join(s.state.ArtifactRoot, filepath.FromSlash(strings.TrimPrefix(reference, "ael-runtime://")))
+		relative, err := filepath.Rel(s.state.RuntimeDir, path)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return failure(request.ID, "snapshot escapes runtime")
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return failure(request.ID, err.Error())
+		}
+		var snapshot struct {
+			State          State          `json:"state"`
+			Implementation map[string]any `json:"implementation"`
+		}
+		if json.Unmarshal(data, &snapshot) != nil {
+			return failure(request.ID, "invalid snapshot")
+		}
+		if snapshot.State.Workspace != s.state.Workspace || snapshot.State.RuntimeDir != s.state.RuntimeDir {
+			return failure(request.ID, "snapshot identity mismatch")
+		}
+		s.state = snapshot.State
+		if checkpointable, ok := s.implementation.(Checkpointable); ok {
+			if err := checkpointable.RestoreCheckpoint(snapshot.Implementation); err != nil {
+				return failure(request.ID, err.Error())
+			}
+		}
 	case "shutdown":
 		s.state.Component = ael.Component{}
 	default:

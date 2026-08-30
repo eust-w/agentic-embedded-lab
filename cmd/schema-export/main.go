@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	capability "github.com/eust-w/agentic-embedded-lab/internal/acceptance"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
@@ -39,6 +40,7 @@ func main() {
 		"model-package":              modeling.Package{},
 		"model-generation-request":   modeling.GenerationRequest{},
 		"model-conformance-evidence": modeling.ConformanceEvidence{},
+		"capability-acceptance":      capability.CapabilityAcceptance{},
 	}
 	reflector := &jsonschema.Reflector{AllowAdditionalProperties: false, DoNotReference: true}
 	for name, model := range models {

@@ -143,6 +143,26 @@
         ]
       },
       "type": "array"
+    },
+    "algebraic_solver": {
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "tolerance": {
+          "type": "number"
+        },
+        "max_iterations": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "method",
+        "tolerance",
+        "max_iterations"
+      ]
     }
   },
   "additionalProperties": false,

@@ -181,6 +181,15 @@ func (*Ngspice) ExpectedVersion() string                 { return "46" }
 func (*Ngspice) Commands() []string                      { return []string{"ngspice"} }
 func (*Ngspice) VersionArguments() []string              { return []string{"--version", "-v"} }
 func (n *Ngspice) Prepare(context.Context, *State) error { n.brownout = false; return nil }
+func (n *Ngspice) Checkpoint() map[string]any            { return map[string]any{"brownout": n.brownout} }
+func (n *Ngspice) RestoreCheckpoint(value map[string]any) error {
+	brownout, ok := value["brownout"].(bool)
+	if !ok {
+		return errors.New("ngspice checkpoint has no brownout state")
+	}
+	n.brownout = brownout
+	return nil
+}
 
 func (n *Ngspice) Step(ctx context.Context, state *State, stepUS int64) (ael.StepResult, error) {
 	model, err := WorkspacePath(state, state.Component.Model, true)

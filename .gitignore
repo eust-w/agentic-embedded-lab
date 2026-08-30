@@ -26,7 +26,7 @@ frontend/package.json.md5
 dist/
 firmware/**/build-*/
 runs/
-acceptance/
+/acceptance/
 toolchains/
 workspace/
 *.fmu

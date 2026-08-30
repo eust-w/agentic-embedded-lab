@@ -110,6 +110,18 @@
               },
               "to_us": {
                 "type": "integer"
+              },
+              "event_type": {
+                "type": "string"
+              },
+              "related_event_type": {
+                "type": "string"
+              },
+              "deadline_us": {
+                "type": "integer"
+              },
+              "minimum_duration_us": {
+                "type": "integer"
               }
             },
             "additionalProperties": false,
@@ -322,6 +334,26 @@
             ]
           },
           "type": "array"
+        },
+        "algebraic_solver": {
+          "properties": {
+            "method": {
+              "type": "string"
+            },
+            "tolerance": {
+              "type": "number"
+            },
+            "max_iterations": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "method",
+            "tolerance",
+            "max_iterations"
+          ]
         }
       },
       "additionalProperties": false,

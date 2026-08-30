@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	cdpbrowser "github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/network"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
@@ -208,6 +209,44 @@ func (c *Controller) Type(ctx context.Context, selector, text string) error {
 		return errors.New("typing into password fields is prohibited")
 	}
 	return c.run(ctx, chromedp.SendKeys(selector, text, chromedp.ByQuery))
+}
+
+func (c *Controller) Download(ctx context.Context, target string) (string, error) {
+	if c.Permissions == nil {
+		return "", errors.New("browser permission store is required")
+	}
+	decision, err := c.Permissions.Site(ctx, target)
+	if err != nil || decision != DecisionAllow {
+		return "", fmt.Errorf("site permission is %s", decision)
+	}
+	directory := filepath.Join(c.ProfilePath, "downloads")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return "", err
+	}
+	before, _ := os.ReadDir(directory)
+	known := map[string]bool{}
+	for _, entry := range before {
+		known[entry.Name()] = true
+	}
+	actions := []chromedp.Action{cdpbrowser.SetDownloadBehavior(cdpbrowser.SetDownloadBehaviorBehaviorAllowAndName).WithDownloadPath(directory).WithEventsEnabled(true), chromedp.Navigate(target)}
+	if err := c.run(ctx, actions...); err != nil && !strings.Contains(err.Error(), "net::ERR_ABORTED") {
+		return "", err
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		entries, _ := os.ReadDir(directory)
+		for _, entry := range entries {
+			if !known[entry.Name()] && !entry.IsDir() && !strings.HasSuffix(entry.Name(), ".crdownload") {
+				return filepath.Join(directory, entry.Name()), nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	return "", errors.New("browser download did not complete before timeout")
 }
 
 func (c *Controller) run(ctx context.Context, actions ...chromedp.Action) error {

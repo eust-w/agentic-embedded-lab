@@ -34,6 +34,9 @@ type Adapter interface {
 	Snapshot(context.Context, int64) (string, error)
 	Shutdown(context.Context) error
 }
+type Restorer interface {
+	Restore(context.Context, string) error
+}
 
 type AdapterFactory func(Component) (Adapter, error)
 
@@ -81,6 +84,11 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 			return bundle, fmt.Errorf("prepare %s: %w", component.ID, err)
 		}
 		adapters[component.ID] = adapter
+		if component.Rollback {
+			if _, ok := adapter.(Restorer); !ok {
+				return bundle, fmt.Errorf("component %s declares rollback but adapter cannot restore", component.ID)
+			}
+		}
 	}
 	metrics := make(map[string]float64)
 	samples := make(map[string][]metricSample)
@@ -125,63 +133,121 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 				dirty[componentID] = true
 			}
 		}
-		for _, component := range components {
-			if !componentDue(component, virtualTime, dirty[component.ID], experiment.MacroStepUS) {
-				continue
+		maxIterations := 1
+		if system.AlgebraicSolver != nil {
+			maxIterations = system.AlgebraicSolver.MaxIterations
+		}
+		previousOutputs := map[string]float64{}
+		converged := system.AlgebraicSolver == nil
+		for iteration := 0; iteration < maxIterations; iteration++ {
+			if iteration > 0 {
+				for _, component := range components {
+					checkpoint := bundle.Artifacts[fmt.Sprintf("checkpoint.%s.%d", component.ID, virtualTime)]
+					if err := adapters[component.ID].(Restorer).Restore(ctx, checkpoint); err != nil {
+						return bundle, err
+					}
+					dirty[component.ID] = true
+				}
+				for _, connection := range system.Connections {
+					if value, ok := previousOutputs[connection.SourceComponent+"."+connection.SourcePort]; ok {
+						if _, err := adapters[connection.TargetComponent].Inject(ctx, connection.TargetPort, value, virtualTime); err != nil {
+							return bundle, err
+						}
+					}
+				}
 			}
-			stepUS := componentStep(component, experiment.MacroStepUS, experiment.DurationUS-virtualTime)
-			if component.Rollback {
-				checkpoint, err := adapters[component.ID].Snapshot(ctx, virtualTime)
+			currentOutputs := map[string]float64{}
+			maxDelta := 0.0
+			for _, component := range components {
+				if !componentDue(component, virtualTime, dirty[component.ID], experiment.MacroStepUS) {
+					continue
+				}
+				stepUS := componentStep(component, experiment.MacroStepUS, experiment.DurationUS-virtualTime)
+				if component.Rollback {
+					checkpoint, err := adapters[component.ID].Snapshot(ctx, virtualTime)
+					if err != nil {
+						return bundle, fmt.Errorf("checkpoint %s at %dus: %w", component.ID, virtualTime, err)
+					}
+					if checkpoint == "" {
+						return bundle, fmt.Errorf("checkpoint %s at %dus returned no artifact", component.ID, virtualTime)
+					}
+					bundle.Artifacts[fmt.Sprintf("checkpoint.%s.%d", component.ID, virtualTime)] = checkpoint
+				}
+				result, err := adapters[component.ID].Step(ctx, virtualTime, stepUS)
+				if err != nil && component.Rollback {
+					restorer := adapters[component.ID].(Restorer)
+					checkpoint := bundle.Artifacts[fmt.Sprintf("checkpoint.%s.%d", component.ID, virtualTime)]
+					if restoreErr := restorer.Restore(ctx, checkpoint); restoreErr != nil {
+						return bundle, fmt.Errorf("restore %s at %dus: %w", component.ID, virtualTime, restoreErr)
+					}
+					sequence = appendEvents(&bundle.Events, []Event{{Type: "scheduler.rollback_retry", Payload: map[string]any{"checkpoint": checkpoint}, FidelityRef: component.ID + ":checkpoint"}}, sequence, virtualTime, component.ID)
+					result, err = adapters[component.ID].Step(ctx, virtualTime, stepUS)
+				}
 				if err != nil {
-					return bundle, fmt.Errorf("checkpoint %s at %dus: %w", component.ID, virtualTime, err)
+					return bundle, fmt.Errorf("step %s at %dus: %w", component.ID, virtualTime, err)
 				}
-				if checkpoint == "" {
-					return bundle, fmt.Errorf("checkpoint %s at %dus returned no artifact", component.ID, virtualTime)
-				}
-				bundle.Artifacts[fmt.Sprintf("checkpoint.%s.%d", component.ID, virtualTime)] = checkpoint
-			}
-			result, err := adapters[component.ID].Step(ctx, virtualTime, stepUS)
-			if err != nil {
-				return bundle, fmt.Errorf("step %s at %dus: %w", component.ID, virtualTime, err)
-			}
-			dirty[component.ID] = false
-			for _, name := range sortedFloatKeys(result.Metrics) {
-				value := result.Metrics[name]
-				if math.IsNaN(value) || math.IsInf(value, 0) {
-					return bundle, fmt.Errorf("component %s produced invalid metric %s", component.ID, name)
-				}
-				key := component.ID + "." + name
-				metrics[key] = value
-				samples[key] = append(samples[key], metricSample{AtUS: virtualTime + stepUS, Value: value})
-			}
-			for _, name := range sortedFloatKeys(result.Outputs) {
-				value := result.Outputs[name]
-				if math.IsNaN(value) || math.IsInf(value, 0) {
-					return bundle, fmt.Errorf("component %s produced invalid output %s", component.ID, name)
-				}
-				key := component.ID + "." + name
-				metrics[key] = value
-				if _, alreadySampled := result.Metrics[name]; !alreadySampled {
+				dirty[component.ID] = false
+				for _, name := range sortedFloatKeys(result.Metrics) {
+					value := result.Metrics[name]
+					if math.IsNaN(value) || math.IsInf(value, 0) {
+						return bundle, fmt.Errorf("component %s produced invalid metric %s", component.ID, name)
+					}
+					key := component.ID + "." + name
+					metrics[key] = value
+					currentOutputs[key] = value
+					if previous, ok := previousOutputs[key]; ok {
+						maxDelta = math.Max(maxDelta, math.Abs(value-previous))
+					} else if system.AlgebraicSolver != nil {
+						maxDelta = math.Inf(1)
+					}
 					samples[key] = append(samples[key], metricSample{AtUS: virtualTime + stepUS, Value: value})
 				}
-				for _, connection := range connections[component.ID+"."+name] {
-					injected, err := adapters[connection.TargetComponent].Inject(ctx, connection.TargetPort, value, virtualTime)
-					if err != nil {
-						return bundle, fmt.Errorf("propagate %s.%s to %s.%s: %w", component.ID, name, connection.TargetComponent, connection.TargetPort, err)
+				for _, name := range sortedFloatKeys(result.Outputs) {
+					value := result.Outputs[name]
+					if math.IsNaN(value) || math.IsInf(value, 0) {
+						return bundle, fmt.Errorf("component %s produced invalid output %s", component.ID, name)
 					}
-					sequence = appendEvents(&bundle.Events, []Event{{Type: "connection.propagated", Payload: map[string]any{"source": component.ID + "." + name, "target": connection.TargetComponent + "." + connection.TargetPort, "value": value, "unit": connection.Unit}, FidelityRef: component.ID + ":port"}}, sequence, virtualTime, component.ID)
-					sequence = appendEvents(&bundle.Events, injected, sequence, virtualTime, connection.TargetComponent)
-					dirty[connection.TargetComponent] = true
+					key := component.ID + "." + name
+					metrics[key] = value
+					currentOutputs[key] = value
+					if previous, ok := previousOutputs[key]; ok {
+						maxDelta = math.Max(maxDelta, math.Abs(value-previous))
+					} else if system.AlgebraicSolver != nil {
+						maxDelta = math.Inf(1)
+					}
+					if _, alreadySampled := result.Metrics[name]; !alreadySampled {
+						samples[key] = append(samples[key], metricSample{AtUS: virtualTime + stepUS, Value: value})
+					}
+					for _, connection := range connections[component.ID+"."+name] {
+						injected, err := adapters[connection.TargetComponent].Inject(ctx, connection.TargetPort, value, virtualTime)
+						if err != nil {
+							return bundle, fmt.Errorf("propagate %s.%s to %s.%s: %w", component.ID, name, connection.TargetComponent, connection.TargetPort, err)
+						}
+						sequence = appendEvents(&bundle.Events, []Event{{Type: "connection.propagated", Payload: map[string]any{"source": component.ID + "." + name, "target": connection.TargetComponent + "." + connection.TargetPort, "value": value, "unit": connection.Unit}, FidelityRef: component.ID + ":port"}}, sequence, virtualTime, component.ID)
+						sequence = appendEvents(&bundle.Events, injected, sequence, virtualTime, connection.TargetComponent)
+						dirty[connection.TargetComponent] = true
+					}
 				}
+				for _, name := range sortedStringKeys(result.Artifacts) {
+					hash := result.Artifacts[name]
+					bundle.Artifacts[component.ID+"."+name] = hash
+				}
+				sequence = appendEvents(&bundle.Events, result.Events, sequence, virtualTime, component.ID)
 			}
-			for _, name := range sortedStringKeys(result.Artifacts) {
-				hash := result.Artifacts[name]
-				bundle.Artifacts[component.ID+"."+name] = hash
+			if system.AlgebraicSolver != nil {
+				sequence = appendEvents(&bundle.Events, []Event{{Type: "scheduler.algebraic_iteration", Payload: map[string]any{"iteration": iteration + 1, "max_delta": maxDelta}, FidelityRef: "scheduler:fixed-point"}}, sequence, virtualTime, "scheduler")
+				if iteration > 0 && maxDelta <= system.AlgebraicSolver.Tolerance {
+					converged = true
+					break
+				}
+				previousOutputs = currentOutputs
 			}
-			sequence = appendEvents(&bundle.Events, result.Events, sequence, virtualTime, component.ID)
+		}
+		if !converged {
+			return bundle, fmt.Errorf("algebraic loop did not converge within %d iterations", maxIterations)
 		}
 	}
-	bundle.Assertions = evaluateAssertions(experiment.Assertions, metrics, samples)
+	bundle.Assertions = evaluateAssertions(experiment.Assertions, metrics, samples, bundle.Events)
 	return bundle, nil
 }
 
@@ -235,7 +301,7 @@ func Validate(experiment Experiment, system System) error {
 		if aggregation == "" {
 			aggregation = "final"
 		}
-		if aggregation != "final" && aggregation != "min" && aggregation != "max" && aggregation != "p95" && aggregation != "p99" {
+		if aggregation != "final" && aggregation != "min" && aggregation != "max" && aggregation != "p95" && aggregation != "p99" && aggregation != "event_count" && aggregation != "event_before" && aggregation != "event_deadline" && aggregation != "event_duration" {
 			return fmt.Errorf("assertion %s has unsupported aggregation %s", assertion.ID, aggregation)
 		}
 		if assertion.FromUS != nil && *assertion.FromUS < 0 || assertion.ToUS != nil && *assertion.ToUS > experiment.DurationUS || assertion.FromUS != nil && assertion.ToUS != nil && *assertion.FromUS > *assertion.ToUS {
@@ -266,6 +332,13 @@ func Validate(experiment Experiment, system System) error {
 				return fmt.Errorf("port %s has unsupported direction %s", key, port.Direction)
 			}
 			ports[key] = port
+		}
+	}
+	if system.AlgebraicSolver != nil {
+		for _, component := range system.Components {
+			if !component.Rollback {
+				return fmt.Errorf("algebraic component %s must declare rollback", component.ID)
+			}
 		}
 	}
 	for _, connection := range system.Connections {
@@ -333,7 +406,20 @@ func orderedComponents(system System) ([]Component, error) {
 		}
 	}
 	if len(ordered) != len(system.Components) {
-		return nil, errors.New("algebraic loop detected; v2 requires an explicit delay or rollback-capable coordinator")
+		if system.AlgebraicSolver == nil {
+			return nil, errors.New("algebraic loop detected; configure a rollback-capable fixed-point solver or add an explicit delay")
+		}
+		if system.AlgebraicSolver.Method != "fixed_point" || system.AlgebraicSolver.Tolerance <= 0 || system.AlgebraicSolver.MaxIterations < 2 {
+			return nil, errors.New("algebraic solver requires method=fixed_point, positive tolerance, and max_iterations >= 2")
+		}
+		ordered = ordered[:0]
+		for _, component := range system.Components {
+			if !component.Rollback {
+				return nil, fmt.Errorf("algebraic component %s is not rollback-capable", component.ID)
+			}
+			ordered = append(ordered, component)
+		}
+		sort.Slice(ordered, func(i, j int) bool { return ordered[i].ID < ordered[j].ID })
 	}
 	return ordered, nil
 }
@@ -425,7 +511,7 @@ func appendEvents(destination *[]Event, source []Event, sequence, virtualTime in
 	return sequence
 }
 
-func evaluateAssertions(assertions []Assertion, metrics map[string]float64, samples map[string][]metricSample) []AssertionResult {
+func evaluateAssertions(assertions []Assertion, metrics map[string]float64, samples map[string][]metricSample, events []Event) []AssertionResult {
 	results := make([]AssertionResult, 0, len(assertions))
 	for _, assertion := range assertions {
 		aggregation := assertion.Aggregation
@@ -433,6 +519,9 @@ func evaluateAssertions(assertions []Assertion, metrics map[string]float64, samp
 			aggregation = "final"
 		}
 		observed, observedAt, ok := aggregateMetric(aggregation, assertion, metrics, samples)
+		if strings.HasPrefix(aggregation, "event_") {
+			observed, observedAt, ok = aggregateEvent(aggregation, assertion, events)
+		}
 		passed := ok
 		switch assertion.Operator {
 		case "<":
@@ -457,6 +546,48 @@ func evaluateAssertions(assertions []Assertion, metrics map[string]float64, samp
 		results = append(results, AssertionResult{ID: assertion.ID, Passed: passed, Observed: observed, Expected: assertion.Expected, Aggregation: aggregation, ObservedAtUS: observedAt, Message: message})
 	}
 	return results
+}
+
+func aggregateEvent(aggregation string, assertion Assertion, events []Event) (float64, int64, bool) {
+	var matching, related []Event
+	for _, event := range events {
+		if event.Type == assertion.EventType {
+			matching = append(matching, event)
+		}
+		if event.Type == assertion.RelatedEventType {
+			related = append(related, event)
+		}
+	}
+	switch aggregation {
+	case "event_count":
+		return float64(len(matching)), 0, true
+	case "event_before":
+		if len(matching) == 0 || len(related) == 0 {
+			return 0, 0, false
+		}
+		value := 0.0
+		if matching[0].VirtualTimeUS < related[0].VirtualTimeUS || matching[0].Sequence < related[0].Sequence {
+			value = 1
+		}
+		return value, matching[0].VirtualTimeUS, true
+	case "event_deadline":
+		if len(matching) == 0 || assertion.DeadlineUS == nil {
+			return 0, 0, false
+		}
+		value := 0.0
+		if matching[0].VirtualTimeUS <= *assertion.DeadlineUS {
+			value = 1
+		}
+		return value, matching[0].VirtualTimeUS, true
+	case "event_duration":
+		if len(matching) < 2 || assertion.MinimumDurationUS == nil {
+			return 0, 0, false
+		}
+		duration := matching[len(matching)-1].VirtualTimeUS - matching[0].VirtualTimeUS
+		return float64(duration), matching[len(matching)-1].VirtualTimeUS, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func aggregateMetric(aggregation string, assertion Assertion, metrics map[string]float64, samples map[string][]metricSample) (float64, int64, bool) {

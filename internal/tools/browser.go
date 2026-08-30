@@ -17,7 +17,7 @@ func (b BrowserTool) Definition() protocol.ToolDefinition {
 	return protocol.ToolDefinition{Type: "function", Name: "browser", Description: "Operate the pinned controlled browser after explicit site authorization", Parameters: map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"action":   map[string]any{"type": "string", "enum": []string{"start", "navigate", "dom", "screenshot", "console", "network", "click", "type"}},
+			"action":   map[string]any{"type": "string", "enum": []string{"start", "navigate", "dom", "screenshot", "console", "network", "download", "click", "type"}},
 			"url":      map[string]any{"type": "string"},
 			"selector": map[string]any{"type": "string"},
 			"text":     map[string]any{"type": "string"},
@@ -36,7 +36,7 @@ func (b BrowserTool) Operation(arguments map[string]any) approval.Operation {
 	if action == "click" || action == "type" {
 		risk = protocol.RiskHigh
 	}
-	return approval.Operation{Tool: "browser", Action: action, Resource: resource, Risk: risk, Network: action == "navigate"}
+	return approval.Operation{Tool: "browser", Action: action, Resource: resource, Risk: risk, Network: action == "navigate" || action == "download"}
 }
 
 func (b BrowserTool) Execute(ctx context.Context, arguments map[string]any) (Result, error) {
@@ -66,6 +66,10 @@ func (b BrowserTool) Execute(ctx context.Context, arguments map[string]any) (Res
 		return Result{Output: map[string]any{"entries": b.Controller.Console(0)}}, nil
 	case "network":
 		return Result{Output: map[string]any{"entries": b.Controller.Network(0)}}, nil
+	case "download":
+		value, _ := arguments["url"].(string)
+		path, err := b.Controller.Download(ctx, value)
+		return Result{Output: map[string]any{"path": path}}, err
 	case "click":
 		selector, _ := arguments["selector"].(string)
 		if err := b.Controller.Click(ctx, selector); err != nil {

@@ -13,10 +13,12 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
+	capability "github.com/eust-w/agentic-embedded-lab/internal/acceptance"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -25,6 +27,8 @@ import (
 )
 
 type Config struct {
+	Workspace          string
+	SourceRevision     string
 	DatabaseURL        string
 	S3Endpoint         string
 	S3Bucket           string
@@ -82,12 +86,55 @@ func (c *ControlPlane) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/tasks", c.user(c.createTask))
 	mux.HandleFunc("GET /v1/tasks/{id}", c.user(c.getTask))
 	mux.HandleFunc("POST /v1/tasks/{id}/cancel", c.user(c.cancelUserTask))
+	mux.HandleFunc("GET /v1/capabilities", c.user(c.listCapabilities))
+	mux.HandleFunc("GET /v1/capabilities/{id}", c.user(c.getCapability))
+	mux.HandleFunc("POST /v1/acceptance/runs", c.user(c.createAcceptanceRun))
+	mux.HandleFunc("GET /v1/acceptance/runs/{id}", c.user(c.getTask))
 	mux.HandleFunc("POST /v1/workers/register", c.worker(c.registerWorker))
 	mux.HandleFunc("POST /v1/workers/{worker}/lease", c.worker(c.leaseTask))
 	mux.HandleFunc("POST /v1/workers/{worker}/heartbeat", c.worker(c.heartbeat))
 	mux.HandleFunc("POST /v1/workers/{worker}/tasks/{task}/complete", c.worker(c.completeTask))
 	mux.HandleFunc("POST /v1/workers/{worker}/tasks/{task}/cancelled", c.worker(c.cancelTask))
 	return requestLimit(mux)
+}
+
+func (c *ControlPlane) listCapabilities(w http.ResponseWriter, r *http.Request) {
+	values, err := capability.List(c.config.Workspace, c.config.SourceRevision)
+	if err != nil {
+		writeError(w, 500, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"api_version": capability.APIVersion, "capabilities": values})
+}
+func (c *ControlPlane) getCapability(w http.ResponseWriter, r *http.Request) {
+	value, err := capability.Inspect(c.config.Workspace, c.config.SourceRevision, r.PathValue("id"))
+	if err != nil {
+		writeError(w, 404, err)
+		return
+	}
+	writeJSON(w, 200, value)
+}
+func (c *ControlPlane) createAcceptanceRun(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Profile string `json:"profile"`
+	}
+	if decodeJSON(w, r, &request) != nil {
+		return
+	}
+	allowed := map[string]bool{"desktop": true, "agent": true, "simulation": true, "software": true, "development-package": true}
+	if !allowed[request.Profile] {
+		writeError(w, 400, errors.New("unsupported acceptance profile"))
+		return
+	}
+	payload := map[string]any{"kind": "acceptance", "profile": request.Profile, "source_revision": c.config.SourceRevision}
+	now := time.Now().UTC()
+	task := Task{ID: uuid.NewString(), Status: "queued", Payload: payload, CreatedAt: now, UpdatedAt: now}
+	encoded, _ := json.Marshal(payload)
+	if _, err := c.db.ExecContext(r.Context(), `INSERT INTO aether_tasks(id,status,payload,created_at,updated_at)VALUES($1,$2,$3,$4,$4)`, task.ID, task.Status, encoded, now); err != nil {
+		writeError(w, 500, err)
+		return
+	}
+	writeJSON(w, 202, task)
 }
 
 func migrate(ctx context.Context, db *sql.DB) error {
@@ -384,7 +431,18 @@ func ConfigFromEnv() Config {
 			fingerprints[value] = true
 		}
 	}
-	return Config{DatabaseURL: os.Getenv("AEL_DATABASE_URL"), S3Endpoint: os.Getenv("AEL_S3_ENDPOINT"), S3Bucket: os.Getenv("AEL_S3_BUCKET"), S3AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"), S3SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"), OIDCIssuer: os.Getenv("AEL_OIDC_ISSUER"), OIDCAudience: os.Getenv("AEL_OIDC_AUDIENCE"), OIDCJWKSURL: os.Getenv("AEL_OIDC_JWKS_URL"), WorkerFingerprints: fingerprints}
+	workspace := os.Getenv("AEL_WORKSPACE")
+	if workspace == "" {
+		workspace, _ = os.Getwd()
+	}
+	revision := os.Getenv("AEL_SOURCE_REVISION")
+	if revision == "" {
+		command := exec.Command("git", "-C", workspace, "rev-parse", "HEAD")
+		if data, err := command.Output(); err == nil {
+			revision = strings.TrimSpace(string(data))
+		}
+	}
+	return Config{Workspace: workspace, SourceRevision: revision, DatabaseURL: os.Getenv("AEL_DATABASE_URL"), S3Endpoint: os.Getenv("AEL_S3_ENDPOINT"), S3Bucket: os.Getenv("AEL_S3_BUCKET"), S3AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"), S3SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"), OIDCIssuer: os.Getenv("AEL_OIDC_ISSUER"), OIDCAudience: os.Getenv("AEL_OIDC_AUDIENCE"), OIDCJWKSURL: os.Getenv("AEL_OIDC_JWKS_URL"), WorkerFingerprints: fingerprints}
 }
 func requestLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

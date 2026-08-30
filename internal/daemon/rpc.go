@@ -90,6 +90,9 @@ func (s *Server) ConfigureProject(ctx context.Context, project store.ProjectReco
 	_ = registry.Register(tools.GitReadTool{Workspace: root})
 	_ = registry.Register(tools.GitWriteTool{Workspace: root})
 	_ = registry.Register(tools.AELRouteTool{})
+	_ = registry.Register(tools.CapabilityTool{Workspace: root, Mode: "inspect_capabilities"})
+	_ = registry.Register(tools.CapabilityTool{Workspace: root, Mode: "get_acceptance_status"})
+	_ = registry.Register(tools.CapabilityTool{Workspace: root, Mode: "get_acceptance_evidence"})
 	_ = registry.Register(tools.CommandTool{Workspace: root, Executor: executor.New(), Profile: project.Permission})
 	if s.Browser != nil {
 		_ = registry.Register(tools.BrowserTool{Controller: s.Browser})

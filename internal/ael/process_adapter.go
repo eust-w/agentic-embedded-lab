@@ -85,6 +85,10 @@ func (p *ProcessAdapter) Snapshot(ctx context.Context, virtualTimeUS int64) (str
 	}
 	return response.Artifacts["snapshot"], nil
 }
+func (p *ProcessAdapter) Restore(ctx context.Context, snapshot string) error {
+	_, err := p.call(ctx, "restore", 0, map[string]any{"snapshot": snapshot})
+	return err
+}
 
 func (p *ProcessAdapter) Shutdown(ctx context.Context) error {
 	p.mu.Lock()

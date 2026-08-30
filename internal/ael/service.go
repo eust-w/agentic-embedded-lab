@@ -2,9 +2,13 @@ package ael
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -207,7 +211,40 @@ func (m *RunManager) Replay(ctx context.Context, id string) (RunRecord, error) {
 	if err != nil {
 		return RunRecord{}, err
 	}
+	if record.Bundle == nil {
+		return RunRecord{}, errors.New("replay requires an existing evidence bundle")
+	}
+	m.mu.Lock()
+	root := m.projects[record.Request.ProjectID]
+	m.mu.Unlock()
+	experiment, err := LoadExperiment(root, record.Request.ExperimentPath)
+	if err != nil {
+		return RunRecord{}, err
+	}
+	system, err := LoadSystem(root, record.Request.SystemPath)
+	if err != nil {
+		return RunRecord{}, err
+	}
+	if canonicalSHA(experiment) != canonicalSHA(record.Bundle.Experiment) || canonicalSHA(system) != canonicalSHA(record.Bundle.System) {
+		return RunRecord{}, errors.New("replay input drift detected; experiment or system hash changed")
+	}
+	command := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	command.Dir = root
+	data, err := command.Output()
+	if err != nil {
+		return RunRecord{}, err
+	}
+	head := strings.TrimSpace(string(data))
+	if record.Request.SourceRevision != "" && !strings.HasPrefix(head, record.Request.SourceRevision) && !strings.HasPrefix(record.Request.SourceRevision, head) {
+		return RunRecord{}, errors.New("replay source revision drift detected")
+	}
 	return m.Start(ctx, record.Request)
+}
+
+func canonicalSHA(value any) string {
+	data, _ := json.Marshal(value)
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
 }
 
 func (m *RunManager) Compare(ctx context.Context, leftID, rightID string) (Comparison, error) {
