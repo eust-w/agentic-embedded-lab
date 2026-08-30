@@ -46,7 +46,7 @@ func TestSchedulerProducesDeterministicTraceAndExplicitFidelity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.TraceSHA256 != second.TraceSHA256 || len(first.Events) != 4 {
+	if first.TraceSHA256 != second.TraceSHA256 || len(first.Events) != 3 {
 		t.Fatalf("trace is not deterministic: %s %s %#v", first.TraceSHA256, second.TraceSHA256, first.Events)
 	}
 	if !first.Assertions[0].Passed || first.Fidelity.HardwareValidated || first.Fidelity.Physical != FidelityUnsupported {

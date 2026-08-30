@@ -14,17 +14,13 @@ components:
       id: mcu
       model: benchmarks/models/renode/sifive-fe310-ael.repl
       ports:
-        - direction: input
-          name: case_id
-          type: integer
         - direction: output
           name: failure
           type: integer
       properties:
         entry_symbol: __start
         firmware: firmware/zephyr/build-hifive1/zephyr/zephyr.elf
-        input_registers:
-            case_id: 2.147499008e+09
+        input_registers: {}
         memory_tags:
             - address: 2.68468224e+08
               default: 4.294967295e+09

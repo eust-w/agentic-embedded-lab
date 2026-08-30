@@ -7,6 +7,8 @@ components:
         hardware_validated: false
         limitations:
             - migrated functional model; no hardware calibration
+            - virtual CPU rate is reduced for functional MCUboot coverage; timing is not hardware-equivalent
+            - MPU initialization is disabled for this Renode model; memory protection is not covered by this OTA claim
         physical: unsupported
         protocol: functional
         register: synthetic
@@ -22,6 +24,9 @@ components:
           name: failure
           type: integer
         - direction: output
+          name: ready
+          type: integer
+        - direction: output
           name: retries
           type: real
           unit: "1"
@@ -30,13 +35,18 @@ components:
           type: real
           unit: uA
       properties:
-        firmware: firmware/zephyr/build-case17-faulty/zephyr/zephyr.elf
+        firmware: firmware/zephyr/build-case17-faulty/merged.hex
+        performance_mips: 1
+        preserve_firmware_on_reset: true
+        stop_register: 5.37000964e+08
+        stop_value: 2.709433623e+09
         input_registers:
             network_retries: 5.3700098e+08
         model_state: conformance_validated
         output_registers:
             current: 5.37000976e+08
             failure: 5.37000968e+08
+            ready: 5.37000964e+08
             retries: 5.37000972e+08
         output_sentinels:
             failure: 4.294967295e+09

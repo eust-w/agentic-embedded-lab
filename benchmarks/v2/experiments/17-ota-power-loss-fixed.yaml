@@ -1,13 +1,17 @@
 api_version: ael.dev/v2
 assertions:
+    - expected: 2709433623
+      id: A00
+      metric: mcu.ready
+      operator: ==
     - expected: 0
       id: A01
       metric: mcu.failure
       operator: ==
-duration_us: 6000
+duration_us: 1.2e+08
 faults: null
 id: 17-ota-power-loss-fixed
-macro_step_us: 1000
+macro_step_us: 1.2e+08
 required_fidelity:
     firmware: functional
     hardware_validated: false

@@ -1,0 +1,22 @@
+api_version: ael.dev/v2
+id: riscv-hifive1-fixed-smoke
+system_id: renode-riscv-zephyr-reference
+duration_us: 3000
+macro_step_us: 1000
+seed: 404
+timeout: 300000000000
+stimuli: []
+faults: []
+assertions:
+  - id: A01
+    metric: mcu.failure
+    operator: "=="
+    expected: 0
+required_fidelity:
+  firmware: functional
+  register: synthetic
+  protocol: functional
+  timing: functional
+  physical: unsupported
+  hardware_validated: false
+  limitations: []

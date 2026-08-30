@@ -18,7 +18,7 @@ func TestMigratedBenchmarkContractsAreStrictAndConsistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(systemFiles) != 55 || len(experimentFiles) != 48 {
+	if len(systemFiles) != 55 || len(experimentFiles) != 49 {
 		t.Fatalf("unexpected migrated asset count: systems=%d experiments=%d", len(systemFiles), len(experimentFiles))
 	}
 	systems := make(map[string]System)

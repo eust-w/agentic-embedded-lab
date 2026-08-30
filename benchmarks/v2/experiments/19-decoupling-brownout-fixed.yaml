@@ -4,6 +4,10 @@ assertions:
       id: A01
       metric: circuit.failure
       operator: ==
+    - expected: 0
+      id: A02
+      metric: mcu.failure
+      operator: ==
 duration_us: 6000
 faults: null
 id: 19-decoupling-brownout-fixed

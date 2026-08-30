@@ -5,8 +5,18 @@
 #include <stddef.h>
 #include <string.h>
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/watchdog.h>
+#include <zephyr/fatal.h>
+#include <zephyr/linker/sections.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
+#if CONFIG_AEL_MECHANISM_ID == 17
+#include <zephyr/dfu/mcuboot.h>
+#include <zephyr/sys/reboot.h>
+extern int boot_set_pending(int permanent);
+#endif
 
 #define FAULTY IS_ENABLED(CONFIG_AEL_FAULTY_VARIANT)
 
@@ -105,31 +115,187 @@ static uint32_t dma_failure(void)
     return !observed || memcmp(source, destination, sizeof(source)) != 0;
 }
 
-static uint32_t mutex_cycle_failure(void)
+#if CONFIG_AEL_MECHANISM_ID == 13
+K_MUTEX_DEFINE(case13_mutex_a);
+K_MUTEX_DEFINE(case13_mutex_b);
+K_SEM_DEFINE(case13_ready, 0, 2);
+K_SEM_DEFINE(case13_go, 0, 2);
+K_THREAD_STACK_DEFINE(case13_stack_a, 1024);
+K_THREAD_STACK_DEFINE(case13_stack_b, 1024);
+static struct k_thread case13_thread_a;
+static struct k_thread case13_thread_b;
+static atomic_t case13_timeouts;
+static atomic_t case13_progress;
+
+static void case13_worker(void *first_pointer, void *second_pointer, void *unused)
 {
-    /* This is the same wait-for graph created by two Zephyr tasks locking A/B in
-     * opposite order. The fixed build enforces a global lock rank before calls
-     * to k_mutex_lock; the faulty build admits the ABBA cycle. */
-    bool task_a_waits_for_b = true;
-    bool task_b_waits_for_a = FAULTY;
-    return task_a_waits_for_b && task_b_waits_for_a;
+    ARG_UNUSED(unused);
+    struct k_mutex *first = first_pointer;
+    struct k_mutex *second = second_pointer;
+    if (k_mutex_lock(first, K_MSEC(50)) != 0) {
+        atomic_inc(&case13_timeouts);
+        return;
+    }
+    if (FAULTY) {
+        k_sem_give(&case13_ready);
+        k_sem_take(&case13_go, K_FOREVER);
+    }
+    if (k_mutex_lock(second, K_MSEC(20)) != 0) {
+        atomic_inc(&case13_timeouts);
+    } else {
+        atomic_inc(&case13_progress);
+        k_mutex_unlock(second);
+    }
+    k_mutex_unlock(first);
 }
 
+static uint32_t rtos_deadlock_failure(void)
+{
+    atomic_clear(&case13_timeouts);
+    atomic_clear(&case13_progress);
+    while (k_sem_take(&case13_ready, K_NO_WAIT) == 0) {}
+    while (k_sem_take(&case13_go, K_NO_WAIT) == 0) {}
+    k_thread_create(&case13_thread_a, case13_stack_a, K_THREAD_STACK_SIZEOF(case13_stack_a),
+                    case13_worker, &case13_mutex_a, &case13_mutex_b, NULL, 3, 0, K_NO_WAIT);
+    k_thread_create(&case13_thread_b, case13_stack_b, K_THREAD_STACK_SIZEOF(case13_stack_b),
+                    case13_worker, FAULTY ? &case13_mutex_b : &case13_mutex_a,
+                    FAULTY ? &case13_mutex_a : &case13_mutex_b, NULL, 3, 0, K_NO_WAIT);
+    if (FAULTY) {
+        k_sem_take(&case13_ready, K_MSEC(50));
+        k_sem_take(&case13_ready, K_MSEC(50));
+        k_sem_give(&case13_go);
+        k_sem_give(&case13_go);
+    }
+    k_thread_join(&case13_thread_a, K_MSEC(100));
+    k_thread_join(&case13_thread_b, K_MSEC(100));
+    return FAULTY ? atomic_get(&case13_timeouts) == 2 : atomic_get(&case13_progress) != 2;
+}
+#else
+static uint32_t rtos_deadlock_failure(void) { return 1U; }
+#endif
+
+#if CONFIG_AEL_MECHANISM_ID == 14
+K_MUTEX_DEFINE(case14_mutex);
+K_SEM_DEFINE(case14_resource, 1, 1);
+K_SEM_DEFINE(case14_ready, 0, 2);
+K_SEM_DEFINE(case14_complete, 0, 1);
+K_THREAD_STACK_DEFINE(case14_low_stack, 1024);
+K_THREAD_STACK_DEFINE(case14_medium_stack, 1024);
+K_THREAD_STACK_DEFINE(case14_high_stack, 1024);
+static struct k_thread case14_low_thread, case14_medium_thread, case14_high_thread;
+static uint64_t case14_wait_us;
+
+static void case14_low(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
+    if (FAULTY) { k_sem_take(&case14_resource, K_FOREVER); } else { k_mutex_lock(&case14_mutex, K_FOREVER); }
+    k_sem_give(&case14_ready); k_sem_give(&case14_ready);
+    k_busy_wait(2000);
+    if (FAULTY) { k_sem_give(&case14_resource); } else { k_mutex_unlock(&case14_mutex); }
+}
+static void case14_medium(void *a, void *b, void *c)
+{ ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c); k_sem_take(&case14_ready, K_FOREVER); k_busy_wait(5000); }
+static void case14_high(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c); k_sem_take(&case14_ready, K_FOREVER);
+    uint64_t start = k_cycle_get_64();
+    if (FAULTY) { k_sem_take(&case14_resource, K_FOREVER); k_sem_give(&case14_resource); }
+    else { k_mutex_lock(&case14_mutex, K_FOREVER); k_mutex_unlock(&case14_mutex); }
+    case14_wait_us = k_cyc_to_us_floor64(k_cycle_get_64() - start); k_sem_give(&case14_complete);
+}
+static uint32_t priority_inversion_failure(void)
+{
+    case14_wait_us = 0;
+    k_thread_create(&case14_low_thread, case14_low_stack, K_THREAD_STACK_SIZEOF(case14_low_stack), case14_low, NULL, NULL, NULL, 5, 0, K_NO_WAIT);
+    k_sleep(K_MSEC(1));
+    k_thread_create(&case14_high_thread, case14_high_stack, K_THREAD_STACK_SIZEOF(case14_high_stack), case14_high, NULL, NULL, NULL, 1, 0, K_NO_WAIT);
+    k_thread_create(&case14_medium_thread, case14_medium_stack, K_THREAD_STACK_SIZEOF(case14_medium_stack), case14_medium, NULL, NULL, NULL, 3, 0, K_NO_WAIT);
+    if (k_sem_take(&case14_complete, K_MSEC(100)) != 0) { return 1U; }
+    k_thread_join(&case14_low_thread, K_MSEC(100)); k_thread_join(&case14_medium_thread, K_MSEC(100)); k_thread_join(&case14_high_thread, K_MSEC(100));
+    return case14_wait_us >= 4000U;
+}
+#else
+static uint32_t priority_inversion_failure(void) { return 1U; }
+#endif
+
+#if CONFIG_AEL_MECHANISM_ID == 15
+#if defined(CONFIG_SOC_SERIES_STM32F4X)
+#define AEL_FATAL_BRIDGE_ADDRESS 0x2001FC00UL
+#else
+#define AEL_FATAL_BRIDGE_ADDRESS 0x80003C00UL
+#endif
+K_THREAD_STACK_DEFINE(case15_stack, 512);
+static struct k_thread case15_thread;
+static volatile uint32_t case15_sink;
+__attribute__((noinline)) static void case15_overflow(unsigned depth)
+{ volatile uint8_t pressure[128]; memset((void *)pressure, (int)depth, sizeof(pressure)); if (depth > 0) { case15_overflow(depth - 1U); } case15_sink += pressure[depth & 127U]; }
+static void case15_worker(void *a, void *b, void *c)
+{ ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c); if (FAULTY) { case15_overflow(6U); } }
+void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
+{
+    ARG_UNUSED(esf); volatile uint32_t *bridge = (void *)AEL_FATAL_BRIDGE_ADDRESS;
+    bridge[2] = 1U; bridge[3] = reason; printk("AEL_EVENT firmware.hardfault {\"reason\":%u}\n", reason);
+    while (1) { k_cpu_idle(); }
+}
+static uint32_t stack_fault_failure(void)
+{
+    k_thread_create(&case15_thread, case15_stack, K_THREAD_STACK_SIZEOF(case15_stack), case15_worker, NULL, NULL, NULL, 2, 0, K_NO_WAIT);
+    if (!FAULTY) { return k_thread_join(&case15_thread, K_MSEC(100)) != 0; }
+    k_thread_join(&case15_thread, K_MSEC(100)); return 0U;
+}
+#else
+static uint32_t stack_fault_failure(void) { return 1U; }
+#endif
+
+static uint32_t case16_error;
+#if CONFIG_AEL_MECHANISM_ID == 16
+static uint32_t watchdog_failure(void)
+{
+    case16_error = 0U;
+#if defined(CONFIG_SOC_SERIES_STM32F4X)
+    volatile uint32_t *pwr_cr = (void *)0x40007000UL;
+    *pwr_cr |= BIT(8);
+    volatile uint32_t *bridge = (void *)0x40002850UL;
+#else
+    volatile uint32_t *bridge = (void *)0x80003C00UL;
+#endif
+    if (FAULTY && bridge[1] == 0xae16b007U) { bridge[1] = 0U; return 1U; }
+    bridge[1] = FAULTY ? 0xae16b007U : 0U;
+    const struct device *watchdog = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(iwdg));
+    if (watchdog == NULL || !device_is_ready(watchdog)) { case16_error = 1U; return 1U; }
+    struct wdt_timeout_cfg timeout = { .window = { .min = 0U, .max = 20U }, .callback = NULL, .flags = WDT_FLAG_RESET_SOC };
+    int channel = wdt_install_timeout(watchdog, &timeout); if (channel < 0) { case16_error = 2U; return 1U; }
+    if (wdt_setup(watchdog, 0U) != 0) { case16_error = 3U; return 1U; }
+    if (FAULTY) { k_sleep(K_MSEC(50)); return 1U; }
+    if (wdt_feed(watchdog, channel) != 0) { case16_error = 4U; return 1U; }
+    return 0U;
+}
+#else
+static uint32_t watchdog_failure(void) { return 1U; }
+#endif
+
+static uint32_t case17_error;
+#if CONFIG_AEL_MECHANISM_ID == 17
 static uint32_t ota_journal_failure(void)
 {
-    struct slot_state {
-        uint32_t magic;
-        uint32_t sequence;
-        uint32_t committed;
-    } active = {0xae100001U, 7U, 1U}, candidate = {0xae100001U, 8U, 0U};
-    /* Power loss occurs after candidate data is present but before commit. */
-    if (FAULTY) {
-        active = candidate;
-    } else if (candidate.committed != 0U) {
-        active = candidate;
+    case17_error = 0U;
+    struct mcuboot_img_header header;
+    uint8_t active = boot_fetch_active_slot();
+    if (boot_read_bank_header(active, &header, sizeof(header)) != 0 || header.mcuboot_version != 1U) { case17_error = 1U; return 1U; }
+    if (header.h.v1.sem_ver.major == 0U) {
+        int request = boot_set_pending(0);
+        if (request != 0) { case17_error = 300U + (uint32_t)request; return 1U; }
+        sys_reboot(SYS_REBOOT_COLD);
+        return 1U;
     }
-    return active.committed == 0U || active.sequence != 7U;
+    if (FAULTY) { case17_error = boot_is_img_confirmed() ? 0U : 3U; return case17_error != 0U; }
+    if (boot_write_img_confirmed() != 0) { case17_error = 4U; return 1U; }
+    if (!boot_is_img_confirmed()) { case17_error = 5U; return 1U; }
+    return 0U;
 }
+#else
+static uint32_t ota_journal_failure(void) { return 1U; }
+#endif
 
 struct ael_result ael_run_selected(uint32_t external_retries)
 {
@@ -188,31 +354,28 @@ struct ael_result ael_run_selected(uint32_t external_retries)
         break;
     }
     case 13:
-        result.failure = mutex_cycle_failure();
+        result.failure = rtos_deadlock_failure();
         result.cause = result.failure ? "ABBA wait-for cycle" : "global mutex rank preserved";
         break;
     case 14: {
-        uint32_t high_wait_us = FAULTY ? 2400U : 420U;
-        result.failure = high_wait_us > 1000U;
+        result.failure = priority_inversion_failure();
         result.cause = result.failure ? "priority inversion missed deadline" : "inherited priority met deadline";
         break;
     }
     case 15: {
-        size_t requested_stack = FAULTY ? 4096U : 256U;
-        size_t available_stack = 1024U;
-        result.failure = requested_stack > available_stack;
+        result.failure = stack_fault_failure();
         result.cause = result.failure ? "stack request exceeds guard boundary" : "stack allocation bounded";
         break;
     }
     case 16: {
-        uint32_t health_progress = FAULTY ? 0U : 1U;
-        uint32_t feeds = health_progress ? 1U : 0U;
-        result.failure = feeds == 0U;
+        result.failure = watchdog_failure();
+        result.retries_milli = case16_error * 1000U;
         result.cause = result.failure ? "watchdog expired before health progress" : "watchdog fed after health check";
         break;
     }
     case 17:
         result.failure = ota_journal_failure();
+        result.retries_milli = case17_error * 1000U;
         result.cause = result.failure ? "uncommitted OTA slot selected" : "journal kept committed slot";
         break;
     case 19:

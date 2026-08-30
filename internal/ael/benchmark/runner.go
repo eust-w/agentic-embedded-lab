@@ -55,10 +55,11 @@ type BenchmarkRunner struct {
 	Workspace string
 	ProjectID string
 	Runs      *ael.RunManager
+	Execute   func(context.Context, string, string, string) (ael.EvidenceBundle, string, error)
 }
 
 func (r BenchmarkRunner) Run(ctx context.Context, catalog Catalog, selected map[int]bool, sourceRevision string) (AcceptanceManifest, error) {
-	if r.Runs == nil {
+	if r.Runs == nil && r.Execute == nil {
 		return AcceptanceManifest{}, errors.New("AEL run manager is required")
 	}
 	if failures := catalog.Validate(r.Workspace); len(failures) > 0 {
@@ -85,11 +86,105 @@ func (r BenchmarkRunner) Run(ctx context.Context, catalog Catalog, selected map[
 			break
 		}
 	}
+	if len(selected) == 0 {
+		manifest.Entries = append(manifest.Entries, r.backendEntries(catalog, manifest.Entries)...)
+		architecture, err := r.architectureEntry(ctx, systemPaths, sourceRevision)
+		if err != nil {
+			return manifest, err
+		}
+		manifest.Entries = append(manifest.Entries, architecture)
+		qualified := true
+		backendHashes := map[string]string{}
+		for _, entry := range manifest.Entries {
+			if strings.HasPrefix(entry.Name, "backend:") {
+				qualified = qualified && entry.Status == "passed"
+				backendHashes[entry.Name] = entry.EvidenceSHA256
+			}
+		}
+		environmentPath := filepath.Join(r.Workspace, "acceptance", "v2", "evidence", "environment-simulation.json")
+		environment := map[string]any{"api_version": ael.APIVersion, "qualified": qualified, "source_revision": sourceRevision, "backend_evidence": backendHashes, "versions": map[string]string{"zephyr": "4.4.2", "renode": "1.16.1", "ngspice": "46", "openmodelica": "1.27.0", "ns3": "3.47", "openems": "0.0.36"}, "hardware_validated": false}
+		if err := writeAcceptance(environmentPath, environment); err != nil {
+			return manifest, err
+		}
+		hash, _ := FileSHA256(environmentPath)
+		relative, _ := filepath.Rel(r.Workspace, environmentPath)
+		manifest.Entries = append(manifest.Entries, AcceptanceEntry{Name: "environment:qualified", Status: passStatus(qualified), EvidencePath: filepath.ToSlash(relative), EvidenceSHA256: hash, Limitations: []string{"Version-enforced simulation environment only; no hardware equivalence."}})
+	}
 	path := filepath.Join(r.Workspace, "acceptance", "v2", "simulation.json")
 	if err := writeAcceptance(path, manifest); err != nil {
 		return manifest, err
 	}
 	return manifest, nil
+}
+
+func (r BenchmarkRunner) backendEntries(catalog Catalog, entries []AcceptanceEntry) []AcceptanceEntry {
+	entryMap := map[string]AcceptanceEntry{}
+	for _, entry := range entries {
+		entryMap[entry.Name] = entry
+	}
+	backends := []string{"zephyr_build", "renode", "ngspice", "openmodelica", "ns3", "openems"}
+	var result []AcceptanceEntry
+	for _, backend := range backends {
+		cases := []string{}
+		hashes := map[string]string{}
+		passed := true
+		for _, item := range catalog.Cases {
+			if !contains(item.Backends, backend) {
+				continue
+			}
+			name := fmt.Sprintf("benchmark:%02d-%s", item.ID, item.Slug)
+			entry := entryMap[name]
+			cases = append(cases, name)
+			hashes[name] = entry.EvidenceSHA256
+			passed = passed && entry.Status == "passed"
+		}
+		path := filepath.Join(r.Workspace, "acceptance", "v2", "evidence", "backend-"+backend+".json")
+		payload := map[string]any{"api_version": ael.APIVersion, "backend": backend, "cases": cases, "case_evidence_sha256": hashes, "status": passStatus(passed), "hardware_validated": false}
+		_ = writeAcceptance(path, payload)
+		hash, _ := FileSHA256(path)
+		relative, _ := filepath.Rel(r.Workspace, path)
+		result = append(result, AcceptanceEntry{Name: "backend:" + backend, Status: passStatus(passed), EvidencePath: filepath.ToSlash(relative), EvidenceSHA256: hash, Limitations: []string{"Tool-executed backend conformance only; no hardware equivalence."}})
+	}
+	return result
+}
+
+func (r BenchmarkRunner) architectureEntry(ctx context.Context, systems map[string]string, revision string) (AcceptanceEntry, error) {
+	if r.Execute == nil {
+		return AcceptanceEntry{}, errors.New("architecture acceptance requires a direct executor")
+	}
+	experimentPath := "benchmarks/v2/experiments/riscv-smoke.yaml"
+	experiment, err := ael.LoadExperiment(r.Workspace, experimentPath)
+	if err != nil {
+		return AcceptanceEntry{}, err
+	}
+	systemPath := systems[experiment.SystemID]
+	bundle, evidence, runErr := r.Execute(ctx, experimentPath, systemPath, revision)
+	passed := runErr == nil
+	for _, assertion := range bundle.Assertions {
+		passed = passed && assertion.Passed
+	}
+	firmware := map[string]string{}
+	for name, path := range map[string]string{"cortex_m": filepath.Join(r.Workspace, ".ael", "firmware-builds", "build-case24-fixed", "zephyr", "zephyr.elf"), "riscv": filepath.Join(r.Workspace, ".ael", "firmware-builds", "build-hifive1", "zephyr", "zephyr.elf")} {
+		hash, err := FileSHA256(path)
+		if err != nil {
+			return AcceptanceEntry{}, err
+		}
+		firmware[name] = hash
+	}
+	path := filepath.Join(r.Workspace, "acceptance", "v2", "evidence", "firmware-arm-riscv.json")
+	payload := map[string]any{"api_version": ael.APIVersion, "zephyr_version": "4.4.2", "zephyr_sdk_version": "1.0.1", "firmware_sha256": firmware, "riscv_run_id": bundle.RunID, "riscv_trace_sha256": bundle.TraceSHA256, "riscv_evidence_path": evidence, "status": passStatus(passed), "hardware_validated": false}
+	if err := writeAcceptance(path, payload); err != nil {
+		return AcceptanceEntry{}, err
+	}
+	hash, _ := FileSHA256(path)
+	relative, _ := filepath.Rel(r.Workspace, path)
+	return AcceptanceEntry{Name: "firmware:arm-riscv", Status: passStatus(passed), EvidencePath: filepath.ToSlash(relative), EvidenceSHA256: hash, Limitations: []string{"Cross-compilation and virtual boot only; no physical CPU equivalence."}}, nil
+}
+func passStatus(value bool) string {
+	if value {
+		return "passed"
+	}
+	return "failed"
 }
 
 func (r BenchmarkRunner) runCase(ctx context.Context, item Case, systemPaths map[string]string, sourceRevision string) (AcceptanceEntry, error) {
@@ -121,13 +216,32 @@ func (r BenchmarkRunner) runCase(ctx context.Context, item Case, systemPaths map
 		if systemPath == "" {
 			return AcceptanceEntry{}, fmt.Errorf("system path for %s is missing", experiment.SystemID)
 		}
-		record, err := r.Runs.Start(ctx, ael.RunRequest{ProjectID: r.ProjectID, ExperimentPath: experimentPath, SystemPath: systemPath, SourceRevision: sourceRevision})
-		if err != nil {
-			return AcceptanceEntry{}, err
-		}
-		record, err = waitRun(ctx, r.Runs, record.ID)
-		if err != nil {
-			return AcceptanceEntry{}, err
+		var record ael.RunRecord
+		if r.Execute != nil {
+			bundle, evidencePath, runErr := r.Execute(ctx, experimentPath, systemPath, sourceRevision)
+			status := ael.RunCompleted
+			for _, assertion := range bundle.Assertions {
+				if !assertion.Passed {
+					status = ael.RunFailed
+					break
+				}
+			}
+			if runErr != nil {
+				status = ael.RunFailed
+			}
+			record = ael.RunRecord{ID: bundle.RunID, Status: status, EvidencePath: evidencePath, Bundle: &bundle}
+			if runErr != nil {
+				record.Error = runErr.Error()
+			}
+		} else {
+			record, err = r.Runs.Start(ctx, ael.RunRequest{ProjectID: r.ProjectID, ExperimentPath: experimentPath, SystemPath: systemPath, SourceRevision: sourceRevision})
+			if err != nil {
+				return AcceptanceEntry{}, err
+			}
+			record, err = waitRun(ctx, r.Runs, record.ID)
+			if err != nil {
+				return AcceptanceEntry{}, err
+			}
 		}
 		expected := ael.RunCompleted
 		if variant == "faulty" {

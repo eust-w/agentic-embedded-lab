@@ -31,6 +31,10 @@ int main(void)
             bridge->failure = result.failure;
             bridge->retries_milli = result.retries_milli;
             bridge->current_microamp = result.current_microamp;
+            /* Written last so an observer can distinguish an executed
+             * mechanism from zero-initialized SRAM or an unfinished boot.
+             */
+            bridge->input1 = 0xA17EAD17U;
             printk("AEL_EVENT firmware.mechanism {\"mechanism_id\":%u,\"variant\":\"%s\","
                    "\"failure\":%u,\"cause\":\"%s\"}\n",
                    CONFIG_AEL_MECHANISM_ID,

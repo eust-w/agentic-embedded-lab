@@ -44,6 +44,7 @@ type State struct {
 	Inputs        map[string]any
 	VirtualTimeUS int64
 	RuntimeDir    string
+	ArtifactRoot  string
 	Tool          string
 	Version       string
 }
@@ -59,7 +60,15 @@ func NewServer(workspace string, implementation Implementation) (*Server, error)
 		return nil, err
 	}
 	tool, version := resolveTool(implementation)
-	return &Server{implementation: implementation, state: State{Workspace: root, Inputs: make(map[string]any), Tool: tool, Version: version}}, nil
+	artifactRoot := os.Getenv("AEL_RUNTIME_ROOT")
+	if artifactRoot == "" {
+		artifactRoot = filepath.Join(root, ".ael", "backend-runtime")
+	}
+	artifactRoot, err = filepath.Abs(artifactRoot)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{implementation: implementation, state: State{Workspace: root, ArtifactRoot: artifactRoot, Inputs: make(map[string]any), Tool: tool, Version: version}}, nil
 }
 
 func (s *Server) Serve(ctx context.Context, input io.Reader, output io.Writer) error {
@@ -107,7 +116,7 @@ func (s *Server) handle(ctx context.Context, request ael.BackendRequest) (respon
 		}
 		seed, _ := numeric(request.Payload["seed"])
 		s.state.Seed = int64(seed)
-		runtimeRoot := filepath.Join(s.state.Workspace, ".ael", "backend-runtime")
+		runtimeRoot := s.state.ArtifactRoot
 		if err := os.MkdirAll(runtimeRoot, 0o700); err != nil {
 			return failure(request.ID, err.Error())
 		}
@@ -148,7 +157,7 @@ func (s *Server) handle(ctx context.Context, request ael.BackendRequest) (respon
 		if err := os.WriteFile(path, payload, 0o600); err != nil {
 			return failure(request.ID, err.Error())
 		}
-		response.Artifacts = map[string]string{"snapshot": relativeArtifact(s.state.Workspace, path)}
+		response.Artifacts = map[string]string{"snapshot": relativeArtifact(&s.state, path)}
 	case "shutdown":
 		s.state.Component = ael.Component{}
 	default:
@@ -236,12 +245,14 @@ func WorkspacePath(state *State, value string, mustExist bool) (string, error) {
 	return target, nil
 }
 
-func relativeArtifact(workspace, path string) string {
-	relative, err := filepath.Rel(workspace, path)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		panic("backend artifact is outside workspace")
+func relativeArtifact(state *State, path string) string {
+	for _, root := range []struct{ path, prefix string }{{state.Workspace, ""}, {state.ArtifactRoot, "ael-runtime://"}} {
+		relative, err := filepath.Rel(root.path, path)
+		if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return root.prefix + filepath.ToSlash(relative)
+		}
 	}
-	return relative
+	panic("backend artifact is outside approved roots")
 }
 
 func resolveTool(implementation Implementation) (string, string) {

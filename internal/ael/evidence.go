@@ -2,17 +2,21 @@ package ael
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 type EvidenceWriter struct {
-	Workspace string
+	Workspace       string
+	ArtifactSources map[string]string
 }
 
 func (w EvidenceWriter) Write(bundle EvidenceBundle) (string, error) {
@@ -40,6 +44,18 @@ func (w EvidenceWriter) Write(bundle EvidenceBundle) (string, error) {
 	defer os.RemoveAll(temporary)
 	if err := os.MkdirAll(filepath.Join(temporary, "snapshots"), 0o700); err != nil {
 		return "", err
+	}
+	if len(w.ArtifactSources) > 0 {
+		if err := os.MkdirAll(filepath.Join(temporary, "artifacts"), 0o700); err != nil {
+			return "", err
+		}
+		for key, source := range w.ArtifactSources {
+			relative, digest, err := copyEvidenceArtifact(temporary, key, source)
+			if err != nil {
+				return "", err
+			}
+			bundle.Artifacts[key] = relative + "#sha256=" + digest
+		}
 	}
 	files := map[string]any{
 		"system.resolved.json":     bundle.System,
@@ -76,6 +92,41 @@ func (w EvidenceWriter) Write(bundle EvidenceBundle) (string, error) {
 		return "", err
 	}
 	return finalPath, nil
+}
+
+func copyEvidenceArtifact(root, key, source string) (string, string, error) {
+	info, err := os.Stat(source)
+	if err != nil {
+		return "", "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", "", errors.New("evidence artifact must be a regular file")
+	}
+	safeKey := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(key)
+	relative := filepath.ToSlash(filepath.Join("artifacts", safeKey, filepath.Base(source)))
+	destination := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+		return "", "", err
+	}
+	input, err := os.Open(source)
+	if err != nil {
+		return "", "", err
+	}
+	defer input.Close()
+	output, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return "", "", err
+	}
+	hash := sha256.New()
+	_, copyErr := io.Copy(io.MultiWriter(output, hash), input)
+	closeErr := output.Close()
+	if copyErr != nil {
+		return "", "", copyErr
+	}
+	if closeErr != nil {
+		return "", "", closeErr
+	}
+	return relative, hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func writeJSONFile(path string, value any) error {

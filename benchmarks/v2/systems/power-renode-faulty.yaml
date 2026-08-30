@@ -14,6 +14,10 @@ components:
       id: mcu
       model: benchmarks/models/renode/stm32f4-ael.repl
       ports:
+        - direction: input
+          name: network_retries
+          type: real
+          unit: "1"
         - direction: output
           name: current
           type: real
@@ -23,7 +27,8 @@ components:
           type: integer
       properties:
         firmware: firmware/zephyr/build-case19-faulty/zephyr/zephyr.elf
-        input_registers: {}
+        input_registers:
+            network_retries: 5.3700098e+08
         model_state: conformance_validated
         output_registers:
             current: 5.37000976e+08
@@ -74,9 +79,9 @@ components:
       rollback: false
       step_us: 1000
 connections:
-    - source_component: mcu
-      source_port: current
-      target_component: circuit
-      target_port: load_microamp
-      unit: uA
+    - source_component: circuit
+      source_port: failure
+      target_component: mcu
+      target_port: network_retries
+      unit: "1"
 id: firmware-power-cross-domain-faulty

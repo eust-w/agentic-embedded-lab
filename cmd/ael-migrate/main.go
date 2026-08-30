@@ -188,6 +188,18 @@ func migrateExperiments(source, systems, output string) error {
 		}
 		experiment := ael.Experiment{APIVersion: ael.APIVersion, ID: legacy.Name, SystemID: systemID, DurationUS: legacy.DurationUS, MacroStepUS: legacy.MacroStepUS, Seed: legacy.Seed, Timeout: time.Duration(legacy.TimeoutS) * time.Second,
 			RequiredFidelity: ael.Fidelity{Firmware: ael.FidelityFunctional, Register: ael.FidelitySynthetic, Protocol: ael.FidelityFunctional, Timing: ael.FidelityFunctional, Physical: ael.FidelityUnsupported, HardwareValidated: false}}
+		if caseID >= 13 && caseID <= 16 {
+			experiment.DurationUS = 100000
+			experiment.MacroStepUS = 100000
+		}
+		if caseID == 16 {
+			experiment.DurationUS = 500000
+			experiment.MacroStepUS = 500000
+		}
+		if caseID == 17 {
+			experiment.DurationUS = 10000000
+			experiment.MacroStepUS = 10000000
+		}
 		for _, stimulus := range legacy.Stimuli {
 			if stimulus.Target == "mcu.case_id" {
 				continue
@@ -251,6 +263,15 @@ func specializeFirmwareSystems(output string) error {
 			return err
 		}
 	}
+	riscvPath := filepath.Join(output, "renode-riscv-smoke.yaml")
+	var riscv ael.System
+	if err := decodeV2YAML(riscvPath, &riscv); err != nil {
+		return err
+	}
+	removeCasePort(&riscv)
+	if err := writeYAML(riscvPath, riscv); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -263,7 +284,21 @@ func specializeMCUFirmware(system *ael.System, caseID int, variant string) {
 		if component.Properties == nil {
 			component.Properties = map[string]any{}
 		}
-		component.Properties["firmware"] = fmt.Sprintf("firmware/zephyr/build-case%02d-%s/zephyr/zephyr.elf", caseID, variant)
+		firmware := fmt.Sprintf("firmware/zephyr/build-case%02d-%s/zephyr/zephyr.elf", caseID, variant)
+		if caseID == 17 {
+			firmware = fmt.Sprintf("firmware/zephyr/build-case17-%s/merged.hex", variant)
+		}
+		component.Properties["firmware"] = firmware
+	}
+	removeCasePort(system)
+}
+
+func removeCasePort(system *ael.System) {
+	for index := range system.Components {
+		component := &system.Components[index]
+		if component.ID != "mcu" {
+			continue
+		}
 		if inputs, ok := component.Properties["input_registers"].(map[string]any); ok {
 			delete(inputs, "case_id")
 		}

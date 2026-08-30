@@ -80,7 +80,8 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 	metrics := make(map[string]float64)
 	connections := connectionsBySource(system.Connections)
 	var sequence int64
-	for virtualTime := int64(0); virtualTime <= experiment.DurationUS; virtualTime += experiment.MacroStepUS {
+	for virtualTime := int64(0); virtualTime < experiment.DurationUS; virtualTime += experiment.MacroStepUS {
+		stepUS := min(experiment.MacroStepUS, experiment.DurationUS-virtualTime)
 		select {
 		case <-ctx.Done():
 			return bundle, ctx.Err()
@@ -113,7 +114,7 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 			}
 		}
 		for _, component := range components {
-			result, err := adapters[component.ID].Step(ctx, virtualTime, experiment.MacroStepUS)
+			result, err := adapters[component.ID].Step(ctx, virtualTime, stepUS)
 			if err != nil {
 				return bundle, fmt.Errorf("step %s at %dus: %w", component.ID, virtualTime, err)
 			}

@@ -25,10 +25,12 @@ RUN mkdir -p /opt/zephyrproject \
       https://github.com/zephyrproject-rtos/zephyr.git /opt/zephyrproject/zephyr \
     && west init -l /opt/zephyrproject/zephyr \
     && cd /opt/zephyrproject \
-    && west update --narrow -o=--depth=1 cmsis cmsis_6 hal_stm32 \
+    && west update --narrow -o=--depth=1 cmsis cmsis_6 hal_stm32 mcuboot mbedtls \
     && west zephyr-export \
     && python3 -m pip install --break-system-packages --no-cache-dir \
       -r /opt/zephyrproject/zephyr/scripts/requirements-base.txt
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+      -r /opt/zephyrproject/bootloader/mcuboot/scripts/requirements.txt
 
 RUN case "${TARGETARCH}" in \
       amd64) SDK_ARCH=x86_64 ;; \

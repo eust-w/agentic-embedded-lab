@@ -59,6 +59,10 @@ func (Renode) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 	if err != nil {
 		return ael.StepResult{}, err
 	}
+	uartLog := filepath.Join(state.RuntimeDir, fmt.Sprintf("uart-%d.log", state.VirtualTimeUS+stepUS))
+	if strings.Contains(strings.ToLower(filepath.Base(model)), "stm32") {
+		lines = append(lines, "usart2 CreateFileBackend @"+uartLog)
+	}
 	lines = append(lines, fmt.Sprintf("emulation RunFor \"%.9f\"", float64(state.VirtualTimeUS+stepUS)/1_000_000))
 	outputs := propertyMap(state.Component.Properties, "output_registers")
 	keys := sortedKeys(outputs)
@@ -69,6 +73,10 @@ func (Renode) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 		}
 		lines = append(lines, fmt.Sprintf("python \"print('AEL_REGISTER:%s:%%x' %% self.Machine.SystemBus.ReadDoubleWord(%d))\"", name, address))
 	}
+	// Preserve the final instruction address in the raw evidence. This is
+	// deliberately diagnostic-only: no assertion may infer correctness from PC.
+	lines = append(lines, "cpu PC")
+	lines = append(lines, "cpu GetRegister 0", "cpu GetRegister 1", "cpu GetRegister 13", "cpu GetRegister 14")
 	lines = append(lines, "quit")
 	script := filepath.Join(state.RuntimeDir, "ael-step.resc")
 	if err := os.WriteFile(script, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
@@ -92,7 +100,12 @@ func (Renode) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 		scale := numberOr(scales[match[1]], 1)
 		resultOutputs[match[1]] = float64(value) * scale
 	}
-	return ael.StepResult{Outputs: resultOutputs, Metrics: metrics, Events: events, Artifacts: map[string]string{"script": relativeArtifact(state.Workspace, script), "log": relativeArtifact(state.Workspace, logPath)}}, nil
+	events = append(events, ael.Event{VirtualTimeUS: state.VirtualTimeUS + stepUS, Source: state.Component.ID, Type: "renode.mmio_observed", Payload: map[string]any{"outputs": resultOutputs}, FidelityRef: "renode:tool-executed"})
+	artifacts := map[string]string{"script": relativeArtifact(state, script), "log": relativeArtifact(state, logPath)}
+	if _, err := os.Stat(uartLog); err == nil {
+		artifacts["uart"] = relativeArtifact(state, uartLog)
+	}
+	return ael.StepResult{Outputs: resultOutputs, Metrics: metrics, Events: events, Artifacts: artifacts}, nil
 }
 
 func renodeInitialisation(state *State, model string) ([]string, error) {
@@ -107,7 +120,41 @@ func renodeInitialisation(state *State, model string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		lines = append(lines, "sysbus LoadELF @"+path)
+		loader := "sysbus LoadELF @"
+		hexFirmware := strings.EqualFold(filepath.Ext(path), ".hex")
+		if hexFirmware {
+			loader = "sysbus LoadHEX @"
+		}
+		bootLines := []string{loader + path}
+		if hexFirmware {
+			bootLines = append(bootLines, "cpu VectorTableOffset 0x08000000")
+		}
+		lines = append(lines, bootLines...)
+		resetLines := bootLines
+		if preserve, ok := state.Component.Properties["preserve_firmware_on_reset"].(bool); ok && preserve {
+			resetLines = nil
+			if hexFirmware {
+				resetLines = append(resetLines, "cpu VectorTableOffset 0x08000000")
+			}
+		}
+		lines = append(lines, "macro reset", "\"\"\"")
+		lines = append(lines, resetLines...)
+		lines = append(lines, "\"\"\"")
+	}
+	if raw, exists := state.Component.Properties["performance_mips"]; exists {
+		performanceMIPS, ok := numeric(raw)
+		if !ok || performanceMIPS <= 0 || performanceMIPS > 100_000 {
+			return nil, errors.New("Renode performance_mips must be a number in the range (0, 100000]")
+		}
+		lines = append(lines, fmt.Sprintf("cpu PerformanceInMips %.9g", performanceMIPS))
+	}
+	if rawAddress, exists := state.Component.Properties["stop_register"]; exists {
+		address, addressOK := integer(rawAddress)
+		value, valueOK := integer(state.Component.Properties["stop_value"])
+		if !addressOK || !valueOK || address < 0 || value < 0 {
+			return nil, errors.New("Renode stop_register and stop_value must be non-negative integers")
+		}
+		lines = append(lines, fmt.Sprintf("sysbus AddWatchpointHook %#x DoubleWord Write \"if value == %#x: cpu.GetMachine().PauseAndRequestEmulationPause()\"", address, value))
 	}
 	inputRegisters := propertyMap(state.Component.Properties, "input_registers")
 	for _, name := range sortedInputKeys(state.Inputs) {
@@ -170,6 +217,9 @@ func (n *Ngspice) Step(ctx context.Context, state *State, stepUS int64) (ael.Ste
 	logData, _ := os.ReadFile(logPath)
 	combined := append(output, logData...)
 	metrics, events := ParseOutput(state, combined, state.VirtualTimeUS+stepUS)
+	for name, value := range parseNgspiceMeasures(string(combined)) {
+		metrics[name] = value
+	}
 	if voltage, ok := metrics["supply_voltage"]; ok {
 		threshold := numberOr(state.Component.Properties["bor_threshold_V"], 2.7)
 		crossed := !n.brownout && voltage < threshold
@@ -179,7 +229,19 @@ func (n *Ngspice) Step(ctx context.Context, state *State, stepUS int64) (ael.Ste
 			events = append(events, ael.Event{VirtualTimeUS: state.VirtualTimeUS + stepUS, Source: state.Component.ID, Type: "power.brownout_threshold_crossed", Payload: map[string]any{"rail_voltage_V": voltage, "bor_threshold_V": threshold}, FidelityRef: "ngspice:tool-executed"})
 		}
 	}
-	return ael.StepResult{Outputs: copyMetrics(metrics), Metrics: metrics, Events: events, Artifacts: map[string]string{"log": relativeArtifact(state.Workspace, logPath), "deck": relativeArtifact(state.Workspace, deck)}}, nil
+	return ael.StepResult{Outputs: copyMetrics(metrics), Metrics: metrics, Events: events, Artifacts: map[string]string{"log": relativeArtifact(state, logPath), "deck": relativeArtifact(state, deck)}}, nil
+}
+
+var ngspiceMeasurePattern = regexp.MustCompile(`(?m)^ael_([A-Za-z0-9_]+)\s*=\s*([-+0-9.eE]+)`)
+
+func parseNgspiceMeasures(output string) map[string]float64 {
+	result := map[string]float64{}
+	for _, match := range ngspiceMeasurePattern.FindAllStringSubmatch(output, -1) {
+		if value, err := strconv.ParseFloat(match[2], 64); err == nil {
+			result[match[1]] = value
+		}
+	}
+	return result
 }
 
 type Modelica struct{}
@@ -301,11 +363,11 @@ func (OpenEMS) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRe
 		return ael.StepResult{}, err
 	}
 	digest := sha256.Sum256(append(modelData, mustJSON(state.Inputs)...))
-	cache := filepath.Join(state.Workspace, ".ael", "openems-cache", hex.EncodeToString(digest[:])+".json")
+	cache := filepath.Join(state.ArtifactRoot, "openems-cache", hex.EncodeToString(digest[:])+".json")
 	if data, err := os.ReadFile(cache); err == nil {
 		metrics := map[string]float64{}
 		_ = json.Unmarshal(data, &metrics)
-		return ael.StepResult{Outputs: copyMetrics(metrics), Metrics: metrics, Events: []ael.Event{{Type: "openems.cache_hit", FidelityRef: "openems:tool-executed-cached"}}, Artifacts: map[string]string{"cache": relativeArtifact(state.Workspace, cache)}}, nil
+		return ael.StepResult{Outputs: copyMetrics(metrics), Metrics: metrics, Events: []ael.Event{{Type: "openems.cache_hit", FidelityRef: "openems:tool-executed-cached"}}, Artifacts: map[string]string{"cache": relativeArtifact(state, cache)}}, nil
 	}
 	octave, err := exec.LookPath("octave-cli")
 	if err != nil {
@@ -410,10 +472,10 @@ func (Zephyr) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 		if mechanismFailed {
 			value = 1
 		}
-		artifacts := map[string]string{"build_log": relativeArtifact(state.Workspace, logPath)}
+		artifacts := map[string]string{"build_log": relativeArtifact(state, logPath)}
 		for label, path := range map[string]string{"dotconfig": filepath.Join(build, "zephyr", ".config"), "devicetree": filepath.Join(build, "zephyr", "zephyr.dts"), "firmware_elf": filepath.Join(build, "zephyr", "zephyr.elf")} {
 			if _, err := os.Stat(path); err == nil {
-				artifacts[label] = relativeArtifact(state.Workspace, path)
+				artifacts[label] = relativeArtifact(state, path)
 			}
 		}
 		event := ael.Event{VirtualTimeUS: state.VirtualTimeUS + stepUS, Source: state.Component.ID, Type: fmt.Sprintf("zephyr.build.case%d", caseID), Payload: map[string]any{"variant": variant, "returncode": exitCode, "mechanism_failed": mechanismFailed, "detail": detail}, FidelityRef: "zephyr_build:tool-executed"}
@@ -424,7 +486,7 @@ func (Zephyr) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 		return result, err
 	}
 	if _, err := os.Stat(filepath.Join(build, "zephyr", "zephyr.elf")); err == nil {
-		result.Artifacts["firmware_elf"] = relativeArtifact(state.Workspace, filepath.Join(build, "zephyr", "zephyr.elf"))
+		result.Artifacts["firmware_elf"] = relativeArtifact(state, filepath.Join(build, "zephyr", "zephyr.elf"))
 	}
 	return result, nil
 }
@@ -438,7 +500,7 @@ func scriptWorkerStep(ctx context.Context, state *State, stepUS int64, args []st
 	_ = os.WriteFile(logPath, output, 0o600)
 	metrics, events := ParseOutput(state, output, state.VirtualTimeUS+stepUS)
 	events = append(events, ael.Event{VirtualTimeUS: state.VirtualTimeUS + stepUS, Source: state.Component.ID, Type: label + ".step_completed", Payload: map[string]any{}, FidelityRef: label + ":tool-executed"})
-	return ael.StepResult{Outputs: copyMetrics(metrics), Metrics: metrics, Events: events, Artifacts: map[string]string{"log": relativeArtifact(state.Workspace, logPath)}}, nil
+	return ael.StepResult{Outputs: copyMetrics(metrics), Metrics: metrics, Events: events, Artifacts: map[string]string{"log": relativeArtifact(state, logPath)}}, nil
 }
 
 func propertyMap(properties map[string]any, key string) map[string]any {
