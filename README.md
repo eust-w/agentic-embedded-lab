@@ -7,17 +7,18 @@
     <img alt="Wails" src="https://img.shields.io/badge/Wails-v2.12-DF0000?style=flat-square">
     <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=111">
     <img alt="Foundation" src="https://img.shields.io/badge/Go%20foundation-passing-20b26b?style=flat-square">
-    <img alt="AEL simulation" src="https://img.shields.io/badge/AEL%20simulation-migration%20in%20progress-f59e0b?style=flat-square">
+    <img alt="AEL simulation" src="https://img.shields.io/badge/AEL%20simulation-34%2F34%20passing-20b26b?style=flat-square">
+    <img alt="macOS package" src="https://img.shields.io/badge/macOS%20dev%20package-passing-20b26b?style=flat-square">
     <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-f59e0b?style=flat-square"></a>
   </p>
   <p><b>English</b> | <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
 > [!IMPORTANT]
-> This branch is the active **Go rewrite toward Aether Desktop 1.0**. The Go
-> foundation and React production build pass, but the five simulator backends,
-> 24 mechanism benchmarks, bundled Chromium, LaunchAgent installation, signing,
-> and notarization are not complete. No simulator or hardware Claim is implied.
+> This branch is the active **Go rewrite toward Aether Desktop 1.0**. Foundation,
+> software topology, the complete AEL simulation gate and the ad-hoc-signed arm64
+> development bundle pass. The public 1.0 release remains blocked on full Xcode,
+> Developer ID/notarization credentials and physical Validation Envelopes.
 
 ## Product split
 
@@ -48,20 +49,21 @@
   plugins, wazero/WASM, MCP STDIO/HTTP and local redacted memory.
 - Independent child-agent threads, persistent RRULE automation, controlled CDP
   browser APIs and per-application Computer Use permissions.
-- Initial AEL v2 contracts, deterministic scheduler, evidence trace hashes,
-  explicit Fidelity aggregation and the Go backend JSONL protocol.
+- Isolated gRPC process plugins, WASM plugins, a pinned Chromium runtime,
+  Chrome Native Messaging and a dynamically loaded Sparkle 2 updater.
+- AEL v2 contracts, FMI/SSP orchestration, six execution adapters, 24 real
+  faulty/fixed mechanisms, ARM/RISC-V firmware, Evidence/Fidelity and 20-run
+  deterministic trace acceptance.
 
-## Not yet accepted
+## Remaining release gates
 
-- Renode, ngspice, OpenModelica/OMSimulator, ns-3 and openEMS Go workers are not
-  all wired into the container images.
-- The existing 24 faulty/fixed benchmarks have not all passed through the Go runner.
-- Bundled Chromium and Chrome Native Messaging distribution are not installed.
-- ScreenCaptureKit screenshot capture and Accessibility element-tree inspection
-  are not complete; input primitives and permission checks exist.
-- `SMAppService`, Sparkle updates, Developer ID signing and Apple notarization
-  require the production packaging phase and full Xcode.
+- The local development `.app` is ad-hoc signed. Developer ID signing,
+  notarization, Sparkle feed signing and DMG release require full Xcode and the
+  release owner's credentials.
+- The Chrome Native Messaging installer is shipped but is never installed
+  silently; the user must explicitly enable that persistent integration.
 - Hardware validation remains unavailable without the physical laboratory.
+  Simulation success never creates a hardware or production Claim.
 
 ## Development
 
@@ -75,6 +77,9 @@ npm --prefix frontend run build
 go test ./...
 go vet ./...
 go run ./cmd/schema-export --output schemas/v2
+./scripts/fetch_macos_dependencies.sh
+./scripts/build_mac_app.sh --development
+go run ./cmd/aether-package-check
 ```
 
 Run the frontend visual shell:
@@ -97,7 +102,8 @@ The design intentionally keeps these states separate:
 | Hardware validated | Physical differential evidence passed inside a signed envelope |
 | Production approved | Hardware evidence, policy and an independent human approval are present |
 
-The current branch proves only the checked software foundation. See
+The current branch proves the named software, simulation and development-package
+checks only. It does not prove physical hardware equivalence. See
 [the visual specification](docs/design/aether-desktop-1.0/DESIGN.md) and
 [the archived Python implementation](https://github.com/eust-w/agentic-embedded-lab/tree/archive/python-aether-pre-go).
 

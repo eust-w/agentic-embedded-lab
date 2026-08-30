@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { vi } from 'vitest'
 import { App } from './App'
 import { useWorkspace } from './store/workspace'
@@ -35,6 +35,13 @@ describe('Aether desktop shell', () => {
     expect(screen.getByText('已批准当前轮次')).toBeInTheDocument()
   })
 
+  it('shows an explicit Chinese blocker when bundled Chromium is unavailable', () => {
+    render(<App />)
+    fireEvent.click(within(screen.getByRole('navigation', { name: '工作区视图' })).getByRole('button', { name: '浏览器' }))
+    expect(screen.getByText('受控 Chromium 尚未启动')).toBeInTheDocument()
+    expect(screen.getByText(/不会静默改用系统浏览器/)).toBeInTheDocument()
+  })
+
   it('opens a real Wails project and renders persisted daemon items', async () => {
     const thread: Thread = { api_version: 'aether.desktop/v1', id: 'thread-1', project_id: 'project-1', title: '真实任务', model: 'gpt-5.6', permission: 'workspace_write', status: 'ready', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     const items: Item[] = [
@@ -44,6 +51,7 @@ describe('Aether desktop shell', () => {
     const api: BackendAPI = {
       Health: vi.fn().mockResolvedValue({ status: 'ready', time: new Date().toISOString() }),
       InstallBackgroundService: vi.fn().mockResolvedValue(undefined),
+      UpdateStatus: vi.fn().mockResolvedValue({ available: false, started: false }),
       SelectProject: vi.fn().mockResolvedValue({ id: 'project-1', root: '/tmp/firmware', permission: 'workspace_write', tools: [] }),
       ListThreads: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([thread]),
       CreateThread: vi.fn().mockResolvedValue(thread),
@@ -56,6 +64,19 @@ describe('Aether desktop shell', () => {
       GetExperiment: vi.fn().mockResolvedValue({}),
       CancelExperiment: vi.fn().mockResolvedValue(true),
       CheckRelease: vi.fn().mockImplementation((profile) => Promise.resolve({ profile, passed: profile === 'foundation', failures: profile === 'foundation' ? [] : ['证据缺失'], checked: [] })),
+      BrowserStatus: vi.fn().mockResolvedValue({ running: false, executable: '/Applications/Aether Desktop.app/Contents/Resources/Chromium.app/Contents/MacOS/Chromium' }),
+      StartBrowser: vi.fn().mockResolvedValue(undefined),
+      StopBrowser: vi.fn().mockResolvedValue(undefined),
+      SetSitePermission: vi.fn().mockResolvedValue(undefined),
+      RevokeSitePermission: vi.fn().mockResolvedValue(undefined),
+      NavigateBrowser: vi.fn().mockResolvedValue(undefined),
+      BrowserDOM: vi.fn().mockResolvedValue(''),
+      BrowserScreenshot: vi.fn().mockResolvedValue(''),
+      BrowserConsole: vi.fn().mockResolvedValue([]),
+      BrowserNetwork: vi.fn().mockResolvedValue([]),
+      LatestChromeSnapshot: vi.fn().mockResolvedValue({ available: false }),
+      BrowserClick: vi.fn().mockResolvedValue(undefined),
+      BrowserType: vi.fn().mockResolvedValue(undefined),
     }
     window.go = { app: { Backend: api } }
     render(<App />)

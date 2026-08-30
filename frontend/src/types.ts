@@ -132,3 +132,24 @@ export interface ReleaseResult {
   failures: string[]
   checked: string[]
 }
+
+export interface BrowserStatus {
+  running: boolean
+  executable: string
+  url?: string
+  title?: string
+}
+
+export interface BrowserConsoleEntry {
+  level: string
+  text: string
+  timestamp: string
+}
+
+export interface BrowserNetworkEntry {
+  method: string
+  url: string
+  status: number
+  mime_type: string
+  timestamp: string
+}

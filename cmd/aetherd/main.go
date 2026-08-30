@@ -16,6 +16,7 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
+	"github.com/eust-w/agentic-embedded-lab/internal/browser"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
 	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
@@ -49,7 +50,7 @@ func main() {
 	defer agents.Close()
 	aelRuns := ael.NewRunManager(state, *aelBackend)
 	models := modeling.NewManager(client)
-	server := daemon.Server{SocketPath: *socketPath, Token: token, Runtime: runtime, Agents: agents, AEL: aelRuns, Models: models}
+	server := daemon.Server{SocketPath: *socketPath, Token: token, Runtime: runtime, Agents: agents, AEL: aelRuns, Models: models, Chrome: &browser.ChromeSessionStore{}}
 	if err := server.Listen(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatalf("run daemon: %v", err)
 	}

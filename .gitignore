@@ -22,6 +22,7 @@ aether/desktop/out/
 *.egg-info/
 *.py[cod]
 build/
+frontend/package.json.md5
 dist/
 firmware/**/build-*/
 runs/

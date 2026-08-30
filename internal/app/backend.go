@@ -3,21 +3,27 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
+	"github.com/eust-w/agentic-embedded-lab/internal/browser"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
 	"github.com/eust-w/agentic-embedded-lab/internal/launchagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/release"
 	"github.com/eust-w/agentic-embedded-lab/internal/secret"
+	"github.com/eust-w/agentic-embedded-lab/internal/store"
+	"github.com/eust-w/agentic-embedded-lab/internal/updater"
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -29,6 +35,9 @@ type Backend struct {
 	client         *daemon.Client
 	service        launchagent.Service
 	currentProject string
+	browser        *browser.Controller
+	browserStore   *store.Store
+	updaterStarted bool
 }
 
 type ProjectInfo struct {
@@ -43,6 +52,30 @@ func NewBackend() *Backend { return &Backend{service: launchagent.New()} }
 func (b *Backend) Startup(ctx context.Context) {
 	b.ctx = ctx
 	_ = b.refreshClient()
+	b.updaterStarted = updater.Start()
+	root := applicationSupportRoot()
+	state, err := store.Open(ctx, filepath.Join(root, "browser-state"))
+	if err == nil {
+		b.browserStore = state
+		b.browser = &browser.Controller{
+			Executable:  bundledChromiumExecutable(),
+			ProfilePath: filepath.Join(root, "ChromiumProfile"),
+			Permissions: browser.NewPermissionStore(state),
+		}
+	}
+}
+
+func (b *Backend) UpdateStatus() map[string]bool {
+	return map[string]bool{"available": updater.Available(), "started": b.updaterStarted}
+}
+
+func (b *Backend) Shutdown(context.Context) {
+	if b.browser != nil {
+		b.browser.Stop()
+	}
+	if b.browserStore != nil {
+		_ = b.browserStore.Close()
+	}
 }
 
 func (b *Backend) Health() (map[string]any, error) {
@@ -251,6 +284,149 @@ func (b *Backend) BackgroundServiceStatus() launchagent.Status { return b.servic
 func (b *Backend) InstallBackgroundService() error { return b.service.Register() }
 
 func (b *Backend) UninstallBackgroundService() error { return b.service.Unregister() }
+
+func (b *Backend) BrowserStatus() browser.Status {
+	if b.browser == nil {
+		return browser.Status{Executable: bundledChromiumExecutable()}
+	}
+	return b.browser.Status()
+}
+
+func (b *Backend) StartBrowser() error {
+	if b.browser == nil {
+		return errors.New("浏览器状态存储不可用")
+	}
+	return b.browser.Start(b.ctx)
+}
+
+func (b *Backend) StopBrowser() {
+	if b.browser != nil {
+		b.browser.Stop()
+	}
+}
+
+func (b *Backend) SetSitePermission(rawURL string, allow bool) error {
+	if b.browser == nil || b.browser.Permissions == nil {
+		return errors.New("浏览器权限存储不可用")
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Hostname() == "" {
+		return errors.New("请输入包含协议和主机名的有效网址")
+	}
+	decision := browser.DecisionDeny
+	if allow {
+		decision = browser.DecisionAllow
+	}
+	return b.browser.Permissions.Set(b.ctx, "site", strings.ToLower(parsed.Hostname()), decision, "persistent")
+}
+
+func (b *Backend) RevokeSitePermission(rawURL string) error {
+	if b.browser == nil || b.browser.Permissions == nil {
+		return errors.New("浏览器权限存储不可用")
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Hostname() == "" {
+		return errors.New("请输入包含协议和主机名的有效网址")
+	}
+	return b.browser.Permissions.Revoke(b.ctx, "site", strings.ToLower(parsed.Hostname()))
+}
+
+func (b *Backend) NavigateBrowser(target string) error {
+	if b.browser == nil {
+		return errors.New("浏览器不可用")
+	}
+	return b.browser.Navigate(b.ctx, target)
+}
+
+func (b *Backend) BrowserDOM() (string, error) {
+	if b.browser == nil {
+		return "", errors.New("浏览器不可用")
+	}
+	return b.browser.DOM(b.ctx)
+}
+
+func (b *Backend) BrowserScreenshot() (string, error) {
+	if b.browser == nil {
+		return "", errors.New("浏览器不可用")
+	}
+	payload, err := b.browser.Screenshot(b.ctx)
+	if err != nil {
+		return "", err
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(payload), nil
+}
+
+func (b *Backend) BrowserConsole(after int) []browser.ConsoleEntry {
+	if b.browser == nil {
+		return nil
+	}
+	return b.browser.Console(after)
+}
+
+func (b *Backend) BrowserNetwork(after int) []browser.NetworkEntry {
+	if b.browser == nil {
+		return nil
+	}
+	return b.browser.Network(after)
+}
+
+func (b *Backend) LatestChromeSnapshot() (map[string]any, error) {
+	if err := b.refreshClient(); err != nil {
+		return nil, errors.New("Aether 后台尚未配置")
+	}
+	var result map[string]any
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.chrome_latest"}, &result)
+	return result, err
+}
+
+func (b *Backend) BrowserClick(selector string, confirmed bool) error {
+	if b.browser == nil {
+		return errors.New("浏览器不可用")
+	}
+	if sensitiveBrowserAction(selector) && !confirmed {
+		return errors.New("该选择器可能触发提交、购买或删除；需要二次确认")
+	}
+	return b.browser.Click(b.ctx, selector)
+}
+
+func (b *Backend) BrowserType(selector, text string) error {
+	if b.browser == nil {
+		return errors.New("浏览器不可用")
+	}
+	return b.browser.Type(b.ctx, selector, text)
+}
+
+func sensitiveBrowserAction(selector string) bool {
+	value := strings.ToLower(selector)
+	for _, marker := range []string{"submit", "purchase", "buy", "delete", "remove", "upload", "付款", "购买", "删除", "提交", "上传"} {
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func applicationSupportRoot() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "Aether")
+	}
+	return filepath.Join(home, "Library", "Application Support", "Aether")
+}
+
+func bundledChromiumExecutable() string {
+	if override := strings.TrimSpace(os.Getenv("AETHER_CHROMIUM_PATH")); override != "" {
+		if absolute, err := filepath.Abs(override); err == nil {
+			return absolute
+		}
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return filepath.Join(string(filepath.Separator), "Applications", "Aether Desktop.app", "Contents", "Resources", "Chromium.app", "Contents", "MacOS", "Chromium")
+	}
+	contents := filepath.Dir(filepath.Dir(executable))
+	return filepath.Join(contents, "Resources", "Chromium.app", "Contents", "MacOS", "Chromium")
+}
 
 func defaultSocketPath() string {
 	home, err := os.UserHomeDir()

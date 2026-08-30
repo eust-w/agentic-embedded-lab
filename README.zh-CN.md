@@ -6,9 +6,9 @@
 </div>
 
 > [!IMPORTANT]
-> 当前分支正在进行Aether Desktop 1.0全量Go重构。Go Foundation与React生产
-> 构建已通过，但五个仿真后端、24项机制基准、内置Chromium、LaunchAgent、
-> 签名和公证尚未全部完成，不能据此声明仿真或硬件通过。
+> 当前分支正在进行Aether Desktop 1.0全量Go重构。Foundation、软件拓扑、
+> AEL完整仿真门和arm64开发包已经通过；正式1.0仍受完整Xcode、Developer ID、
+> Apple公证凭据以及真机Validation Envelope约束。
 
 ## 产品关系
 
@@ -27,15 +27,17 @@
 - 类型化审批、Seatbelt执行器、Git/Worktree、AGENTS层级发现。
 - Skills、Hooks、签名插件、WASM、MCP、脱敏Memory和独立子Agent Thread。
 - RRULE后台调度、受控CDP浏览器和逐应用Computer Use权限。
-- AEL v2契约、确定性Scheduler、Trace Hash、Fidelity和Backend JSONL协议。
+- 隔离gRPC进程插件、WASM插件、固定Chromium、Chrome Native Messaging和
+  动态加载的Sparkle 2更新器。
+- AEL v2契约、FMI/SSP、六类执行适配器、24项真实faulty/fixed机制、
+  ARM/RISC-V Firmware、Evidence/Fidelity和20次确定性Trace验收。
 
-## 尚未通过的门
+## 尚未通过的发布门
 
-- 五个仿真器的Go Worker与容器尚未全部接通。
-- 24项faulty/fixed基准尚未全部通过Go Runner。
-- Chromium、Chrome Native Messaging、ScreenCaptureKit完整链路尚未完成。
-- `SMAppService`、Sparkle、Developer ID签名与Notarization需要完整Xcode。
-- 没有真实实验室时，Hardware与Production Claim继续阻塞。
+- 当前开发包使用ad-hoc签名；Developer ID、Notarization、Sparkle Feed签名和
+  正式DMG需要完整Xcode及发布者凭据。
+- Chrome Native Messaging安装器已提供，但不会静默创建持久集成，必须由用户明确启用。
+- 没有真实实验室时，Hardware与Production Claim继续阻塞；仿真通过不等于真机通过。
 
 ## 开发检查
 
@@ -45,6 +47,9 @@ npm --prefix frontend run build
 go test ./...
 go vet ./...
 go run ./cmd/schema-export --output schemas/v2
+./scripts/fetch_macos_dependencies.sh
+./scripts/build_mac_app.sh --development
+go run ./cmd/aether-package-check
 ```
 
 视觉规范见[设计文档](docs/design/aether-desktop-1.0/DESIGN.md)，旧Python实现保存在

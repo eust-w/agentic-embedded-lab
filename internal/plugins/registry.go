@@ -76,6 +76,11 @@ func (r Registry) Install(source string, approvePermissions bool) (Installed, er
 	if err := copyPackage(source, temporary); err != nil {
 		return Installed{}, err
 	}
+	if manifest.Process != nil {
+		if err := os.Chmod(filepath.Join(temporary, manifest.Process.Executable), 0o700); err != nil {
+			return Installed{}, err
+		}
+	}
 	if err := os.Rename(temporary, destination); err != nil {
 		return Installed{}, err
 	}

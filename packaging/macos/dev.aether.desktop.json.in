@@ -1,0 +1,9 @@
+{
+  "name": "dev.aether.desktop",
+  "description": "Aether Desktop explicit Chrome tab bridge",
+  "path": "@AETHER_CHROME_HOST_PATH@",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://nkpiamfhpapfmhgjallhkoapfpogldbe/"
+  ]
+}

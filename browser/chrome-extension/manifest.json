@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Aether Desktop 标签页桥接",
+  "description": "仅在用户点击扩展后，将当前 Chrome 标签页的结构化快照发送给本机 Aether Desktop。",
+  "version": "1.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs+wBDoVZczZL9wfhcMzE+5+iSVYurJYovkDi3APj28Dz/BtRF2c7Wz1w6ZQ/zgfAP+e7UiJ3cMqa0WtoUV9PLdJ14viWf5BUyJRXpV7SN8LyEUk8b0HOGIHHXC+B9t3jsvcKItWEXPlOElFNT+dQ0k/UhmbZhJMvh2xt7hoiyK5oY9e1n1AXG1NVQvTkyjxMLTq1BeWgwFol3gTX6fyBgtlItEKW2TJqDYWGNPA+YYFqbHEN+OkYRz+zecmjzFaS0x7SHrZxeWlEibZKdtl1Yh2UoRWORFYaOvsme+QE8kw3w5uQ2q2vDhJB0Jd1YQWnSAnwBYONV8Z3Dd543fMoewIDAQAB",
+  "permissions": ["activeTab", "nativeMessaging", "scripting"],
+  "background": { "service_worker": "service-worker.js", "type": "module" },
+  "action": { "default_title": "发送当前标签页到 Aether", "default_popup": "popup.html" }
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
+	"github.com/eust-w/agentic-embedded-lab/internal/browser"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/store"
@@ -42,6 +43,24 @@ func TestDaemonRequiresCapabilityToken(t *testing.T) {
 	thread, ok := created.Result.(protocol.Thread)
 	if !ok || thread.ID == "" {
 		t.Fatal("thread was not created")
+	}
+}
+
+func TestDaemonAcceptsOnlyTypedChromeSnapshots(t *testing.T) {
+	ctx := context.Background()
+	server := &Server{Token: "capability", Chrome: &browser.ChromeSessionStore{}}
+	message := browser.NativeMessage{Type: "snapshot", ID: "capture-1", TabID: 8, Payload: map[string]any{"url": "https://example.com", "title": "Example", "dom": "<html></html>"}}
+	ingested := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "1", Token: "capability", Method: "browser.chrome_ingest", Params: mustJSON(t, message)})
+	if ingested.Error != "" {
+		t.Fatal(ingested.Error)
+	}
+	latest := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "2", Token: "capability", Method: "browser.chrome_latest"})
+	if latest.Error != "" {
+		t.Fatal(latest.Error)
+	}
+	result, ok := latest.Result.(map[string]any)
+	if !ok || result["available"] != true {
+		t.Fatalf("latest Chrome snapshot missing: %#v", latest.Result)
 	}
 }
 

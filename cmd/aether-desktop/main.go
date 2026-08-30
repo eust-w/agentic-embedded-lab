@@ -23,6 +23,7 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 11, G: 15, B: 20, A: 1},
 		AssetServer:      &assetserver.Options{Assets: webassets.Assets},
 		OnStartup:        backend.Startup,
+		OnShutdown:       backend.Shutdown,
 		Bind:             []any{backend},
 		Mac: &mac.Options{
 			TitleBar:             mac.TitleBarHiddenInset(),

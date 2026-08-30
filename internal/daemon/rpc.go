@@ -18,6 +18,7 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/approval"
+	"github.com/eust-w/agentic-embedded-lab/internal/browser"
 	"github.com/eust-w/agentic-embedded-lab/internal/executor"
 	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
 	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
@@ -48,6 +49,7 @@ type Server struct {
 	Agents     *multiagent.Manager
 	AEL        *ael.RunManager
 	Models     *modeling.Manager
+	Chrome     *browser.ChromeSessionStore
 }
 
 func (s *Server) Listen(ctx context.Context) error {
@@ -121,6 +123,25 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 	switch request.Method {
 	case "health":
 		response.Result = map[string]any{"status": "ready", "time": time.Now().UTC()}
+	case "browser.chrome_ingest":
+		if s.Chrome == nil {
+			response.Error = "Chrome native messaging bridge is unavailable"
+			break
+		}
+		var message browser.NativeMessage
+		if err := json.Unmarshal(request.Params, &message); err != nil {
+			response.Error = "invalid Chrome snapshot"
+			break
+		}
+		snapshot, err := s.Chrome.Ingest(message)
+		response.Result, response.Error = resultOrError(snapshot, err)
+	case "browser.chrome_latest":
+		if s.Chrome == nil {
+			response.Error = "Chrome native messaging bridge is unavailable"
+			break
+		}
+		snapshot, ok := s.Chrome.Latest()
+		response.Result = map[string]any{"available": ok, "snapshot": snapshot}
 	case "project.open":
 		var params struct {
 			ProjectID  string                     `json:"project_id"`

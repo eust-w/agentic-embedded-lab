@@ -1,0 +1,15 @@
+{
+  "chromium": {
+    "revision": "1688699",
+    "platform": "Mac_Arm",
+    "url": "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Mac_Arm/1688699/chrome-mac.zip",
+    "sha256": "fa980d55ea084890fb11400de4c3696ec35c1e426debd031ae0b980a7a0e7b03",
+    "license": "Chromium project licenses; see Chromium.app/Contents/Resources/about_credits.html"
+  },
+  "sparkle": {
+    "version": "2.9.4",
+    "url": "https://github.com/sparkle-project/Sparkle/releases/download/2.9.4/Sparkle-2.9.4.tar.xz",
+    "sha256": "ce89daf967db1e1893ed3ebd67575ed82d3902563e3191ca92aaec9164fbdef9",
+    "license": "MIT"
+  }
+}
