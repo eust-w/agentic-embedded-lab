@@ -111,8 +111,8 @@ func TestSchedulerHonorsMultiRateEventDrivenAndCheckpoints(t *testing.T) {
 	slow := &fakeAdapter{component: Component{ID: "slow"}}
 	event := &fakeAdapter{component: Component{ID: "event"}}
 	system := System{APIVersion: APIVersion, ID: "multi-rate", Components: []Component{
-		{ID: "fast", Backend: BackendRenode, StepUS: 500},
-		{ID: "slow", Backend: BackendModelica, StepUS: 2000, Rollback: true},
+		{ID: "fast", Backend: BackendRenode, StepUS: 500, Properties: map[string]any{"communication_step_us": float64(500)}},
+		{ID: "slow", Backend: BackendModelica, StepUS: 2000, Rollback: true, Properties: map[string]any{"communication_step_us": float64(2000)}},
 		{ID: "event", Backend: BackendOpenEMS, EventDriven: true},
 	}}
 	experiment := Experiment{APIVersion: APIVersion, ID: "multi", SystemID: system.ID, DurationUS: 4000, MacroStepUS: 1000, Timeout: time.Second, Stimuli: []Stimulus{{AtUS: 2000, Target: "event.detune", Value: 1}}}
@@ -143,5 +143,18 @@ func TestTemporalAssertionsUseWindowedMaxAndPercentile(t *testing.T) {
 	}, metrics, samples)
 	if !results[0].Passed || !results[1].Passed || results[0].ObservedAtUS != 2000 {
 		t.Fatalf("unexpected temporal assertions: %#v", results)
+	}
+}
+
+func TestInternalStepHintDoesNotCreateExternalCommunicationPoints(t *testing.T) {
+	adapter := &fakeAdapter{component: Component{ID: "mcu"}}
+	system := System{APIVersion: APIVersion, ID: "internal-step", Components: []Component{{ID: "mcu", Backend: BackendRenode, StepUS: 1000}}}
+	experiment := Experiment{APIVersion: APIVersion, ID: "long", SystemID: system.ID, DurationUS: 120_000_000, MacroStepUS: 120_000_000, Timeout: time.Second}
+	bundle, err := (Scheduler{Factories: map[Backend]AdapterFactory{BackendRenode: func(Component) (Adapter, error) { return adapter, nil }}}).Run(context.Background(), experiment, system, "revision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(adapter.steps) != 1 || adapter.steps[0] != experiment.DurationUS || len(bundle.Events) != 1 {
+		t.Fatalf("internal step hint escaped into coordinator schedule: steps=%v events=%d", adapter.steps, len(bundle.Events))
 	}
 }

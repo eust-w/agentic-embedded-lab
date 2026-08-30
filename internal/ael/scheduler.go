@@ -126,10 +126,10 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 			}
 		}
 		for _, component := range components {
-			if !componentDue(component, virtualTime, dirty[component.ID]) {
+			if !componentDue(component, virtualTime, dirty[component.ID], experiment.MacroStepUS) {
 				continue
 			}
-			stepUS := componentStep(component, communicationStepUS, experiment.DurationUS-virtualTime)
+			stepUS := componentStep(component, experiment.MacroStepUS, experiment.DurationUS-virtualTime)
 			if component.Rollback {
 				checkpoint, err := adapters[component.ID].Snapshot(ctx, virtualTime)
 				if err != nil {
@@ -228,6 +228,14 @@ func Validate(experiment Experiment, system System) error {
 			return errors.New("component ids and backends must be unique and non-empty")
 		}
 		ids[component.ID] = true
+		if component.Properties != nil {
+			if _, declared := component.Properties["communication_step_us"]; declared {
+				step := componentCommunicationStep(component)
+				if step <= 0 {
+					return fmt.Errorf("component %s communication_step_us must be positive", component.ID)
+				}
+			}
+		}
 		for _, port := range component.Ports {
 			key := component.ID + "." + port.Name
 			if port.Name == "" || ports[key].Name != "" {
@@ -328,8 +336,8 @@ func connectionsBySource(connections []Connection) map[string][]Connection {
 func communicationStep(experiment Experiment, components []Component) int64 {
 	step := experiment.MacroStepUS
 	for _, component := range components {
-		if component.StepUS > 0 {
-			step = greatestCommonDivisor(step, component.StepUS)
+		if communication := componentCommunicationStep(component); communication > 0 {
+			step = greatestCommonDivisor(step, communication)
 		}
 	}
 	return step
@@ -345,22 +353,39 @@ func greatestCommonDivisor(left, right int64) int64 {
 	return left
 }
 
-func componentDue(component Component, virtualTime int64, dirty bool) bool {
+func componentDue(component Component, virtualTime int64, dirty bool, macroStepUS int64) bool {
 	if component.EventDriven {
 		return dirty
 	}
-	if component.StepUS <= 0 {
-		return true
+	step := componentCommunicationStep(component)
+	if step <= 0 {
+		step = macroStepUS
 	}
-	return virtualTime%component.StepUS == 0
+	return virtualTime%step == 0
 }
 
-func componentStep(component Component, communicationStepUS, remainingUS int64) int64 {
-	step := component.StepUS
+func componentStep(component Component, macroStepUS, remainingUS int64) int64 {
+	step := componentCommunicationStep(component)
 	if step <= 0 {
-		step = communicationStepUS
+		step = macroStepUS
 	}
 	return min(step, remainingUS)
+}
+
+func componentCommunicationStep(component Component) int64 {
+	if component.Properties == nil {
+		return 0
+	}
+	switch value := component.Properties["communication_step_us"].(type) {
+	case float64:
+		return int64(value)
+	case int64:
+		return value
+	case int:
+		return int64(value)
+	default:
+		return 0
+	}
 }
 
 func appendEvents(destination *[]Event, source []Event, sequence, virtualTime int64, componentID string) int64 {
