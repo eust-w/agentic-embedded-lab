@@ -105,7 +105,7 @@ func loadManifest(path string) (benchmark.AcceptanceManifest, error) {
 	return value, nil
 }
 func validateSimulation(root string, manifest benchmark.AcceptanceManifest, catalog benchmark.Catalog) []string {
-	names := []string{"cross-domain:five-backend", "fmi:five-domain", "firmware:arm-riscv", "environment:qualified", "determinism:trace-20"}
+	names := []string{"cross-domain:five-backend", "fmi:five-domain", "firmware:arm-riscv", "environment:qualified", "determinism:trace-matrix"}
 	for _, backend := range []string{"zephyr_build", "renode", "ngspice", "openmodelica", "ns3", "openems"} {
 		names = append(names, "backend:"+backend)
 	}

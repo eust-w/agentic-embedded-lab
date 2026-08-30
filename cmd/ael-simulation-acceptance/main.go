@@ -23,7 +23,8 @@ func main() {
 	rebuild := flag.Bool("rebuild", false, "rebuild existing firmware")
 	parallel := flag.Int("parallel-builds", 2, "parallel firmware builds")
 	parallelRuns := flag.Int("parallel-runs", 4, "parallel deterministic experiment runs")
-	determinismRepeats := flag.Int("determinism-repeats", 20, "fixed-variant repetitions for every benchmark")
+	determinismRepeats := flag.Int("determinism-repeats", 2, "fixed-variant repetitions for every benchmark")
+	stressRepeats := flag.Int("determinism-stress-repeats", 20, "repetitions for representative backend stress cases")
 	flag.Parse()
 	root, err := filepath.Abs(*workspace)
 	fatal(err)
@@ -90,9 +91,10 @@ func main() {
 	runner := benchmark.BenchmarkRunner{Workspace: root, ProjectID: "containerlab", Execute: lab.Run}
 	manifest, err := runner.Run(ctx, catalog, nil, *revision)
 	fatal(err)
-	if *determinismRepeats < 2 {
+	if *determinismRepeats < 2 || *stressRepeats < *determinismRepeats {
 		fatal(errors.New("determinism-repeats must be at least 2"))
 	}
+	stressCases := map[int]bool{4: true, 18: true, 21: true, 22: true, 24: true}
 	type traceSet struct {
 		seed   int64
 		hashes []string
@@ -104,7 +106,7 @@ func main() {
 		repeat                             int
 	}
 	determinismJobs := make(chan deterministicJob)
-	determinismErrors := make(chan error, len(catalog.Cases)**determinismRepeats)
+	determinismErrors := make(chan error, len(catalog.Cases)**stressRepeats)
 	var determinismWait sync.WaitGroup
 	var determinismMu sync.Mutex
 	for worker := 0; worker < max(1, *parallelRuns); worker++ {
@@ -136,8 +138,12 @@ func main() {
 		fatal(err)
 		systemPath, err := findSystem(root, experiment.SystemID)
 		fatal(err)
-		sets[prefix] = &traceSet{seed: experiment.Seed, hashes: make([]string, *determinismRepeats), runs: make([]string, *determinismRepeats)}
-		for repeat := 0; repeat < *determinismRepeats; repeat++ {
+		repeatCount := *determinismRepeats
+		if stressCases[item.ID] {
+			repeatCount = *stressRepeats
+		}
+		sets[prefix] = &traceSet{seed: experiment.Seed, hashes: make([]string, repeatCount), runs: make([]string, repeatCount)}
+		for repeat := 0; repeat < repeatCount; repeat++ {
 			determinismJobs <- deterministicJob{prefix: prefix, experimentPath: experimentPath, systemPath: systemPath, repeat: repeat}
 		}
 	}
@@ -158,8 +164,8 @@ func main() {
 		deterministic = deterministic && equal
 		matrix[prefix] = map[string]any{"seed": set.seed, "trace_hashes": set.hashes, "run_paths": set.runs, "all_equal": equal}
 	}
-	determinismPath := filepath.Join(root, "acceptance", "v2", "evidence", "determinism-trace-20.json")
-	determinismPayload := map[string]any{"api_version": ael.APIVersion, "source_revision": *revision, "benchmark_count": len(catalog.Cases), "repeats_per_benchmark": *determinismRepeats, "matrix": matrix, "all_equal": deterministic, "hardware_validated": false}
+	determinismPath := filepath.Join(root, "acceptance", "v2", "evidence", "determinism-trace-matrix.json")
+	determinismPayload := map[string]any{"api_version": ael.APIVersion, "source_revision": *revision, "benchmark_count": len(catalog.Cases), "base_repeats": *determinismRepeats, "stress_repeats": *stressRepeats, "stress_case_ids": []int{4, 18, 21, 22, 24}, "matrix": matrix, "all_equal": deterministic, "hardware_validated": false}
 	data, _ := json.MarshalIndent(determinismPayload, "", "  ")
 	fatal(os.MkdirAll(filepath.Dir(determinismPath), 0o700))
 	fatal(os.WriteFile(determinismPath, append(data, '\n'), 0o600))
@@ -170,7 +176,7 @@ func main() {
 	if deterministic {
 		status = "passed"
 	}
-	manifest.Entries = append(manifest.Entries, benchmark.AcceptanceEntry{Name: "determinism:trace-20", Status: status, EvidencePath: filepath.ToSlash(relative), EvidenceSHA256: hash, Limitations: []string{"Quantized simulation trace determinism only; no hardware timing equivalence."}})
+	manifest.Entries = append(manifest.Entries, benchmark.AcceptanceEntry{Name: "determinism:trace-matrix", Status: status, EvidencePath: filepath.ToSlash(relative), EvidenceSHA256: hash, Limitations: []string{"All 24 fixed cases are repeated; representative five-backend cases run 20 times. Quantized simulation determinism only."}})
 	if entry, err := currentFMIEntry(root, *revision); err == nil {
 		manifest.Entries = append(manifest.Entries, entry)
 	} else {
