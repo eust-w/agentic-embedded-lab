@@ -22,6 +22,7 @@ func main() {
 	revision := flag.String("revision", "", "source Git revision; defaults to HEAD")
 	rebuild := flag.Bool("rebuild", false, "rebuild existing firmware")
 	parallel := flag.Int("parallel-builds", 2, "parallel firmware builds")
+	parallelRuns := flag.Int("parallel-runs", 4, "parallel deterministic experiment runs")
 	determinismRepeats := flag.Int("determinism-repeats", 20, "fixed-variant repetitions for every benchmark")
 	flag.Parse()
 	root, err := filepath.Abs(*workspace)
@@ -92,8 +93,42 @@ func main() {
 	if *determinismRepeats < 2 {
 		fatal(errors.New("determinism-repeats must be at least 2"))
 	}
-	matrix := map[string]any{}
-	deterministic := true
+	type traceSet struct {
+		seed   int64
+		hashes []string
+		runs   []string
+	}
+	sets := map[string]*traceSet{}
+	type deterministicJob struct {
+		prefix, experimentPath, systemPath string
+		repeat                             int
+	}
+	determinismJobs := make(chan deterministicJob)
+	determinismErrors := make(chan error, len(catalog.Cases)**determinismRepeats)
+	var determinismWait sync.WaitGroup
+	var determinismMu sync.Mutex
+	for worker := 0; worker < max(1, *parallelRuns); worker++ {
+		determinismWait.Add(1)
+		go func() {
+			defer determinismWait.Done()
+			for job := range determinismJobs {
+				bundle, evidence, err := lab.Run(ctx, job.experimentPath, job.systemPath, *revision)
+				if err != nil {
+					determinismErrors <- fmt.Errorf("determinism %s repeat %d: %w", job.prefix, job.repeat, err)
+					continue
+				}
+				relative, err := filepath.Rel(root, evidence)
+				if err != nil {
+					determinismErrors <- err
+					continue
+				}
+				determinismMu.Lock()
+				sets[job.prefix].hashes[job.repeat] = bundle.TraceSHA256
+				sets[job.prefix].runs[job.repeat] = filepath.ToSlash(relative)
+				determinismMu.Unlock()
+			}
+		}()
+	}
 	for _, item := range catalog.Cases {
 		prefix := fmt.Sprintf("%02d-%s", item.ID, item.Slug)
 		experimentPath := "benchmarks/v2/experiments/" + prefix + "-fixed.yaml"
@@ -101,20 +136,27 @@ func main() {
 		fatal(err)
 		systemPath, err := findSystem(root, experiment.SystemID)
 		fatal(err)
-		hashes := make([]string, 0, *determinismRepeats)
-		runs := make([]string, 0, *determinismRepeats)
+		sets[prefix] = &traceSet{seed: experiment.Seed, hashes: make([]string, *determinismRepeats), runs: make([]string, *determinismRepeats)}
 		for repeat := 0; repeat < *determinismRepeats; repeat++ {
-			bundle, evidence, err := lab.Run(ctx, experimentPath, systemPath, *revision)
-			fatal(err)
-			hashes = append(hashes, bundle.TraceSHA256)
-			relative, err := filepath.Rel(root, evidence)
-			fatal(err)
-			runs = append(runs, filepath.ToSlash(relative))
-			if repeat > 0 && hashes[repeat] != hashes[0] {
-				deterministic = false
-			}
+			determinismJobs <- deterministicJob{prefix: prefix, experimentPath: experimentPath, systemPath: systemPath, repeat: repeat}
 		}
-		matrix[prefix] = map[string]any{"seed": experiment.Seed, "trace_hashes": hashes, "run_paths": runs, "all_equal": allEqual(hashes)}
+	}
+	close(determinismJobs)
+	determinismWait.Wait()
+	close(determinismErrors)
+	var runErrors []error
+	for err := range determinismErrors {
+		runErrors = append(runErrors, err)
+	}
+	if len(runErrors) > 0 {
+		fatal(errors.Join(runErrors...))
+	}
+	matrix := map[string]any{}
+	deterministic := true
+	for prefix, set := range sets {
+		equal := allEqual(set.hashes)
+		deterministic = deterministic && equal
+		matrix[prefix] = map[string]any{"seed": set.seed, "trace_hashes": set.hashes, "run_paths": set.runs, "all_equal": equal}
 	}
 	determinismPath := filepath.Join(root, "acceptance", "v2", "evidence", "determinism-trace-20.json")
 	determinismPayload := map[string]any{"api_version": ael.APIVersion, "source_revision": *revision, "benchmark_count": len(catalog.Cases), "repeats_per_benchmark": *determinismRepeats, "matrix": matrix, "all_equal": deterministic, "hardware_validated": false}
