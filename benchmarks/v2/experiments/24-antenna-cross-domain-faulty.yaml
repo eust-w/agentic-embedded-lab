@@ -20,6 +20,29 @@ assertions:
       id: A05
       metric: plant.failure
       operator: ==
+    - aggregation: max
+      expected: 0
+      id: A06
+      metric: network.retries
+      operator: ">"
+    - aggregation: max
+      expected: 6800
+      id: A07
+      metric: mcu.current
+      operator: ">"
+      unit: uA
+    - aggregation: max
+      expected: 0.1
+      id: A08
+      metric: circuit.power
+      operator: ">"
+      unit: W
+    - aggregation: max
+      expected: 30
+      id: A09
+      metric: plant.temperature
+      operator: ">"
+      unit: Cel
 duration_us: 6000
 faults: null
 id: 24-antenna-cross-domain-faulty
@@ -37,47 +60,47 @@ stimuli:
     - at_us: 0
       target: circuit.source_resistance_ohm
       unit: Ohm
-      value: 12
+      value: 1.5
     - at_us: 0
       target: circuit.capacitance_uF
       unit: uF
-      value: 2.2
+      value: 47
     - at_us: 0
       target: circuit.load_microamp
       unit: uA
-      value: 160000
+      value: 60000
     - at_us: 0
       target: circuit.rf_retries
       value: 0
     - at_us: 0
       target: plant.thermal_resistance_K_per_W
       unit: K/W
-      value: 95
+      value: 18
     - at_us: 0
       target: plant.sleep_current_A
       unit: A
-      value: 0.0012
+      value: 8e-06
     - at_us: 0
       target: plant.duty_cycle
-      value: 0.2
+      value: 0.01
     - at_us: 0
       target: plant.input_power
       unit: W
-      value: 0.65
+      value: 0.18
     - at_us: 0
       target: plant.rf_retries
       value: 0
     - at_us: 0
       target: network.interference_dbm
       unit: dBm
-      value: -42
+      value: -95
     - at_us: 0
       target: network.partition_ms
       unit: ms
-      value: 800
+      value: 0
     - at_us: 0
       target: network.retry_limit
-      value: 3
+      value: 8
     - at_us: 0
       target: network.protocol
       value: 0

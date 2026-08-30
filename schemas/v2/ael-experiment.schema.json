@@ -93,6 +93,15 @@
           },
           "unit": {
             "type": "string"
+          },
+          "aggregation": {
+            "type": "string"
+          },
+          "from_us": {
+            "type": "integer"
+          },
+          "to_us": {
+            "type": "integer"
           }
         },
         "additionalProperties": false,

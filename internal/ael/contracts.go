@@ -97,11 +97,14 @@ type Fault struct {
 }
 
 type Assertion struct {
-	ID       string  `json:"id"`
-	Metric   string  `json:"metric"`
-	Operator string  `json:"operator"`
-	Expected float64 `json:"expected"`
-	Unit     string  `json:"unit,omitempty"`
+	ID          string  `json:"id"`
+	Metric      string  `json:"metric"`
+	Operator    string  `json:"operator"`
+	Expected    float64 `json:"expected"`
+	Unit        string  `json:"unit,omitempty"`
+	Aggregation string  `json:"aggregation,omitempty"`
+	FromUS      *int64  `json:"from_us,omitempty"`
+	ToUS        *int64  `json:"to_us,omitempty"`
 }
 
 type Experiment struct {
@@ -130,11 +133,13 @@ type Event struct {
 }
 
 type AssertionResult struct {
-	ID       string  `json:"id"`
-	Passed   bool    `json:"passed"`
-	Observed float64 `json:"observed"`
-	Expected float64 `json:"expected"`
-	Message  string  `json:"message"`
+	ID           string  `json:"id"`
+	Passed       bool    `json:"passed"`
+	Observed     float64 `json:"observed"`
+	Expected     float64 `json:"expected"`
+	Aggregation  string  `json:"aggregation,omitempty"`
+	ObservedAtUS int64   `json:"observed_at_us,omitempty"`
+	Message      string  `json:"message"`
 }
 
 type RunFailure struct {

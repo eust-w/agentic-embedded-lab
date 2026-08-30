@@ -39,15 +39,16 @@ def scalar_variable(parent, port: dict[str, object], reference: int) -> None:
     }
     type_node = ElementTree.SubElement(variable, type_names[str(port["data_type"])])
     if causality == "input":
-        type_node.set(
-            "start",
-            {
-                "real": "0.0",
-                "integer": "0",
-                "boolean": "false",
-                "string": "",
-            }[str(port["data_type"])],
-        )
+        default = {
+            "real": "0.0",
+            "integer": "0",
+            "boolean": "false",
+            "string": "",
+        }[str(port["data_type"])]
+        start = port.get("start", default)
+        if port["data_type"] == "boolean":
+            start = "true" if bool(start) else "false"
+        type_node.set("start", str(start))
     if port.get("unit") and port["unit"] != "1":
         type_node.set("unit", str(port["unit"]))
 

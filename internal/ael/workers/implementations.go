@@ -376,7 +376,11 @@ func (OpenEMS) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRe
 	original := state.Tool
 	state.Tool = octave
 	defer func() { state.Tool = original }()
-	result, err := scriptWorkerStep(ctx, state, stepUS, []string{"--no-gui", "--quiet", model}, "openems")
+	environment := map[string]string{"AEL_OUTPUT_DIR": filepath.Join(state.RuntimeDir, "openems-output")}
+	for key, value := range state.Inputs {
+		environment["AEL_INPUT_"+strings.ToUpper(strings.ReplaceAll(key, "-", "_"))] = fmt.Sprint(value)
+	}
+	result, err := scriptWorkerStepEnvironment(ctx, state, stepUS, []string{"--no-gui", "--quiet", model}, "openems", environment)
 	if err == nil {
 		_ = os.MkdirAll(filepath.Dir(cache), 0o700)
 		_ = os.WriteFile(cache, mustJSON(result.Metrics), 0o600)
@@ -492,7 +496,11 @@ func (Zephyr) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRes
 }
 
 func scriptWorkerStep(ctx context.Context, state *State, stepUS int64, args []string, label string) (ael.StepResult, error) {
-	output, err := RunTool(ctx, state, args, durationProperty(state.Component.Properties, "timeout_s", 120*time.Second), nil)
+	return scriptWorkerStepEnvironment(ctx, state, stepUS, args, label, nil)
+}
+
+func scriptWorkerStepEnvironment(ctx context.Context, state *State, stepUS int64, args []string, label string, environment map[string]string) (ael.StepResult, error) {
+	output, err := RunTool(ctx, state, args, durationProperty(state.Component.Properties, "timeout_s", 120*time.Second), environment)
 	if err != nil {
 		return ael.StepResult{}, err
 	}

@@ -6,22 +6,32 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/benchmark"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/containerlab"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
 func main() {
 	workspace := flag.String("workspace", ".", "workspace")
-	revision := flag.String("revision", "working-tree", "revision")
+	revision := flag.String("revision", "", "source Git revision; defaults to HEAD")
 	rebuild := flag.Bool("rebuild", false, "rebuild existing firmware")
 	parallel := flag.Int("parallel-builds", 2, "parallel firmware builds")
+	determinismRepeats := flag.Int("determinism-repeats", 20, "fixed-variant repetitions for every benchmark")
 	flag.Parse()
 	root, err := filepath.Abs(*workspace)
 	fatal(err)
+	if *revision == "" {
+		*revision = gitRevision(root)
+	}
+	if *revision == "" || *revision == "working-tree" {
+		fatal(errors.New("a concrete Git source revision is required"))
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
 	defer cancel()
 	lab := containerlab.Lab{Workspace: root, WorkerBinary: filepath.Join(root, ".ael", "container-bin", "ael-backend"), RuntimeRoot: filepath.Join(root, ".ael", "container-runs"), Images: containerlab.DefaultImages()}
@@ -79,22 +89,35 @@ func main() {
 	runner := benchmark.BenchmarkRunner{Workspace: root, ProjectID: "containerlab", Execute: lab.Run}
 	manifest, err := runner.Run(ctx, catalog, nil, *revision)
 	fatal(err)
-	hashes := make([]string, 0, 20)
-	evidencePaths := make([]string, 0, 20)
+	if *determinismRepeats < 2 {
+		fatal(errors.New("determinism-repeats must be at least 2"))
+	}
+	matrix := map[string]any{}
 	deterministic := true
-	for repeat := 0; repeat < 20; repeat++ {
-		bundle, evidence, err := lab.Run(ctx, "benchmarks/v2/experiments/18-ldo-dropout-fixed.yaml", "benchmarks/v2/systems/ngspice-power.yaml", *revision)
-		if err != nil {
+	for _, item := range catalog.Cases {
+		prefix := fmt.Sprintf("%02d-%s", item.ID, item.Slug)
+		experimentPath := "benchmarks/v2/experiments/" + prefix + "-fixed.yaml"
+		experiment, err := ael.LoadExperiment(root, experimentPath)
+		fatal(err)
+		systemPath, err := findSystem(root, experiment.SystemID)
+		fatal(err)
+		hashes := make([]string, 0, *determinismRepeats)
+		runs := make([]string, 0, *determinismRepeats)
+		for repeat := 0; repeat < *determinismRepeats; repeat++ {
+			bundle, evidence, err := lab.Run(ctx, experimentPath, systemPath, *revision)
 			fatal(err)
+			hashes = append(hashes, bundle.TraceSHA256)
+			relative, err := filepath.Rel(root, evidence)
+			fatal(err)
+			runs = append(runs, filepath.ToSlash(relative))
+			if repeat > 0 && hashes[repeat] != hashes[0] {
+				deterministic = false
+			}
 		}
-		hashes = append(hashes, bundle.TraceSHA256)
-		evidencePaths = append(evidencePaths, evidence)
-		if repeat > 0 && hashes[repeat] != hashes[0] {
-			deterministic = false
-		}
+		matrix[prefix] = map[string]any{"seed": experiment.Seed, "trace_hashes": hashes, "run_paths": runs, "all_equal": allEqual(hashes)}
 	}
 	determinismPath := filepath.Join(root, "acceptance", "v2", "evidence", "determinism-trace-20.json")
-	determinismPayload := map[string]any{"api_version": "ael.dev/v2", "experiment": "18-ldo-dropout-fixed", "seed": 1018, "repeats": 20, "trace_hashes": hashes, "evidence_paths": evidencePaths, "all_equal": deterministic, "hardware_validated": false}
+	determinismPayload := map[string]any{"api_version": ael.APIVersion, "source_revision": *revision, "benchmark_count": len(catalog.Cases), "repeats_per_benchmark": *determinismRepeats, "matrix": matrix, "all_equal": deterministic, "hardware_validated": false}
 	data, _ := json.MarshalIndent(determinismPayload, "", "  ")
 	fatal(os.MkdirAll(filepath.Dir(determinismPath), 0o700))
 	fatal(os.WriteFile(determinismPath, append(data, '\n'), 0o600))
@@ -106,6 +129,11 @@ func main() {
 		status = "passed"
 	}
 	manifest.Entries = append(manifest.Entries, benchmark.AcceptanceEntry{Name: "determinism:trace-20", Status: status, EvidencePath: filepath.ToSlash(relative), EvidenceSHA256: hash, Limitations: []string{"Quantized simulation trace determinism only; no hardware timing equivalence."}})
+	if entry, err := currentFMIEntry(root, *revision); err == nil {
+		manifest.Entries = append(manifest.Entries, entry)
+	} else {
+		fatal(err)
+	}
 	manifestPath := filepath.Join(root, "acceptance", "v2", "simulation.json")
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	fatal(os.WriteFile(manifestPath, append(manifestData, '\n'), 0o600))
@@ -117,6 +145,61 @@ func main() {
 	if !passed {
 		os.Exit(2)
 	}
+}
+
+func findSystem(root, id string) (string, error) {
+	base := filepath.Join(root, "benchmarks", "v2", "systems")
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
+		}
+		relative := filepath.ToSlash(filepath.Join("benchmarks", "v2", "systems", entry.Name()))
+		system, err := ael.LoadSystem(root, relative)
+		if err == nil && system.ID == id {
+			return relative, nil
+		}
+	}
+	return "", fmt.Errorf("system %s is missing", id)
+}
+
+func allEqual(values []string) bool {
+	for index := 1; index < len(values); index++ {
+		if values[index] != values[0] {
+			return false
+		}
+	}
+	return len(values) > 0
+}
+
+func currentFMIEntry(root, revision string) (benchmark.AcceptanceEntry, error) {
+	path := filepath.Join(root, "acceptance", "v2", "evidence", "fmi-five-domain.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return benchmark.AcceptanceEntry{}, errors.New("FMI evidence is missing; run cmd/ael-fmi-acceptance")
+	}
+	var evidence struct {
+		Status         string `json:"status"`
+		SourceRevision string `json:"source_revision"`
+	}
+	if json.Unmarshal(data, &evidence) != nil || evidence.Status != "passed" || evidence.SourceRevision != revision {
+		return benchmark.AcceptanceEntry{}, errors.New("FMI evidence is stale for the requested source revision")
+	}
+	hash, err := benchmark.FileSHA256(path)
+	return benchmark.AcceptanceEntry{Name: "fmi:five-domain", Status: "passed", EvidencePath: "acceptance/v2/evidence/fmi-five-domain.json", EvidenceSHA256: hash, Limitations: []string{"FMI 2.0 functional exchange only; no calibrated hardware equivalence."}}, err
+}
+
+func gitRevision(root string) string {
+	command := exec.Command("git", "rev-parse", "HEAD")
+	command.Dir = root
+	data, err := command.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 type buildJob struct {

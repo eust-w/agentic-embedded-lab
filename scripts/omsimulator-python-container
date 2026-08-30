@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+workspace="$(pwd -P)"
+image="${AEL_OMSIMULATOR_IMAGE:-ael-openmodelica:local}"
+environment_args=()
+while IFS='=' read -r name value; do
+  environment_args+=(--env "${name}=${value}")
+done < <(env | grep '^AEL_FMI_SOCKET_' || true)
+exec docker run --rm --read-only --cap-drop=ALL \
+  --user="$(id -u):$(id -g)" --security-opt=no-new-privileges \
+  --pids-limit=512 --memory=4g --cpus="${AEL_BACKEND_CPUS:-2}" \
+  --tmpfs=/tmp:rw,exec,nosuid,nodev,size=1g \
+  --mount="type=bind,src=${workspace},dst=${workspace}" \
+  "${environment_args[@]}" --env=HOME=/tmp --env=XDG_CONFIG_HOME=/tmp \
+  --env=PYTHONPATH=/usr/lib/aarch64-linux-gnu/omc \
+  --env=LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/omc \
+  --workdir="${workspace}" --entrypoint=/usr/bin/python3 "${image}" "$@"

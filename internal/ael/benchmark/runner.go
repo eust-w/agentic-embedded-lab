@@ -159,6 +159,10 @@ func (r BenchmarkRunner) architectureEntry(ctx context.Context, systems map[stri
 	}
 	systemPath := systems[experiment.SystemID]
 	bundle, evidence, runErr := r.Execute(ctx, experimentPath, systemPath, revision)
+	evidence, err = relativeRunPath(r.Workspace, evidence)
+	if err != nil {
+		return AcceptanceEntry{}, err
+	}
 	passed := runErr == nil
 	for _, assertion := range bundle.Assertions {
 		passed = passed && assertion.Passed
@@ -219,6 +223,10 @@ func (r BenchmarkRunner) runCase(ctx context.Context, item Case, systemPaths map
 		var record ael.RunRecord
 		if r.Execute != nil {
 			bundle, evidencePath, runErr := r.Execute(ctx, experimentPath, systemPath, sourceRevision)
+			evidencePath, err = relativeRunPath(r.Workspace, evidencePath)
+			if err != nil {
+				return AcceptanceEntry{}, err
+			}
 			status := ael.RunCompleted
 			for _, assertion := range bundle.Assertions {
 				if !assertion.Passed {
@@ -269,6 +277,22 @@ func (r BenchmarkRunner) runCase(ctx context.Context, item Case, systemPaths map
 	}
 	relative, _ := filepath.Rel(r.Workspace, path)
 	return AcceptanceEntry{Name: "benchmark:" + prefix, Status: status, EvidencePath: filepath.ToSlash(relative), EvidenceSHA256: hash, Limitations: []string{item.FidelityBoundary, "No physical hardware evidence was produced."}}, nil
+}
+
+func relativeRunPath(workspace, path string) (string, error) {
+	root, err := filepath.Abs(workspace)
+	if err != nil {
+		return "", err
+	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(root, absolute)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", errors.New("run evidence path escapes workspace")
+	}
+	return filepath.ToSlash(relative), nil
 }
 
 func waitRun(ctx context.Context, manager *ael.RunManager, id string) (ael.RunRecord, error) {

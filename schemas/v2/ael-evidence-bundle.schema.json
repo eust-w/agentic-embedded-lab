@@ -101,6 +101,15 @@
               },
               "unit": {
                 "type": "string"
+              },
+              "aggregation": {
+                "type": "string"
+              },
+              "from_us": {
+                "type": "integer"
+              },
+              "to_us": {
+                "type": "integer"
               }
             },
             "additionalProperties": false,
@@ -383,6 +392,12 @@
           },
           "expected": {
             "type": "number"
+          },
+          "aggregation": {
+            "type": "string"
+          },
+          "observed_at_us": {
+            "type": "integer"
           },
           "message": {
             "type": "string"

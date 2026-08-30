@@ -20,6 +20,29 @@ assertions:
       id: A05
       metric: plant.failure
       operator: ==
+    - aggregation: max
+      expected: 0
+      id: A06
+      metric: network.retries
+      operator: ==
+    - aggregation: max
+      expected: 7000
+      id: A07
+      metric: mcu.current
+      operator: "<="
+      unit: uA
+    - aggregation: max
+      expected: 0.1
+      id: A08
+      metric: circuit.power
+      operator: "<"
+      unit: W
+    - aggregation: max
+      expected: 30
+      id: A09
+      metric: plant.temperature
+      operator: "<"
+      unit: Cel
 duration_us: 6000
 faults: null
 id: 24-antenna-cross-domain-fixed
@@ -37,7 +60,7 @@ stimuli:
     - at_us: 0
       target: circuit.source_resistance_ohm
       unit: Ohm
-      value: 0.15
+      value: 1.5
     - at_us: 0
       target: circuit.capacitance_uF
       unit: uF

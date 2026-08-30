@@ -1,6 +1,8 @@
 package release
 
 import (
+	"bufio"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -103,7 +105,7 @@ func loadManifest(path string) (benchmark.AcceptanceManifest, error) {
 	return value, nil
 }
 func validateSimulation(root string, manifest benchmark.AcceptanceManifest, catalog benchmark.Catalog) []string {
-	names := []string{"cross-domain:five-backend", "firmware:arm-riscv", "environment:qualified", "determinism:trace-20"}
+	names := []string{"cross-domain:five-backend", "fmi:five-domain", "firmware:arm-riscv", "environment:qualified", "determinism:trace-20"}
 	for _, backend := range []string{"zephyr_build", "renode", "ngspice", "openmodelica", "ns3", "openems"} {
 		names = append(names, "backend:"+backend)
 	}
@@ -133,6 +135,10 @@ func validateEntries(root string, manifest benchmark.AcceptanceManifest, require
 			failures = append(failures, "acceptance entry has no hashed evidence: "+name)
 			continue
 		}
+		if filepath.IsAbs(entry.EvidencePath) || strings.Contains(filepath.Clean(entry.EvidencePath), ".."+string(filepath.Separator)) {
+			failures = append(failures, "acceptance evidence path is not workspace-relative: "+name)
+			continue
+		}
 		path := filepath.Join(root, entry.EvidencePath)
 		digest, err := benchmark.FileSHA256(path)
 		if err != nil {
@@ -141,6 +147,88 @@ func validateEntries(root string, manifest benchmark.AcceptanceManifest, require
 		}
 		if digest != entry.EvidenceSHA256 {
 			failures = append(failures, "evidence hash mismatch: "+name)
+		}
+		if strings.HasPrefix(name, "benchmark:") {
+			failures = append(failures, validateCaseRuns(root, path, manifest.SourceRevision)...)
+		}
+	}
+	return failures
+}
+
+func validateCaseRuns(root, path, revision string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	var evidence benchmark.CaseEvidence
+	if err := json.Unmarshal(data, &evidence); err != nil {
+		return []string{"invalid benchmark evidence: " + err.Error()}
+	}
+	var failures []string
+	for _, check := range evidence.Checks {
+		if filepath.IsAbs(check.EvidencePath) || !strings.HasPrefix(filepath.ToSlash(check.EvidencePath), "runs/") {
+			failures = append(failures, fmt.Sprintf("benchmark %s %s run path is not portable", evidence.Benchmark, check.Variant))
+			continue
+		}
+		failures = append(failures, validateRunBundle(filepath.Join(root, filepath.FromSlash(check.EvidencePath)), revision)...)
+	}
+	return failures
+}
+
+func validateRunBundle(runRoot, revision string) []string {
+	required := []string{"provenance.json", "events.jsonl", "assertions.json", "artifacts.json", "experiment.resolved.json", "system.resolved.json", "junit.xml", "summary.md"}
+	var failures []string
+	for _, name := range required {
+		if info, err := os.Stat(filepath.Join(runRoot, name)); err != nil || !info.Mode().IsRegular() {
+			failures = append(failures, "run evidence missing: "+filepath.Join(runRoot, name))
+		}
+	}
+	if len(failures) > 0 {
+		return failures
+	}
+	var provenance struct {
+		SourceRevision string `json:"source_revision"`
+		TraceSHA256    string `json:"trace_sha256"`
+	}
+	data, err := os.ReadFile(filepath.Join(runRoot, "provenance.json"))
+	if err != nil || json.Unmarshal(data, &provenance) != nil {
+		return append(failures, "invalid run provenance: "+runRoot)
+	}
+	if revision == "" || provenance.SourceRevision != revision {
+		failures = append(failures, "run source revision mismatch: "+runRoot)
+	}
+	events, err := os.Open(filepath.Join(runRoot, "events.jsonl"))
+	if err == nil {
+		var values []ael.Event
+		scanner := bufio.NewScanner(events)
+		for scanner.Scan() {
+			var event ael.Event
+			if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+				failures = append(failures, "invalid event stream: "+runRoot)
+				break
+			}
+			values = append(values, event)
+		}
+		events.Close()
+		payload, _ := json.Marshal(values)
+		digest := fmt.Sprintf("%x", sha256.Sum256(payload))
+		if digest != provenance.TraceSHA256 {
+			failures = append(failures, "event trace hash mismatch: "+runRoot)
+		}
+	}
+	var artifacts map[string]string
+	data, err = os.ReadFile(filepath.Join(runRoot, "artifacts.json"))
+	if err == nil && json.Unmarshal(data, &artifacts) == nil {
+		for name, reference := range artifacts {
+			path, digest, ok := strings.Cut(reference, "#sha256=")
+			if !ok || filepath.IsAbs(path) || strings.Contains(filepath.Clean(path), ".."+string(filepath.Separator)) {
+				failures = append(failures, "invalid artifact reference: "+name)
+				continue
+			}
+			actual, err := benchmark.FileSHA256(filepath.Join(runRoot, filepath.FromSlash(path)))
+			if err != nil || actual != digest {
+				failures = append(failures, "artifact hash mismatch: "+name)
+			}
 		}
 	}
 	return failures

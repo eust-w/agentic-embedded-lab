@@ -108,6 +108,14 @@ func (l Lab) adapter(root string, component ael.Component) (ael.Adapter, string,
 	adapter, err := ael.NewProcessAdapter(ael.ProcessConfig{Executable: "docker", Arguments: arguments, Directory: root, Timeout: duration(component.Properties, "timeout_s", 30*time.Minute)})
 	return adapter, runtime, err
 }
+
+func (l Lab) Adapter(root string, component ael.Component) (ael.Adapter, string, error) {
+	return l.adapter(root, component)
+}
+
+func (l Lab) RewriteFirmware(root string, system *ael.System) error {
+	return l.rewriteFirmware(root, system)
+}
 func (l Lab) BuildFirmware(ctx context.Context, caseID int, variant string) error {
 	if caseID < 4 || caseID > 24 || (variant != "faulty" && variant != "fixed") {
 		return errors.New("invalid firmware mechanism build")

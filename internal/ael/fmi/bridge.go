@@ -59,6 +59,13 @@ func (b *Bridge) Listen(ctx context.Context) error {
 	if err := os.Chmod(b.SocketPath, 0o600); err != nil {
 		return err
 	}
+	return b.Serve(ctx, listener)
+}
+
+func (b *Bridge) Serve(ctx context.Context, listener net.Listener) error {
+	if listener == nil || len(b.Instances) == 0 {
+		return errors.New("FMI listener and instances are required")
+	}
 	go func() { <-ctx.Done(); _ = listener.Close() }()
 	for {
 		connection, err := listener.Accept()
@@ -91,6 +98,18 @@ func (b *Bridge) Exchange(ctx context.Context, request string) (string, error) {
 		return "", errors.New("invalid FMI step request")
 	}
 	instance := b.Instances[fields[1]]
+	if instance == nil {
+		var match *Instance
+		for name, candidate := range b.Instances {
+			if strings.HasSuffix(fields[1], "."+name) || strings.HasSuffix(fields[1], "/"+name) {
+				if match != nil {
+					return "", errors.New("ambiguous FMI instance")
+				}
+				match = candidate
+			}
+		}
+		instance = match
+	}
 	if instance == nil || instance.Adapter == nil {
 		return "", errors.New("unknown FMI instance")
 	}
@@ -115,8 +134,11 @@ func (b *Bridge) Exchange(ctx context.Context, request string) (string, error) {
 			return "", err
 		}
 		variable, ok := instance.Variables[reference]
-		if !ok || variable.Direction != "input" || variable.Type != kind {
+		if !ok || variable.Type != kind {
 			return "", fmt.Errorf("invalid FMI input reference %d", reference)
+		}
+		if variable.Direction != "input" {
+			continue
 		}
 		events, err := instance.Adapter.Inject(ctx, variable.Name, value, currentUS)
 		_ = events

@@ -22,6 +22,11 @@ type StepResult struct {
 	Artifacts map[string]string
 }
 
+type metricSample struct {
+	AtUS  int64
+	Value float64
+}
+
 type Adapter interface {
 	Prepare(context.Context, Component, int64) error
 	Inject(context.Context, string, any, int64) ([]Event, error)
@@ -78,10 +83,15 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 		adapters[component.ID] = adapter
 	}
 	metrics := make(map[string]float64)
+	samples := make(map[string][]metricSample)
 	connections := connectionsBySource(system.Connections)
+	communicationStepUS := communicationStep(experiment, components)
+	dirty := make(map[string]bool, len(components))
+	for _, component := range components {
+		dirty[component.ID] = true
+	}
 	var sequence int64
-	for virtualTime := int64(0); virtualTime < experiment.DurationUS; virtualTime += experiment.MacroStepUS {
-		stepUS := min(experiment.MacroStepUS, experiment.DurationUS-virtualTime)
+	for virtualTime := int64(0); virtualTime < experiment.DurationUS; virtualTime += communicationStepUS {
 		select {
 		case <-ctx.Done():
 			return bundle, ctx.Err()
@@ -98,6 +108,7 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 					return bundle, err
 				}
 				sequence = appendEvents(&bundle.Events, injected, sequence, virtualTime, componentID)
+				dirty[componentID] = true
 			}
 		}
 		for _, fault := range experiment.Faults {
@@ -111,24 +122,46 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 					return bundle, err
 				}
 				sequence = appendEvents(&bundle.Events, injected, sequence, virtualTime, componentID)
+				dirty[componentID] = true
 			}
 		}
 		for _, component := range components {
+			if !componentDue(component, virtualTime, dirty[component.ID]) {
+				continue
+			}
+			stepUS := componentStep(component, communicationStepUS, experiment.DurationUS-virtualTime)
+			if component.Rollback {
+				checkpoint, err := adapters[component.ID].Snapshot(ctx, virtualTime)
+				if err != nil {
+					return bundle, fmt.Errorf("checkpoint %s at %dus: %w", component.ID, virtualTime, err)
+				}
+				if checkpoint == "" {
+					return bundle, fmt.Errorf("checkpoint %s at %dus returned no artifact", component.ID, virtualTime)
+				}
+				bundle.Artifacts[fmt.Sprintf("checkpoint.%s.%d", component.ID, virtualTime)] = checkpoint
+			}
 			result, err := adapters[component.ID].Step(ctx, virtualTime, stepUS)
 			if err != nil {
 				return bundle, fmt.Errorf("step %s at %dus: %w", component.ID, virtualTime, err)
 			}
+			dirty[component.ID] = false
 			for name, value := range result.Metrics {
 				if math.IsNaN(value) || math.IsInf(value, 0) {
 					return bundle, fmt.Errorf("component %s produced invalid metric %s", component.ID, name)
 				}
-				metrics[component.ID+"."+name] = value
+				key := component.ID + "." + name
+				metrics[key] = value
+				samples[key] = append(samples[key], metricSample{AtUS: virtualTime + stepUS, Value: value})
 			}
 			for name, value := range result.Outputs {
 				if math.IsNaN(value) || math.IsInf(value, 0) {
 					return bundle, fmt.Errorf("component %s produced invalid output %s", component.ID, name)
 				}
-				metrics[component.ID+"."+name] = value
+				key := component.ID + "." + name
+				metrics[key] = value
+				if _, alreadySampled := result.Metrics[name]; !alreadySampled {
+					samples[key] = append(samples[key], metricSample{AtUS: virtualTime + stepUS, Value: value})
+				}
 				for _, connection := range connections[component.ID+"."+name] {
 					injected, err := adapters[connection.TargetComponent].Inject(ctx, connection.TargetPort, value, virtualTime)
 					if err != nil {
@@ -136,6 +169,7 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 					}
 					sequence = appendEvents(&bundle.Events, []Event{{Type: "connection.propagated", Payload: map[string]any{"source": component.ID + "." + name, "target": connection.TargetComponent + "." + connection.TargetPort, "value": value, "unit": connection.Unit}, FidelityRef: component.ID + ":port"}}, sequence, virtualTime, component.ID)
 					sequence = appendEvents(&bundle.Events, injected, sequence, virtualTime, connection.TargetComponent)
+					dirty[connection.TargetComponent] = true
 				}
 			}
 			for name, hash := range result.Artifacts {
@@ -144,7 +178,7 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 			sequence = appendEvents(&bundle.Events, result.Events, sequence, virtualTime, component.ID)
 		}
 	}
-	bundle.Assertions = evaluateAssertions(experiment.Assertions, metrics)
+	bundle.Assertions = evaluateAssertions(experiment.Assertions, metrics, samples)
 	return bundle, nil
 }
 
@@ -174,6 +208,18 @@ func Validate(experiment Experiment, system System) error {
 	}
 	if experiment.DurationUS <= 0 || experiment.MacroStepUS <= 0 || experiment.Timeout <= 0 {
 		return errors.New("duration, macro step, and timeout must be positive")
+	}
+	for _, assertion := range experiment.Assertions {
+		aggregation := assertion.Aggregation
+		if aggregation == "" {
+			aggregation = "final"
+		}
+		if aggregation != "final" && aggregation != "min" && aggregation != "max" && aggregation != "p95" && aggregation != "p99" {
+			return fmt.Errorf("assertion %s has unsupported aggregation %s", assertion.ID, aggregation)
+		}
+		if assertion.FromUS != nil && *assertion.FromUS < 0 || assertion.ToUS != nil && *assertion.ToUS > experiment.DurationUS || assertion.FromUS != nil && assertion.ToUS != nil && *assertion.FromUS > *assertion.ToUS {
+			return fmt.Errorf("assertion %s has an invalid observation window", assertion.ID)
+		}
 	}
 	ids := make(map[string]bool)
 	ports := make(map[string]Port)
@@ -279,6 +325,44 @@ func connectionsBySource(connections []Connection) map[string][]Connection {
 	return result
 }
 
+func communicationStep(experiment Experiment, components []Component) int64 {
+	step := experiment.MacroStepUS
+	for _, component := range components {
+		if component.StepUS > 0 {
+			step = greatestCommonDivisor(step, component.StepUS)
+		}
+	}
+	return step
+}
+
+func greatestCommonDivisor(left, right int64) int64 {
+	for right != 0 {
+		left, right = right, left%right
+	}
+	if left < 0 {
+		return -left
+	}
+	return left
+}
+
+func componentDue(component Component, virtualTime int64, dirty bool) bool {
+	if component.EventDriven {
+		return dirty
+	}
+	if component.StepUS <= 0 {
+		return true
+	}
+	return virtualTime%component.StepUS == 0
+}
+
+func componentStep(component Component, communicationStepUS, remainingUS int64) int64 {
+	step := component.StepUS
+	if step <= 0 {
+		step = communicationStepUS
+	}
+	return min(step, remainingUS)
+}
+
 func appendEvents(destination *[]Event, source []Event, sequence, virtualTime int64, componentID string) int64 {
 	for _, event := range source {
 		sequence++
@@ -295,10 +379,14 @@ func appendEvents(destination *[]Event, source []Event, sequence, virtualTime in
 	return sequence
 }
 
-func evaluateAssertions(assertions []Assertion, metrics map[string]float64) []AssertionResult {
+func evaluateAssertions(assertions []Assertion, metrics map[string]float64, samples map[string][]metricSample) []AssertionResult {
 	results := make([]AssertionResult, 0, len(assertions))
 	for _, assertion := range assertions {
-		observed, ok := metrics[assertion.Metric]
+		aggregation := assertion.Aggregation
+		if aggregation == "" {
+			aggregation = "final"
+		}
+		observed, observedAt, ok := aggregateMetric(aggregation, assertion, metrics, samples)
 		passed := ok
 		switch assertion.Operator {
 		case "<":
@@ -320,9 +408,55 @@ func evaluateAssertions(assertions []Assertion, metrics map[string]float64) []As
 		} else if !passed {
 			message = "assertion failed"
 		}
-		results = append(results, AssertionResult{ID: assertion.ID, Passed: passed, Observed: observed, Expected: assertion.Expected, Message: message})
+		results = append(results, AssertionResult{ID: assertion.ID, Passed: passed, Observed: observed, Expected: assertion.Expected, Aggregation: aggregation, ObservedAtUS: observedAt, Message: message})
 	}
 	return results
+}
+
+func aggregateMetric(aggregation string, assertion Assertion, metrics map[string]float64, samples map[string][]metricSample) (float64, int64, bool) {
+	if aggregation == "final" {
+		value, ok := metrics[assertion.Metric]
+		values := samples[assertion.Metric]
+		if len(values) > 0 {
+			return value, values[len(values)-1].AtUS, ok
+		}
+		return value, 0, ok
+	}
+	filtered := make([]metricSample, 0, len(samples[assertion.Metric]))
+	for _, sample := range samples[assertion.Metric] {
+		if assertion.FromUS != nil && sample.AtUS < *assertion.FromUS {
+			continue
+		}
+		if assertion.ToUS != nil && sample.AtUS > *assertion.ToUS {
+			continue
+		}
+		filtered = append(filtered, sample)
+	}
+	if len(filtered) == 0 {
+		return 0, 0, false
+	}
+	switch aggregation {
+	case "min", "max":
+		selected := filtered[0]
+		for _, sample := range filtered[1:] {
+			if aggregation == "min" && sample.Value < selected.Value || aggregation == "max" && sample.Value > selected.Value {
+				selected = sample
+			}
+		}
+		return selected.Value, selected.AtUS, true
+	case "p95", "p99":
+		ordered := append([]metricSample(nil), filtered...)
+		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Value < ordered[j].Value })
+		percentile := 0.95
+		if aggregation == "p99" {
+			percentile = 0.99
+		}
+		index := int(math.Ceil(percentile*float64(len(ordered)))) - 1
+		selected := ordered[max(0, index)]
+		return selected.Value, selected.AtUS, true
+	default:
+		return 0, 0, false
+	}
 }
 
 func splitTarget(target string) (string, string) {

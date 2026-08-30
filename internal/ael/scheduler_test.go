@@ -9,6 +9,8 @@ import (
 type fakeAdapter struct {
 	component Component
 	inputs    map[string]any
+	steps     []int64
+	snapshots int
 }
 
 func (f *fakeAdapter) Prepare(context.Context, Component, int64) error { return nil }
@@ -20,6 +22,7 @@ func (f *fakeAdapter) Inject(ctx context.Context, target string, value any, at i
 	return []Event{{Type: "stimulus.injected", Payload: map[string]any{"target": target, "value": value}}}, nil
 }
 func (f *fakeAdapter) Step(ctx context.Context, at, step int64) (StepResult, error) {
+	f.steps = append(f.steps, step)
 	result := StepResult{Metrics: map[string]float64{"failure": 0}, Events: []Event{{Type: "component.stepped", FidelityRef: "functional", Payload: map[string]any{"step_us": step}}}}
 	if f.component.ID == "source" {
 		result.Outputs = map[string]float64{"voltage": 3.3}
@@ -31,8 +34,11 @@ func (f *fakeAdapter) Step(ctx context.Context, at, step int64) (StepResult, err
 	}
 	return result, nil
 }
-func (f *fakeAdapter) Snapshot(context.Context, int64) (string, error) { return "snapshot", nil }
-func (f *fakeAdapter) Shutdown(context.Context) error                  { return nil }
+func (f *fakeAdapter) Snapshot(context.Context, int64) (string, error) {
+	f.snapshots++
+	return "snapshot", nil
+}
+func (f *fakeAdapter) Shutdown(context.Context) error { return nil }
 
 func TestSchedulerProducesDeterministicTraceAndExplicitFidelity(t *testing.T) {
 	system := System{APIVersion: APIVersion, ID: "system", Components: []Component{{ID: "mcu", Backend: BackendRenode, StepUS: 1000, Fidelity: Fidelity{Firmware: FidelityFunctional, Register: FidelitySynthetic, Protocol: FidelityFunctional, Timing: FidelityFunctional, Physical: FidelityUnsupported, Limitations: []string{"no hardware calibration"}}}}}
@@ -97,5 +103,45 @@ func TestValidateRejectsAlgebraicLoop(t *testing.T) {
 	experiment := Experiment{APIVersion: APIVersion, ID: "e", SystemID: system.ID, DurationUS: 1000, MacroStepUS: 1000, Timeout: time.Second}
 	if err := Validate(experiment, system); err == nil {
 		t.Fatal("expected algebraic loop rejection")
+	}
+}
+
+func TestSchedulerHonorsMultiRateEventDrivenAndCheckpoints(t *testing.T) {
+	fast := &fakeAdapter{component: Component{ID: "fast"}}
+	slow := &fakeAdapter{component: Component{ID: "slow"}}
+	event := &fakeAdapter{component: Component{ID: "event"}}
+	system := System{APIVersion: APIVersion, ID: "multi-rate", Components: []Component{
+		{ID: "fast", Backend: BackendRenode, StepUS: 500},
+		{ID: "slow", Backend: BackendModelica, StepUS: 2000, Rollback: true},
+		{ID: "event", Backend: BackendOpenEMS, EventDriven: true},
+	}}
+	experiment := Experiment{APIVersion: APIVersion, ID: "multi", SystemID: system.ID, DurationUS: 4000, MacroStepUS: 1000, Timeout: time.Second, Stimuli: []Stimulus{{AtUS: 2000, Target: "event.detune", Value: 1}}}
+	scheduler := Scheduler{Factories: map[Backend]AdapterFactory{
+		BackendRenode:   func(Component) (Adapter, error) { return fast, nil },
+		BackendModelica: func(Component) (Adapter, error) { return slow, nil },
+		BackendOpenEMS:  func(Component) (Adapter, error) { return event, nil },
+	}}
+	bundle, err := scheduler.Run(context.Background(), experiment, system, "revision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fast.steps) != 8 || len(slow.steps) != 2 || len(event.steps) != 2 {
+		t.Fatalf("unexpected multi-rate steps fast=%v slow=%v event=%v", fast.steps, slow.steps, event.steps)
+	}
+	if slow.snapshots != 2 || bundle.Artifacts["checkpoint.slow.0"] == "" || bundle.Artifacts["checkpoint.slow.2000"] == "" {
+		t.Fatalf("missing synchronized checkpoints: %#v", bundle.Artifacts)
+	}
+}
+
+func TestTemporalAssertionsUseWindowedMaxAndPercentile(t *testing.T) {
+	from, to := int64(1000), int64(3000)
+	metrics := map[string]float64{"m.current": 1}
+	samples := map[string][]metricSample{"m.current": {{AtUS: 500, Value: 100}, {AtUS: 1000, Value: 2}, {AtUS: 2000, Value: 4}, {AtUS: 3000, Value: 3}}}
+	results := evaluateAssertions([]Assertion{
+		{ID: "max", Metric: "m.current", Operator: "==", Expected: 4, Aggregation: "max", FromUS: &from, ToUS: &to},
+		{ID: "p95", Metric: "m.current", Operator: "==", Expected: 4, Aggregation: "p95", FromUS: &from, ToUS: &to},
+	}, metrics, samples)
+	if !results[0].Passed || !results[1].Passed || results[0].ObservedAtUS != 2000 {
+		t.Fatalf("unexpected temporal assertions: %#v", results)
 	}
 }
