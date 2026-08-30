@@ -64,7 +64,14 @@ for solve_index = 1:2
     target_s11_db = solved_target_s11_db;
   end
 end
-rf_loss_db = max(0, requested_loss_db - nominal_loss_db);
+% The FDTD engine is multi-threaded and the last few convergence samples can
+% vary below engineering resolution. Preserve raw S11 metrics above, but use a
+% deterministic 0.1 dB communication value for cross-domain exchange.
+if abs(detune) < 1e-12
+  rf_loss_db = 0;
+else
+  rf_loss_db = round(max(0, requested_loss_db - nominal_loss_db) * 10) / 10;
+end
 failure = double(rf_loss_db > 1.0);
 fprintf('AEL_METRIC resonance_hz=%g\n', resonance);
 fprintf('AEL_METRIC s11_db=%g\n', min_s11);
