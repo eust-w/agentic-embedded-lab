@@ -21,7 +21,7 @@ type Lab struct {
 }
 
 func DefaultImages() map[ael.Backend]string {
-	return map[ael.Backend]string{ael.BackendZephyr: "ael-zephyr:local", ael.BackendRenode: "ael-renode:local", ael.BackendNgspice: "ael-ngspice:local", ael.BackendModelica: "ael-openmodelica:local", ael.BackendOMSimulator: "ael-openmodelica:local", ael.BackendNS3: "ael-ns3:local", ael.BackendOpenEMS: "ael-openems:local"}
+	return map[ael.Backend]string{ael.BackendZephyr: "ael-zephyr:local", ael.BackendRenode: "ael-renode:local", ael.BackendNgspice: "ael-ngspice:local", ael.BackendModelica: "ael-openmodelica:local", ael.BackendOMSimulator: "ael-openmodelica:local", ael.BackendNS3: "ael-ns3:local", ael.BackendOpenEMS: "ael-openems:local", ael.BackendVerilator: "ael-verilator:local"}
 }
 func (l Lab) Run(ctx context.Context, experimentPath, systemPath, revision string) (ael.EvidenceBundle, string, error) {
 	root, err := filepath.Abs(l.Workspace)

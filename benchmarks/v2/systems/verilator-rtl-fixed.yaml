@@ -1,0 +1,22 @@
+api_version: ael.dev/v2
+id: verilator-rtl-fixed
+components:
+  - id: rtl
+    backend: verilator
+    model: benchmarks/models/verilator/rtl_timer.sv
+    step_us: 1000
+    rollback: false
+    event_driven: false
+    ports:
+      - {name: count, direction: output, type: real, unit: "1"}
+      - {name: failure, direction: output, type: real, unit: "1"}
+    properties: {faulty: false}
+    fidelity:
+      firmware: unsupported
+      register: functional
+      protocol: functional
+      timing: functional
+      physical: unsupported
+      hardware_validated: false
+      limitations: ["RTL functional simulation only; no FPGA timing closure or silicon validation."]
+connections: []

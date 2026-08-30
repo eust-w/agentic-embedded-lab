@@ -14,6 +14,7 @@ const (
 	BackendOMSimulator Backend = "omsimulator"
 	BackendNS3         Backend = "ns3"
 	BackendOpenEMS     Backend = "openems"
+	BackendVerilator   Backend = "verilator"
 	BackendHardware    Backend = "hardware"
 )
 

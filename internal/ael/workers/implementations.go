@@ -33,6 +33,8 @@ func ImplementationFor(backend ael.Backend) (Implementation, error) {
 		return NS3{}, nil
 	case ael.BackendOpenEMS:
 		return OpenEMS{}, nil
+	case ael.BackendVerilator:
+		return Verilator{}, nil
 	case ael.BackendZephyr:
 		return Zephyr{}, nil
 	default:
@@ -386,6 +388,42 @@ func (OpenEMS) Step(ctx context.Context, state *State, stepUS int64) (ael.StepRe
 		_ = os.WriteFile(cache, mustJSON(result.Metrics), 0o600)
 	}
 	return result, err
+}
+
+type Verilator struct{}
+
+func (Verilator) Backend() ael.Backend                  { return ael.BackendVerilator }
+func (Verilator) ExpectedVersion() string               { return "5.050" }
+func (Verilator) Commands() []string                    { return []string{"verilator"} }
+func (Verilator) VersionArguments() []string            { return []string{"--version"} }
+func (Verilator) Prepare(context.Context, *State) error { return nil }
+func (Verilator) Step(ctx context.Context, state *State, stepUS int64) (ael.StepResult, error) {
+	model, err := WorkspacePath(state, state.Component.Model, true)
+	if err != nil {
+		return ael.StepResult{}, err
+	}
+	faulty := 0
+	if value, ok := state.Component.Properties["faulty"].(bool); ok && value {
+		faulty = 1
+	}
+	output, err := RunTool(ctx, state, []string{"--binary", "--timing", "-Wall", "-Wno-fatal", "--Mdir", "obj_dir", "--top-module", "rtl_timer", fmt.Sprintf("-GFAULTY=%d", faulty), model}, 120*time.Second, nil)
+	if err != nil {
+		return ael.StepResult{}, err
+	}
+	executable := filepath.Join(state.RuntimeDir, "obj_dir", "Vrtl_timer")
+	original := state.Tool
+	state.Tool = executable
+	runOutput, runErr := RunTool(ctx, state, nil, 30*time.Second, nil)
+	state.Tool = original
+	if runErr != nil {
+		return ael.StepResult{}, runErr
+	}
+	combined := append(output, runOutput...)
+	logPath := filepath.Join(state.RuntimeDir, "verilator.log")
+	_ = os.WriteFile(logPath, combined, 0o600)
+	metrics, events := ParseOutput(state, combined, state.VirtualTimeUS+stepUS)
+	events = append(events, ael.Event{VirtualTimeUS: state.VirtualTimeUS + stepUS, Source: state.Component.ID, Type: "verilator.rtl_executed", FidelityRef: "verilator:tool-executed"})
+	return ael.StepResult{Outputs: copyMetrics(metrics), Metrics: metrics, Events: events, Artifacts: map[string]string{"log": relativeArtifact(state, logPath), "executable": relativeArtifact(state, executable)}}, nil
 }
 
 type Zephyr struct{}

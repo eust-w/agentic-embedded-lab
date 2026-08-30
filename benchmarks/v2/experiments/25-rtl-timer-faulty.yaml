@@ -1,0 +1,12 @@
+api_version: ael.dev/v2
+id: 25-rtl-timer-faulty
+system_id: verilator-rtl-faulty
+duration_us: 1000
+macro_step_us: 1000
+seed: 1025
+timeout: 120000000000
+stimuli: []
+faults: []
+assertions:
+  - {id: A01, metric: rtl.failure, operator: "==", expected: 0}
+required_fidelity: {firmware: unsupported, register: functional, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

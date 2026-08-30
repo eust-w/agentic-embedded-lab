@@ -34,6 +34,8 @@
   动态加载的Sparkle 2更新器。
 - AEL v2契约、FMI/SSP、六类执行适配器、24项真实faulty/fixed机制、
   ARM/RISC-V Firmware、Evidence/Fidelity和20次确定性Trace验收。
+- 可选Verilator 5.050 RTL扩展：独立容器真实编译并执行SystemVerilog faulty/fixed资产；
+  当前为功能级扩展证据，不声明综合、时序收敛、FPGA或硅等价。
 
 ## 尚未通过的发布门
 

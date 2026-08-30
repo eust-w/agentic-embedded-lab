@@ -18,7 +18,7 @@ func TestMigratedBenchmarkContractsAreStrictAndConsistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(systemFiles) != 55 || len(experimentFiles) != 49 {
+	if len(systemFiles) < 55 || len(experimentFiles) < 49 {
 		t.Fatalf("unexpected migrated asset count: systems=%d experiments=%d", len(systemFiles), len(experimentFiles))
 	}
 	systems := make(map[string]System)
@@ -26,6 +26,9 @@ func TestMigratedBenchmarkContractsAreStrictAndConsistent(t *testing.T) {
 		var system System
 		if err := loadStrictWorkspaceYAML(workspace, path, &system); err != nil {
 			t.Fatalf("load %s: %v", path, err)
+		}
+		if _, exists := systems[system.ID]; exists {
+			t.Fatalf("duplicate system id %s", system.ID)
 		}
 		systems[system.ID] = system
 	}

@@ -62,6 +62,9 @@
 - AEL v2 contracts, FMI/SSP orchestration, six execution adapters, 24 real
   faulty/fixed mechanisms, ARM/RISC-V firmware, Evidence/Fidelity and 20-run
   deterministic trace acceptance.
+- An optional Verilator 5.050 RTL extension compiles and executes real
+  SystemVerilog faulty/fixed assets in an isolated container; it is functional
+  evidence only and makes no synthesis, timing-closure, FPGA, or silicon claim.
 
 ## Remaining release gates
 
