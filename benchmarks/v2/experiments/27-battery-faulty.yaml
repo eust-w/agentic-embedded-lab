@@ -1,0 +1,11 @@
+api_version: ael.dev/v2
+id: 27-battery-faulty
+system_id: modelica-battery-extension
+duration_us: 1000
+macro_step_us: 1000
+seed: 1027
+timeout: 120000000000
+stimuli: [{at_us: 0, target: battery.capacity_Ah, value: 2.4}, {at_us: 0, target: battery.fade_per_cycle, value: 0.001}, {at_us: 0, target: battery.cycles, value: 800}, {at_us: 0, target: battery.load_current_A, value: 0.02}, {at_us: 0, target: battery.minimum_runtime_h, value: 50}]
+faults: []
+assertions: [{id: A01, metric: battery.failure, operator: "==", expected: 0}]
+required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

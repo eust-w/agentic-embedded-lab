@@ -1,0 +1,15 @@
+model AelMotor
+  parameter Real inertia = {{inertia}};
+  parameter Real damping = {{damping}};
+  parameter Real torque = {{torque}};
+  parameter Real loadTorque = {{load_torque}};
+  Real speed(start=0, fixed=true);
+equation
+  inertia * der(speed) = torque - loadTorque - damping * speed;
+end AelMotor;
+result := simulate(AelMotor, stopTime=2.0, numberOfIntervals=400, outputFormat="mat", fileNamePrefix="ael_motor");
+speed := val(speed, 2.0, "ael_motor_res.mat");
+failure := if speed > {{speed_limit}} then 1.0 else 0.0;
+print("AEL_METRIC speed=" + String(speed) + "\n");
+print("AEL_METRIC failure=" + String(failure) + "\n");
+print("AEL_EVENT modelica.electromechanical_motor {\"calibrated\":false}\n");

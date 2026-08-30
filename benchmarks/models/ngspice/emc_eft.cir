@@ -1,0 +1,12 @@
+AEL EFT immunity clamp transient model
+.param clamp_voltage='AEL_clamp_voltage_V'
+.param series_resistance='AEL_series_resistance_ohm'
+Veft pulse 0 PULSE(0 1000 1n 5n 5n 50n 1u)
+Rseries pulse protected {series_resistance}
+Dclamp protected 0 TVS
+Cload protected 0 100n
+.model TVS D(BV={clamp_voltage} IBV=1m RS=0.1)
+.tran 0.2n 2u
+.measure tran ael_peak_voltage MAX v(protected)
+.measure tran ael_failure PARAM='ael_peak_voltage > 40'
+.end

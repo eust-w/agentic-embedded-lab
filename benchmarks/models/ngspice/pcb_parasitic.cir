@@ -1,0 +1,15 @@
+AEL PCB rail parasitic transient model
+.param trace_inductance='AEL_trace_inductance_nH*1n'
+.param trace_resistance='AEL_trace_resistance_ohm'
+.param decoupling='AEL_decoupling_uF*1u'
+.param load='AEL_load_mA*1m'
+Vsource source 0 3.3
+Ltrace source trace {trace_inductance}
+Rtrace trace rail {trace_resistance}
+Cdec rail 0 {decoupling} ic=3.3
+Iload rail 0 PWL(0 0 10u 0 11u {load} 200u {load})
+.tran 0.1u 200u uic
+.measure tran ael_supply_voltage MIN v(rail) FROM=10u TO=200u
+.measure tran ael_ringing_peak MAX v(rail) FROM=10u TO=200u
+.measure tran ael_failure PARAM='ael_supply_voltage < 2.7'
+.end

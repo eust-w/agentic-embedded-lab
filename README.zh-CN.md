@@ -36,6 +36,8 @@
   ARM/RISC-V Firmware、Evidence/Fidelity和20次确定性Trace验收。
 - 可选Verilator 5.050 RTL扩展：独立容器真实编译并执行SystemVerilog faulty/fixed资产；
   当前为功能级扩展证据，不声明综合、时序收敛、FPGA或硅等价。
+- 可选多物理模型包：OpenModelica机电电机、电池老化、传感器动态误差，以及
+  ngspice PCB串联寄生和EFT钳位；均具有真实faulty/fixed运行证据，但尚未校准。
 
 ## 尚未通过的发布门
 

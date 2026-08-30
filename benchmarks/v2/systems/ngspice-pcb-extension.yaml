@@ -1,0 +1,19 @@
+api_version: ael.dev/v2
+id: ngspice-pcb-extension
+components:
+  - id: pcb
+    backend: ngspice
+    model: benchmarks/models/ngspice/pcb_parasitic.cir
+    step_us: 1000
+    rollback: false
+    event_driven: false
+    ports:
+      - {name: trace_inductance_nH, direction: input, type: real, unit: "nH"}
+      - {name: trace_resistance_ohm, direction: input, type: real, unit: "Ohm"}
+      - {name: decoupling_uF, direction: input, type: real, unit: "uF"}
+      - {name: load_mA, direction: input, type: real, unit: "mA"}
+      - {name: supply_voltage, direction: output, type: real, unit: "V"}
+      - {name: failure, direction: output, type: real, unit: "1"}
+    properties: {bor_threshold_V: 2.7}
+    fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: ["Lumped PCB parasitics only; no extracted layout model."]}
+connections: []

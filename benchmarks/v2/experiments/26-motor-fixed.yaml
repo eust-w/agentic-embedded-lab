@@ -1,0 +1,11 @@
+api_version: ael.dev/v2
+id: 26-motor-fixed
+system_id: modelica-motor-extension
+duration_us: 1000
+macro_step_us: 1000
+seed: 1026
+timeout: 120000000000
+stimuli: [{at_us: 0, target: motor.inertia, value: 0.02}, {at_us: 0, target: motor.damping, value: 0.03}, {at_us: 0, target: motor.torque, value: 1.2}, {at_us: 0, target: motor.load_torque, value: 0.1}, {at_us: 0, target: motor.speed_limit, value: 50}]
+faults: []
+assertions: [{id: A01, metric: motor.failure, operator: "==", expected: 0}]
+required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

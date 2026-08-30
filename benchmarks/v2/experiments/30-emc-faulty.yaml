@@ -1,0 +1,11 @@
+api_version: ael.dev/v2
+id: 30-emc-faulty
+system_id: ngspice-emc-extension
+duration_us: 1000
+macro_step_us: 1000
+seed: 1030
+timeout: 120000000000
+stimuli: [{at_us: 0, target: emc.clamp_voltage_V, value: 80}, {at_us: 0, target: emc.series_resistance_ohm, value: 1}]
+faults: []
+assertions: [{id: A01, metric: emc.failure, operator: "==", expected: 0}]
+required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

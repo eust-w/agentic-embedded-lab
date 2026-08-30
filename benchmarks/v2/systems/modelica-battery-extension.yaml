@@ -1,0 +1,20 @@
+api_version: ael.dev/v2
+id: modelica-battery-extension
+components:
+  - id: battery
+    backend: openmodelica
+    model: benchmarks/models/modelica/battery_aging.mos
+    step_us: 1000
+    rollback: false
+    event_driven: false
+    ports:
+      - {name: capacity_Ah, direction: input, type: real, unit: "A.h"}
+      - {name: fade_per_cycle, direction: input, type: real, unit: "1"}
+      - {name: cycles, direction: input, type: real, unit: "1"}
+      - {name: load_current_A, direction: input, type: real, unit: "A"}
+      - {name: minimum_runtime_h, direction: input, type: real, unit: "h"}
+      - {name: runtime_hours, direction: output, type: real, unit: "h"}
+      - {name: failure, direction: output, type: real, unit: "1"}
+    properties: {}
+    fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: ["Uncalibrated capacity-fade model; not electrochemical equivalence."]}
+connections: []

@@ -1,0 +1,16 @@
+model AelSensorError
+  parameter Real trueValue = {{true_value}};
+  parameter Real bias = {{bias}};
+  parameter Real timeConstant = {{time_constant_s}};
+  Real estimate(start=0, fixed=true);
+equation
+  der(estimate) = (trueValue + bias - estimate) / timeConstant;
+end AelSensorError;
+result := simulate(AelSensorError, stopTime=5.0, numberOfIntervals=500, outputFormat="mat", fileNamePrefix="ael_sensor");
+estimate := val(estimate, 5.0, "ael_sensor_res.mat");
+error := abs(estimate - {{true_value}});
+failure := if error > {{max_error}} then 1.0 else 0.0;
+print("AEL_METRIC estimate=" + String(estimate) + "\n");
+print("AEL_METRIC error=" + String(error) + "\n");
+print("AEL_METRIC failure=" + String(failure) + "\n");
+print("AEL_EVENT modelica.sensor_error {\"calibrated\":false}\n");

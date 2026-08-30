@@ -1,0 +1,19 @@
+model AelBatteryAging
+  parameter Real initialCapacityAh = {{capacity_Ah}};
+  parameter Real fadePerCycle = {{fade_per_cycle}};
+  parameter Real cycles = {{cycles}};
+  parameter Real loadCurrent = {{load_current_A}};
+  Real remainingCapacityAh;
+  Real runtimeHours;
+equation
+  remainingCapacityAh = initialCapacityAh * max(0.05, 1.0 - fadePerCycle * cycles);
+  runtimeHours = remainingCapacityAh / loadCurrent;
+end AelBatteryAging;
+result := simulate(AelBatteryAging, stopTime=1.0, numberOfIntervals=1, outputFormat="mat", fileNamePrefix="ael_battery");
+capacity := val(remainingCapacityAh, 1.0, "ael_battery_res.mat");
+runtime := val(runtimeHours, 1.0, "ael_battery_res.mat");
+failure := if runtime < {{minimum_runtime_h}} then 1.0 else 0.0;
+print("AEL_METRIC capacity_Ah=" + String(capacity) + "\n");
+print("AEL_METRIC runtime_hours=" + String(runtime) + "\n");
+print("AEL_METRIC failure=" + String(failure) + "\n");
+print("AEL_EVENT modelica.battery_aging {\"calibrated\":false}\n");

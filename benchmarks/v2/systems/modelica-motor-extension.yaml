@@ -1,0 +1,20 @@
+api_version: ael.dev/v2
+id: modelica-motor-extension
+components:
+  - id: motor
+    backend: openmodelica
+    model: benchmarks/models/modelica/electromechanical_motor.mos
+    step_us: 1000
+    rollback: false
+    event_driven: false
+    ports:
+      - {name: inertia, direction: input, type: real, unit: "kg.m2"}
+      - {name: damping, direction: input, type: real, unit: "N.m.s"}
+      - {name: torque, direction: input, type: real, unit: "N.m"}
+      - {name: load_torque, direction: input, type: real, unit: "N.m"}
+      - {name: speed_limit, direction: input, type: real, unit: "rad/s"}
+      - {name: speed, direction: output, type: real, unit: "rad/s"}
+      - {name: failure, direction: output, type: real, unit: "1"}
+    properties: {}
+    fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: ["Uncalibrated lumped electromechanical model."]}
+connections: []

@@ -65,6 +65,9 @@
 - An optional Verilator 5.050 RTL extension compiles and executes real
   SystemVerilog faulty/fixed assets in an isolated container; it is functional
   evidence only and makes no synthesis, timing-closure, FPGA, or silicon claim.
+- Optional tool-executed model packs cover an OpenModelica electromechanical
+  motor, battery aging and sensor dynamics, plus ngspice PCB series parasitics
+  and EFT clamping. All remain uncalibrated functional evidence.
 
 ## Remaining release gates
 
