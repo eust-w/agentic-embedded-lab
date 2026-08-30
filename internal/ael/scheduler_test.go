@@ -158,3 +158,38 @@ func TestInternalStepHintDoesNotCreateExternalCommunicationPoints(t *testing.T) 
 		t.Fatalf("internal step hint escaped into coordinator schedule: steps=%v events=%d", adapter.steps, len(bundle.Events))
 	}
 }
+
+type unorderedOutputAdapter struct{}
+
+func (*unorderedOutputAdapter) Prepare(context.Context, Component, int64) error { return nil }
+func (*unorderedOutputAdapter) Inject(context.Context, string, any, int64) ([]Event, error) {
+	return nil, nil
+}
+func (*unorderedOutputAdapter) Step(context.Context, int64, int64) (StepResult, error) {
+	return StepResult{Outputs: map[string]float64{"z": 3, "a": 1, "m": 2}}, nil
+}
+func (*unorderedOutputAdapter) Snapshot(context.Context, int64) (string, error) {
+	return "snapshot", nil
+}
+func (*unorderedOutputAdapter) Shutdown(context.Context) error { return nil }
+
+func TestTraceOrderingDoesNotDependOnGoMapIteration(t *testing.T) {
+	system := System{APIVersion: APIVersion, ID: "ordered", Components: []Component{
+		{ID: "source", Backend: BackendNgspice, Ports: []Port{{Name: "a", Direction: "output", Type: "real", Unit: "V"}, {Name: "m", Direction: "output", Type: "real", Unit: "V"}, {Name: "z", Direction: "output", Type: "real", Unit: "V"}}},
+		{ID: "sink", Backend: BackendModelica, Ports: []Port{{Name: "a", Direction: "input", Type: "real", Unit: "V"}, {Name: "m", Direction: "input", Type: "real", Unit: "V"}, {Name: "z", Direction: "input", Type: "real", Unit: "V"}}},
+	}, Connections: []Connection{{SourceComponent: "source", SourcePort: "z", TargetComponent: "sink", TargetPort: "z", Unit: "V"}, {SourceComponent: "source", SourcePort: "a", TargetComponent: "sink", TargetPort: "a", Unit: "V"}, {SourceComponent: "source", SourcePort: "m", TargetComponent: "sink", TargetPort: "m", Unit: "V"}}}
+	experiment := Experiment{APIVersion: APIVersion, ID: "ordered", SystemID: system.ID, DurationUS: 1000, MacroStepUS: 1000, Timeout: time.Second}
+	scheduler := Scheduler{Factories: map[Backend]AdapterFactory{BackendNgspice: func(Component) (Adapter, error) { return &unorderedOutputAdapter{}, nil }, BackendModelica: func(component Component) (Adapter, error) { return &fakeAdapter{component: component}, nil }}}
+	var expected string
+	for repeat := 0; repeat < 50; repeat++ {
+		bundle, err := scheduler.Run(context.Background(), experiment, system, "revision")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if repeat == 0 {
+			expected = bundle.TraceSHA256
+		} else if bundle.TraceSHA256 != expected {
+			t.Fatalf("trace order changed: %s != %s", bundle.TraceSHA256, expected)
+		}
+	}
+}

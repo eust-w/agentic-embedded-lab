@@ -145,7 +145,8 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 				return bundle, fmt.Errorf("step %s at %dus: %w", component.ID, virtualTime, err)
 			}
 			dirty[component.ID] = false
-			for name, value := range result.Metrics {
+			for _, name := range sortedFloatKeys(result.Metrics) {
+				value := result.Metrics[name]
 				if math.IsNaN(value) || math.IsInf(value, 0) {
 					return bundle, fmt.Errorf("component %s produced invalid metric %s", component.ID, name)
 				}
@@ -153,7 +154,8 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 				metrics[key] = value
 				samples[key] = append(samples[key], metricSample{AtUS: virtualTime + stepUS, Value: value})
 			}
-			for name, value := range result.Outputs {
+			for _, name := range sortedFloatKeys(result.Outputs) {
+				value := result.Outputs[name]
 				if math.IsNaN(value) || math.IsInf(value, 0) {
 					return bundle, fmt.Errorf("component %s produced invalid output %s", component.ID, name)
 				}
@@ -172,7 +174,8 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 					dirty[connection.TargetComponent] = true
 				}
 			}
-			for name, hash := range result.Artifacts {
+			for _, name := range sortedStringKeys(result.Artifacts) {
+				hash := result.Artifacts[name]
 				bundle.Artifacts[component.ID+"."+name] = hash
 			}
 			sequence = appendEvents(&bundle.Events, result.Events, sequence, virtualTime, component.ID)
@@ -180,6 +183,24 @@ func (s Scheduler) Run(ctx context.Context, experiment Experiment, system System
 	}
 	bundle.Assertions = evaluateAssertions(experiment.Assertions, metrics, samples)
 	return bundle, nil
+}
+
+func sortedFloatKeys(values map[string]float64) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedStringKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func classifyRunError(err error) string {
