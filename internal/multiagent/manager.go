@@ -262,6 +262,32 @@ func (m *Manager) CloseAgent(ctx context.Context, id string) error {
 	return nil
 }
 
+func (m *Manager) Handoff(ctx context.Context, id string, cleanup bool) (aethergit.HandoffResult, error) {
+	m.mu.RLock()
+	handle, ok := m.handles[id]
+	m.mu.RUnlock()
+	if !ok {
+		return aethergit.HandoffResult{}, errors.New("subagent not found")
+	}
+	if handle.Status == StatusActive {
+		return aethergit.HandoffResult{}, errors.New("active subagent must finish or be interrupted before handoff")
+	}
+	if handle.Worktree == nil {
+		return aethergit.HandoffResult{}, errors.New("subagent has no writable worktree")
+	}
+	result, err := m.worktrees.Handoff(ctx, *handle.Worktree, cleanup)
+	if err != nil {
+		return result, err
+	}
+	if cleanup {
+		m.mu.Lock()
+		handle.Worktree = nil
+		handle.UpdatedAt = time.Now().UTC()
+		m.mu.Unlock()
+	}
+	return result, nil
+}
+
 func (m *Manager) Wait(ctx context.Context, id string) (Handle, error) {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()

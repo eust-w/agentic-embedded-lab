@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Camera, CircleAlert, CodeXml, Globe2, LockKeyhole, Play, RefreshCw, ShieldCheck, Square } from 'lucide-react'
+import { Camera, CircleAlert, CodeXml, Download, Globe2, LockKeyhole, MousePointerClick, Play, RefreshCw, ShieldCheck, Square, TextCursorInput } from 'lucide-react'
 import { backend } from '../lib/backend'
 import type { BrowserConsoleEntry, BrowserNetworkEntry, BrowserStatus } from '../types'
 
@@ -18,6 +18,11 @@ export function BrowserWorkspace() {
   const [chromeSnapshot, setChromeSnapshot] = useState<{ url: string; title: string; dom: string; captured_at: string }>()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [selector, setSelector] = useState('')
+  const [text, setText] = useState('')
+  const [downloadURL, setDownloadURL] = useState('')
+  const [downloadPath, setDownloadPath] = useState('')
+  const [confirmSensitive, setConfirmSensitive] = useState(false)
 
   const refresh = useCallback(async () => {
     const api = backend()
@@ -87,6 +92,24 @@ export function BrowserWorkspace() {
     await api.NavigateBrowser(url)
   })
 
+  const click = () => run(async () => {
+    const api = backend()
+    if (!api || !selector.trim()) throw new Error('请输入CSS选择器')
+    await api.BrowserClick(selector.trim(), confirmSensitive)
+  })
+
+  const type = () => run(async () => {
+    const api = backend()
+    if (!api || !selector.trim()) throw new Error('请输入CSS选择器')
+    await api.BrowserType(selector.trim(), text)
+  })
+
+  const download = () => run(async () => {
+    const api = backend()
+    if (!api || !downloadURL.trim()) throw new Error('请输入下载URL')
+    setDownloadPath(await api.BrowserDownload(downloadURL.trim()))
+  })
+
   return <section className="browser-workspace real-browser-workspace">
     <header className="browser-bar">
       <Globe2 size={17}/>
@@ -103,6 +126,17 @@ export function BrowserWorkspace() {
       <button className={panel === 'network' ? 'active' : ''} onClick={() => setPanel('network')}>网络</button>
       <span><i className={`status-dot ${status.running ? 'online' : ''}`}/> {status.running ? '受控 Chromium 已运行' : '浏览器未运行'}</span>
     </nav>
+
+    {status.running ? <section className="browser-actions" aria-label="浏览器交互工具">
+      <label>CSS选择器<input value={selector} onChange={(event) => setSelector(event.target.value)} placeholder="button[data-action='submit']"/></label>
+      <label>输入文本<input value={text} onChange={(event) => setText(event.target.value)} placeholder="要输入的文本"/></label>
+      <label className="sensitive-confirm"><input type="checkbox" checked={confirmSensitive} onChange={(event) => setConfirmSensitive(event.target.checked)}/>我确认本次可能触发敏感点击</label>
+      <button disabled={busy || !selector.trim()} onClick={() => void click()}><MousePointerClick size={14}/>点击</button>
+      <button disabled={busy || !selector.trim()} onClick={() => void type()}><TextCursorInput size={14}/>输入</button>
+      <label>下载URL<input value={downloadURL} onChange={(event) => setDownloadURL(event.target.value)} placeholder="https://example.com/file.bin"/></label>
+      <button disabled={busy || !downloadURL.trim()} onClick={() => void download()}><Download size={14}/>下载</button>
+      {downloadPath ? <code>{downloadPath}</code> : null}
+    </section> : null}
 
     {error ? <div className="browser-blocker">
       <CircleAlert size={17}/><span><strong>浏览器操作被阻止</strong>{error}</span>

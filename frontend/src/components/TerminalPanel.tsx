@@ -110,7 +110,7 @@ export function TerminalPanel() {
   }
 
   return <section className={`terminal-panel live-terminal-panel ${expanded ? 'expanded' : ''}`}>
-    <header><strong>终端</strong><button className="active">zsh</button><span className="terminal-status">{status}</span><span className="terminal-spacer"/><button aria-label="新建终端" disabled={!project} onClick={() => setTerminalEpoch((value) => value + 1)}><Plus size={14}/></button><button aria-label={expanded ? '还原终端' : '最大化终端'} onClick={() => setExpanded((value) => !value)}><Maximize2 size={14}/></button><button aria-label="清空终端" onClick={() => terminal.current?.clear()}><Trash2 size={14}/></button><button aria-label="停止终端" onClick={() => void stop()}><Square size={13}/></button></header>
+    <header><strong>终端</strong><span className="active terminal-shell-label">zsh</span><span className="terminal-status">{status}</span><span className="terminal-spacer"/><button aria-label="新建终端" disabled={!project} onClick={() => setTerminalEpoch((value) => value + 1)}><Plus size={14}/></button><button aria-label={expanded ? '还原终端' : '最大化终端'} onClick={() => setExpanded((value) => !value)}><Maximize2 size={14}/></button><button aria-label="清空终端" onClick={() => terminal.current?.clear()}><Trash2 size={14}/></button><button aria-label="停止终端" onClick={() => void stop()}><Square size={13}/></button></header>
     <div className="xterm-host" ref={container}/>
   </section>
 }

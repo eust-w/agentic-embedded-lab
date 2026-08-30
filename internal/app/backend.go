@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
+	"github.com/eust-w/agentic-embedded-lab/internal/automation"
 	"github.com/eust-w/agentic-embedded-lab/internal/browser"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
 	gitrepo "github.com/eust-w/agentic-embedded-lab/internal/git"
@@ -44,6 +46,7 @@ type Backend struct {
 type ProjectInfo struct {
 	ID         string                     `json:"id"`
 	Root       string                     `json:"root"`
+	Branch     string                     `json:"branch"`
 	Permission protocol.PermissionProfile `json:"permission"`
 	Tools      []protocol.ToolDefinition  `json:"tools"`
 }
@@ -105,12 +108,38 @@ func (b *Backend) SelectProject(permission protocol.PermissionProfile) (ProjectI
 	}
 	b.currentProject = root
 	b.projectID = projectID
+	return b.projectInfo(result, projectID, root, permission), nil
+}
+
+func (b *Backend) ChangeProjectPermission(permission protocol.PermissionProfile) (ProjectInfo, error) {
+	if b.currentProject == "" || b.projectID == "" {
+		return ProjectInfo{}, errors.New("请先选择项目工作区")
+	}
+	if permission != protocol.PermissionReadOnly && permission != protocol.PermissionWorkspace && permission != protocol.PermissionFullAccess {
+		return ProjectInfo{}, errors.New("无效的项目权限")
+	}
+	result, err := b.OpenProject(b.projectID, b.currentProject, permission)
+	if err != nil {
+		return ProjectInfo{}, err
+	}
+	return b.projectInfo(result, b.projectID, b.currentProject, permission), nil
+}
+
+func (b *Backend) projectInfo(result map[string]any, projectID, root string, permission protocol.PermissionProfile) ProjectInfo {
 	tools := make([]protocol.ToolDefinition, 0)
 	if value, ok := result["tools"]; ok {
 		payload, _ := json.Marshal(value)
 		_ = json.Unmarshal(payload, &tools)
 	}
-	return ProjectInfo{ID: projectID, Root: root, Permission: permission, Tools: tools}, nil
+	branch := "非 Git 工作区"
+	if repository, discoverErr := gitrepo.Discover(b.ctx, root); discoverErr == nil {
+		if current, branchErr := repository.Branch(b.ctx); branchErr == nil && current != "" {
+			branch = current
+		} else if head, headErr := repository.Head(b.ctx); headErr == nil && len(head) >= 8 {
+			branch = "detached@" + head[:8]
+		}
+	}
+	return ProjectInfo{ID: projectID, Root: root, Branch: branch, Permission: permission, Tools: tools}
 }
 
 func (b *Backend) CheckRelease(profile release.Profile) (release.Result, error) {
@@ -121,11 +150,19 @@ func (b *Backend) CheckRelease(profile release.Profile) (release.Result, error) 
 }
 
 func (b *Backend) CreateThread(projectID, title string, permission protocol.PermissionProfile) (protocol.Thread, error) {
+	return b.CreateThreadWithModel(projectID, title, permission, agent.DefaultModel)
+}
+
+func (b *Backend) CreateThreadWithModel(projectID, title string, permission protocol.PermissionProfile, model string) (protocol.Thread, error) {
+	model = strings.TrimSpace(model)
+	if model == "" || len(model) > 128 {
+		return protocol.Thread{}, errors.New("模型名称无效")
+	}
 	var thread protocol.Thread
 	params, _ := json.Marshal(map[string]any{
 		"project_id": projectID,
 		"title":      title,
-		"model":      agent.DefaultModel,
+		"model":      model,
 		"permission": permission,
 	})
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "thread.create", Params: params}, &thread)
@@ -222,6 +259,20 @@ func (b *Backend) MessageAgent(id, message string) (protocol.Turn, error) {
 	return turn, err
 }
 
+func (b *Backend) SteerAgent(id, message string) (protocol.Turn, error) {
+	var turn protocol.Turn
+	params, _ := json.Marshal(map[string]string{"id": id, "message": message})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.steer", Params: params}, &turn)
+	return turn, err
+}
+
+func (b *Backend) WaitAgent(id string) (multiagent.Handle, error) {
+	var handle multiagent.Handle
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.wait", Params: params}, &handle)
+	return handle, err
+}
+
 func (b *Backend) InterruptAgent(id string) (bool, error) {
 	var result map[string]bool
 	params, _ := json.Marshal(map[string]string{"id": id})
@@ -241,6 +292,13 @@ func (b *Backend) CloseAgent(id string) (bool, error) {
 	params, _ := json.Marshal(map[string]string{"id": id})
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.close", Params: params}, &result)
 	return result["closed"], err
+}
+
+func (b *Backend) HandoffAgent(id string, cleanup bool) (gitrepo.HandoffResult, error) {
+	var result gitrepo.HandoffResult
+	params, _ := json.Marshal(map[string]any{"id": id, "cleanup": cleanup})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "agent.handoff", Params: params}, &result)
+	return result, err
 }
 
 func (b *Backend) StartExperiment(request ael.RunRequest) (ael.RunRecord, error) {
@@ -514,6 +572,13 @@ func (b *Backend) BrowserType(selector, text string) error {
 	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.type", Params: params}, nil)
 }
 
+func (b *Backend) BrowserDownload(rawURL string) (string, error) {
+	var result map[string]string
+	params, _ := json.Marshal(map[string]string{"url": rawURL})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.download", Params: params}, &result)
+	return result["path"], err
+}
+
 func (b *Backend) ComputerStatus(prompt bool) (map[string]bool, error) {
 	var result map[string]bool
 	params, _ := json.Marshal(map[string]bool{"prompt": prompt})
@@ -537,6 +602,33 @@ func (b *Backend) SetComputerPermission(bundleID string, allow bool, scope strin
 	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.permission", Params: params}, nil)
 }
 
+func (b *Backend) ComputerTree(bundleID string, limit int) (string, error) {
+	var result string
+	params, _ := json.Marshal(map[string]any{"bundle_id": bundleID, "limit": limit})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.tree", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) ComputerScreenshot(bundleID string) (string, error) {
+	var result string
+	params, _ := json.Marshal(map[string]string{"bundle_id": bundleID})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.screenshot", Params: params}, &result)
+	if err != nil {
+		return "", err
+	}
+	return "data:image/png;base64," + result, nil
+}
+
+func (b *Backend) ComputerClick(bundleID string, x, y float64, confirmed bool) error {
+	params, _ := json.Marshal(map[string]any{"bundle_id": bundleID, "x": x, "y": y, "confirmed": confirmed})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.click", Params: params}, nil)
+}
+
+func (b *Backend) ComputerType(bundleID, text string, confirmed bool) error {
+	params, _ := json.Marshal(map[string]any{"bundle_id": bundleID, "text": text, "confirmed": confirmed})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.type", Params: params}, nil)
+}
+
 func (b *Backend) SaveAutomation(spec protocol.AutomationSpec) (protocol.AutomationSpec, error) {
 	var result protocol.AutomationSpec
 	params, _ := json.Marshal(spec)
@@ -557,11 +649,30 @@ func (b *Backend) RunAutomation(id string) (string, error) {
 	return result["job_id"], err
 }
 
+func (b *Backend) TriggerAutomations(eventSource string) ([]string, error) {
+	var result map[string][]string
+	params, _ := json.Marshal(map[string]string{"event_source": eventSource})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.trigger", Params: params}, &result)
+	return result["job_ids"], err
+}
+
 func (b *Backend) CancelAutomation(jobID string) (bool, error) {
 	var result map[string]bool
 	params, _ := json.Marshal(map[string]string{"job_id": jobID})
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.cancel", Params: params}, &result)
 	return result["cancelled"], err
+}
+
+func (b *Backend) AutomationJob(jobID string) (automation.Job, error) {
+	var job automation.Job
+	params, _ := json.Marshal(map[string]string{"job_id": jobID})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.job", Params: params}, &job)
+	return job, err
+}
+
+func (b *Backend) DeleteAutomation(id string) error {
+	params, _ := json.Marshal(map[string]string{"id": id})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.delete", Params: params}, nil)
 }
 
 func (b *Backend) ListPlugins() ([]plugins.Installed, error) {

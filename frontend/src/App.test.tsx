@@ -19,6 +19,8 @@ beforeEach(() => {
   useWorkspace.setState((state) => ({
     ...state,
     view: 'chat',
+    model: 'gpt-5.6',
+    desiredPermission: 'workspace_write',
     approval: { ...state.approval, status: 'denied' },
     project: undefined,
     liveThreads: [],
@@ -29,6 +31,9 @@ beforeEach(() => {
     input: '',
     attachments: [],
     busy: false,
+    activeTurn: undefined,
+    agentResults: {},
+    handoffResults: {},
     backendError: undefined,
   }))
   delete window.go
@@ -62,6 +67,21 @@ describe('Aether desktop shell', () => {
     expect(await screen.findByText('选择 Git 项目后查看真实变更', {}, { timeout: 5000 })).toBeInTheDocument()
   })
 
+  it('filters persisted tasks and focuses search with Command-K', () => {
+    const now = new Date().toISOString()
+    useWorkspace.setState({ project: { id: 'p', root: '/tmp/project', branch: 'main', permission: 'workspace_write', tools: [] }, liveThreads: [
+      { api_version: 'aether.desktop/v1', id: 'uart', project_id: 'p', title: '修复 UART', model: 'gpt-5.6', permission: 'workspace_write', status: 'ready', created_at: now, updated_at: now },
+      { api_version: 'aether.desktop/v1', id: 'spi', project_id: 'p', title: '检查 SPI', model: 'gpt-5.6', permission: 'workspace_write', status: 'ready', created_at: now, updated_at: now },
+    ] })
+    render(<App />)
+    fireEvent.keyDown(window, { key: 'k', metaKey: true })
+    const search = screen.getByRole('textbox', { name: '搜索任务' })
+    expect(search).toHaveFocus()
+    fireEvent.change(search, { target: { value: 'UART' } })
+    expect(screen.getByText('修复 UART')).toBeInTheDocument()
+    expect(screen.queryByText('检查 SPI')).not.toBeInTheDocument()
+  })
+
   it('opens a real Wails project and renders persisted daemon items', async () => {
     const thread: Thread = { api_version: 'aether.desktop/v1', id: 'thread-1', project_id: 'project-1', title: '真实任务', model: 'gpt-5.6', permission: 'workspace_write', status: 'ready', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     const items: Item[] = [
@@ -72,9 +92,11 @@ describe('Aether desktop shell', () => {
       Health: vi.fn().mockResolvedValue({ status: 'ready', time: new Date().toISOString() }),
       InstallBackgroundService: vi.fn().mockResolvedValue(undefined),
       UpdateStatus: vi.fn().mockResolvedValue({ available: false, started: false }),
-      SelectProject: vi.fn().mockResolvedValue({ id: 'project-1', root: '/tmp/firmware', permission: 'workspace_write', tools: [] }),
+      SelectProject: vi.fn().mockResolvedValue({ id: 'project-1', root: '/tmp/firmware', branch: 'main', permission: 'workspace_write', tools: [] }),
+      ChangeProjectPermission: vi.fn().mockResolvedValue({ id: 'project-1', root: '/tmp/firmware', branch: 'main', permission: 'read_only', tools: [] }),
       ListThreads: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([thread]),
       CreateThread: vi.fn().mockResolvedValue(thread),
+      CreateThreadWithModel: vi.fn().mockResolvedValue(thread),
       Items: vi.fn().mockResolvedValue(items),
       RunTurn: vi.fn().mockResolvedValue({ api_version: 'aether.desktop/v1', id: 'turn-1', thread_id: thread.id, status: 'running', input: '检查 UART', started_at: new Date().toISOString() }),
       RunTurnWithAttachments: vi.fn().mockResolvedValue({ api_version: 'aether.desktop/v1', id: 'turn-1', thread_id: thread.id, status: 'running', input: '检查 UART', started_at: new Date().toISOString() }),
@@ -83,7 +105,13 @@ describe('Aether desktop shell', () => {
       ResolveApproval: vi.fn().mockResolvedValue(true),
       SpawnAgent: vi.fn().mockResolvedValue({}),
       ListAgents: vi.fn().mockResolvedValue([]),
+      MessageAgent: vi.fn().mockResolvedValue({}),
+      SteerAgent: vi.fn().mockResolvedValue({}),
+      WaitAgent: vi.fn().mockResolvedValue({}),
+      AgentResult: vi.fn().mockResolvedValue({ handle: {}, items: [], summary: '' }),
       InterruptAgent: vi.fn().mockResolvedValue(true),
+      CloseAgent: vi.fn().mockResolvedValue(true),
+      HandoffAgent: vi.fn().mockResolvedValue({ patch_sha256: 'a'.repeat(64), paths: ['file.c'], applied: true, cleaned_up: true }),
       StartExperiment: vi.fn().mockResolvedValue({}),
       GetExperiment: vi.fn().mockResolvedValue({}),
       CancelExperiment: vi.fn().mockResolvedValue(true),
@@ -101,9 +129,14 @@ describe('Aether desktop shell', () => {
       LatestChromeSnapshot: vi.fn().mockResolvedValue({ available: false }),
       BrowserClick: vi.fn().mockResolvedValue(undefined),
       BrowserType: vi.fn().mockResolvedValue(undefined),
+      BrowserDownload: vi.fn().mockResolvedValue('/tmp/downloads/file.bin'),
       ComputerStatus: vi.fn().mockResolvedValue({ accessibility: false, screen_recording: false }),
       ComputerDecision: vi.fn().mockResolvedValue({ bundle_id: 'com.google.Chrome', decision: 'ask' }),
       SetComputerPermission: vi.fn().mockResolvedValue(undefined),
+      ComputerTree: vi.fn().mockResolvedValue('{}'),
+      ComputerScreenshot: vi.fn().mockResolvedValue('data:image/png;base64,cG5n'),
+      ComputerClick: vi.fn().mockResolvedValue(undefined),
+      ComputerType: vi.fn().mockResolvedValue(undefined),
       StartTerminal: vi.fn().mockResolvedValue({ id: 'term-1', workspace: '/tmp/firmware', shell: '/bin/zsh -l', running: true, exit_code: -1, created_at: new Date().toISOString() }),
       ListTerminals: vi.fn().mockResolvedValue([]),
       ReadTerminal: vi.fn().mockResolvedValue({ id: 'term-1', workspace: '/tmp/firmware', shell: '/bin/zsh -l', running: true, exit_code: -1, created_at: new Date().toISOString(), offset: 0, next_offset: 0, data_base64: '', truncated: false }),
@@ -122,7 +155,10 @@ describe('Aether desktop shell', () => {
       SaveAutomation: vi.fn().mockImplementation((spec) => Promise.resolve(spec)),
       ListAutomations: vi.fn().mockResolvedValue([]),
       RunAutomation: vi.fn().mockResolvedValue('job-1'),
+      TriggerAutomations: vi.fn().mockResolvedValue([]),
       CancelAutomation: vi.fn().mockResolvedValue(true),
+      AutomationJob: vi.fn().mockResolvedValue({ id: 'job-1', automation_id: 'nightly', status: 'completed', attempt: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+      DeleteAutomation: vi.fn().mockResolvedValue(undefined),
       ListPlugins: vi.fn().mockResolvedValue([]),
       SelectAndInstallPlugin: vi.fn().mockResolvedValue({}),
       RevokePlugin: vi.fn().mockResolvedValue(undefined),
@@ -136,9 +172,11 @@ describe('Aether desktop shell', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: /选择项目工作区/ }))
     const composer = await screen.findByPlaceholderText('描述要完成的嵌入式开发任务…')
+    fireEvent.change(screen.getByRole('combobox', { name: '新任务模型' }), { target: { value: 'gpt-test-model' } })
     fireEvent.change(composer, { target: { value: '检查 UART' } })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
     await waitFor(() => expect(screen.getByText('已完成真实检查')).toBeInTheDocument())
     expect(api.RunTurn).toHaveBeenCalledTimes(1)
+    expect(api.CreateThreadWithModel).toHaveBeenCalledWith('project-1', '检查 UART', 'workspace_write', 'gpt-test-model')
   })
 })

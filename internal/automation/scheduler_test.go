@@ -41,4 +41,25 @@ func TestAutomationPersistsAndRunNowCreatesDurableJob(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("automation handler did not run")
 	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		job, err := scheduler.Job(ctx, jobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.Status == "completed" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("job did not complete: %#v", job)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := scheduler.Delete(ctx, spec.ID); err != nil {
+		t.Fatal(err)
+	}
+	listed, err = scheduler.List(ctx)
+	if err != nil || len(listed) != 0 {
+		t.Fatalf("automation was not deleted: %#v %v", listed, err)
+	}
 }

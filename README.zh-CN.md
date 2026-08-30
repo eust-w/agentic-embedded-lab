@@ -25,6 +25,10 @@
 - OpenAI Responses流式调用、取消、幂等、分类错误和重试；默认`gpt-5.6`。
 - macOS Keychain凭证和Unix Socket daemon认证。
 - 类型化审批、Seatbelt执行器、Git/Worktree、AGENTS层级发现。
+- 可配置Responses模型与项目权限；运行中Turn可取消，任务列表支持`⌘K`检索。
+- 子Agent支持消息、转向、等待、中断、结果读取、关闭，以及带冲突预检和Patch哈希的Worktree Handoff。
+- Browser与Computer Use的DOM/AX树、截图、点击、输入和下载均通过显式授权与敏感操作确认执行。
+- RRULE、手动运行和插件事件自动化共享同一持久Job状态，支持启停、取消、恢复和删除。
 - Skills、Hooks、签名插件、WASM、MCP、脱敏Memory和独立子Agent Thread。
 - daemon托管真实zsh PTY、xterm.js、离线Monaco Diff、只读AI代码审查，以及
   需确认的Stage/Restore/Commit/Push/GitHub草稿PR工作流。

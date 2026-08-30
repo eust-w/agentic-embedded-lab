@@ -60,6 +60,59 @@ func TestManagedWorktreeCarriesDirtyTrackedPatch(t *testing.T) {
 	}
 }
 
+func TestWorktreeHandoffAppliesTrackedAndUntrackedChanges(t *testing.T) {
+	ctx := context.Background()
+	root := initialiseRepository(t)
+	manager := WorktreeManager{Root: filepath.Join(t.TempDir(), "worktrees")}
+	reference, err := manager.Create(ctx, &Repository{Root: root}, "HEAD", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(reference.Path, "file.txt"), []byte("from agent\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(reference.Path, "new.txt"), []byte("new\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := manager.Handoff(ctx, reference, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Applied || !result.CleanedUp || result.PatchSHA256 == "" || len(result.Paths) != 2 {
+		t.Fatalf("unexpected handoff: %#v", result)
+	}
+	for path, expected := range map[string]string{"file.txt": "from agent\n", "new.txt": "new\n"} {
+		content, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil || string(content) != expected {
+			t.Fatalf("handoff %s: %q %v", path, content, err)
+		}
+	}
+}
+
+func TestWorktreeHandoffRejectsDestinationConflict(t *testing.T) {
+	ctx := context.Background()
+	root := initialiseRepository(t)
+	manager := WorktreeManager{Root: filepath.Join(t.TempDir(), "worktrees")}
+	reference, err := manager.Create(ctx, &Repository{Root: root}, "HEAD", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Remove(ctx, reference)
+	if err := os.WriteFile(filepath.Join(reference.Path, "file.txt"), []byte("from agent\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("user change\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Handoff(ctx, reference, false); err == nil || !strings.Contains(err.Error(), "conflicts") {
+		t.Fatalf("destination conflict was not rejected: %v", err)
+	}
+	content, _ := os.ReadFile(filepath.Join(root, "file.txt"))
+	if string(content) != "user change\n" {
+		t.Fatalf("destination changed after failed handoff: %q", content)
+	}
+}
+
 func TestCreatePullRequestValidatesBeforeExternalTool(t *testing.T) {
 	repository := &Repository{Root: t.TempDir()}
 	if _, err := repository.CreatePullRequest(context.Background(), "", "", "main", "feature", true); err == nil {

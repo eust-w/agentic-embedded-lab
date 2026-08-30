@@ -1,4 +1,4 @@
-import { Circle, FileCode2, LoaderCircle, Paperclip, Send, ShieldCheck, X } from 'lucide-react'
+import { Circle, FileCode2, Paperclip, Send, ShieldCheck, Square, X } from 'lucide-react'
 import { useWorkspace } from '../store/workspace'
 import type { WorkspaceView } from '../types'
 
@@ -10,6 +10,7 @@ export function ChatWorkspace({ mode }: { mode: WorkspaceView }) {
   const backendError = useWorkspace((state) => state.backendError)
   const setInput = useWorkspace((state) => state.setInput)
   const submit = useWorkspace((state) => state.submit)
+  const cancelTurn = useWorkspace((state) => state.cancelTurn)
   const attachments = useWorkspace((state) => state.attachments)
   const pickAttachments = useWorkspace((state) => state.pickAttachments)
   const removeAttachment = useWorkspace((state) => state.removeAttachment)
@@ -41,7 +42,7 @@ export function ChatWorkspace({ mode }: { mode: WorkspaceView }) {
         <Circle size={12} />
         <button className="attachment-button" type="button" aria-label="添加图片附件" disabled={!project || busy} onClick={() => void pickAttachments()}><Paperclip size={15}/></button>
         <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder={project ? '描述要完成的嵌入式开发任务…' : '先从左侧选择项目工作区'} disabled={!project || busy} rows={2} />
-        <button className="primary-button" type="submit" disabled={!project || busy || !input.trim()}>{busy ? <LoaderCircle className="spin" size={16} /> : <Send size={16} />}{busy ? '执行中' : '发送'}</button>
+        {busy ? <button className="secondary-button" type="button" onClick={() => void cancelTurn()}><Square size={14}/>停止</button> : <button className="primary-button" type="submit" disabled={!project || !input.trim()}><Send size={16}/>发送</button>}
       </form>
     </section>
   )

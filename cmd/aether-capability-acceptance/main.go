@@ -52,7 +52,7 @@ func main() {
 	_ = os.WriteFile(path, append(data, '\n'), 0o600)
 	packageReport := packaging.CheckBundle(filepath.Join(root, "build/bin/Aether Desktop.app"), false)
 	packageData, _ := json.MarshalIndent(packageReport, "", "  ")
-	_ = os.WriteFile(filepath.Join(root, "acceptance", "v2", "desktop-development.json"), append(packageData, '\n'), 0o600)
+	_ = os.WriteFile(filepath.Join(root, "acceptance", "v2", "evidence", "desktop-development.json"), append(packageData, '\n'), 0o600)
 	for _, entry := range manifest.Entries {
 		if entry.Status != "passed" {
 			os.Exit(2)

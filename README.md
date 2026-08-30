@@ -43,6 +43,14 @@
 - Authenticated Unix-socket `aetherd`, plus Wails-only bindings for the UI.
 - Typed permission engine and macOS Seatbelt command preparation; no model-built
   shell command is exposed.
+- Configurable Responses model and project permission, cancellable turns and
+  Command-K task search.
+- Full child-agent message/steer/wait/interrupt/result/close lifecycle plus
+  conflict-checked, hash-recorded worktree handoff.
+- Authorized Browser and Computer Use inspection, screenshots, click, typing
+  and downloads with sensitive-action confirmation.
+- RRULE, manual and plugin-event automations share durable job state with
+  enable, cancel, recovery and deletion controls.
 - Git status/diff/stage/restore/commit/push primitives and managed worktrees with
   dirty tracked-patch transfer, plus an offline Monaco Diff workspace and
   read-only AI review threads. Pushes and GitHub draft PR creation are typed,

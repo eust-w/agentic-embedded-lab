@@ -13,12 +13,26 @@ import (
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/automation"
 	"github.com/eust-w/agentic-embedded-lab/internal/browser"
+	"github.com/eust-w/agentic-embedded-lab/internal/computeruse"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
 	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/store"
 	"github.com/eust-w/agentic-embedded-lab/internal/terminal"
 )
+
+type daemonComputerNative struct{ clicked bool }
+
+func (n *daemonComputerNative) AccessibilityTrusted(bool) bool     { return true }
+func (n *daemonComputerNative) ScreenRecordingTrusted(bool) bool   { return true }
+func (n *daemonComputerNative) FrontmostBundleID() (string, error) { return "com.example.Test", nil }
+func (n *daemonComputerNative) FocusedElementSecure() bool         { return false }
+func (n *daemonComputerNative) ElementTree(int) ([]byte, error) {
+	return []byte(`{"role":"AXApplication"}`), nil
+}
+func (n *daemonComputerNative) Screenshot() ([]byte, error)  { return []byte("png"), nil }
+func (n *daemonComputerNative) Click(float64, float64) error { n.clicked = true; return nil }
+func (n *daemonComputerNative) Type(string) error            { return nil }
 
 func TestDaemonRequiresCapabilityToken(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -96,6 +110,38 @@ func TestDaemonAutomationContractPersistsRRULE(t *testing.T) {
 	if listed.Error != "" || !ok || len(values) != 1 || values[0].ID != "nightly" {
 		t.Fatalf("automation list: %#v", listed)
 	}
+	run := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "3", Token: "capability", Method: "automation.run", Params: mustJSON(t, map[string]string{"id": spec.ID})})
+	if run.Error != "" {
+		t.Fatal(run.Error)
+	}
+	jobID := run.Result.(map[string]string)["job_id"]
+	deadline := time.Now().Add(time.Second)
+	for {
+		status := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "4", Token: "capability", Method: "automation.job", Params: mustJSON(t, map[string]string{"job_id": jobID})})
+		if status.Error != "" {
+			t.Fatal(status.Error)
+		}
+		if status.Result.(automation.Job).Status == "completed" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("automation job did not complete")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	deleted := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "5", Token: "capability", Method: "automation.delete", Params: mustJSON(t, map[string]string{"id": spec.ID})})
+	if deleted.Error != "" {
+		t.Fatal(deleted.Error)
+	}
+	eventSpec := spec
+	eventSpec.ID, eventSpec.RRULE, eventSpec.EventSource = "plugin-event", "", "plugin.model.updated"
+	if saved := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "6", Token: "capability", Method: "automation.save", Params: mustJSON(t, eventSpec)}); saved.Error != "" {
+		t.Fatal(saved.Error)
+	}
+	triggered := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "7", Token: "capability", Method: "automation.trigger", Params: mustJSON(t, map[string]string{"event_source": eventSpec.EventSource})})
+	if triggered.Error != "" || len(triggered.Result.(map[string][]string)["job_ids"]) != 1 {
+		t.Fatalf("event automation did not trigger: %#v", triggered)
+	}
 }
 
 func TestConfigureProjectLoadsSignedPluginSkillAndHook(t *testing.T) {
@@ -159,6 +205,29 @@ func TestDaemonAcceptsOnlyTypedChromeSnapshots(t *testing.T) {
 	result, ok := latest.Result.(map[string]any)
 	if !ok || result["available"] != true {
 		t.Fatalf("latest Chrome snapshot missing: %#v", latest.Result)
+	}
+}
+
+func TestDaemonComputerClickRequiresExplicitConfirmation(t *testing.T) {
+	ctx := context.Background()
+	state, err := store.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	native := &daemonComputerNative{}
+	controller := computeruse.New(state, native)
+	if err := controller.SetApplicationPermission(ctx, "com.example.Test", computeruse.DecisionAllow, "persistent"); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{Token: "capability", Computer: controller}
+	denied := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "1", Token: "capability", Method: "computer.click", Params: mustJSON(t, map[string]any{"bundle_id": "com.example.Test", "x": 1, "y": 2})})
+	if denied.Error == "" || native.clicked {
+		t.Fatalf("unconfirmed click was accepted: %#v", denied)
+	}
+	allowed := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "2", Token: "capability", Method: "computer.click", Params: mustJSON(t, map[string]any{"bundle_id": "com.example.Test", "x": 1, "y": 2, "confirmed": true})})
+	if allowed.Error != "" || !native.clicked {
+		t.Fatalf("confirmed click failed: %#v", allowed)
 	}
 }
 

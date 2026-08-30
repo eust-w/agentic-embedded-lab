@@ -19,6 +19,13 @@ type WorktreeManager struct {
 	Root string
 }
 
+type HandoffResult struct {
+	PatchSHA256 string   `json:"patch_sha256"`
+	Paths       []string `json:"paths"`
+	Applied     bool     `json:"applied"`
+	CleanedUp   bool     `json:"cleaned_up"`
+}
+
 func (m WorktreeManager) Create(ctx context.Context, repository *Repository, base string, includeDirty bool) (protocol.WorktreeRef, error) {
 	if repository == nil || repository.Root == "" || m.Root == "" {
 		return protocol.WorktreeRef{}, errors.New("repository and worktree root are required")
@@ -85,6 +92,88 @@ func (m WorktreeManager) Remove(ctx context.Context, reference protocol.Worktree
 	}
 	_, err = run(ctx, reference.Repository, "worktree", "remove", "--force", path)
 	return err
+}
+
+func (m WorktreeManager) Handoff(ctx context.Context, reference protocol.WorktreeRef, cleanup bool) (HandoffResult, error) {
+	if err := m.validateReference(reference); err != nil {
+		return HandoffResult{}, err
+	}
+	worktree := &Repository{Root: reference.Path}
+	untracked, err := run(ctx, worktree.Root, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return HandoffResult{}, err
+	}
+	for _, path := range strings.Split(untracked, "\x00") {
+		if path == "" {
+			continue
+		}
+		if _, err := run(ctx, worktree.Root, "add", "-N", "--", path); err != nil {
+			return HandoffResult{}, err
+		}
+	}
+	patch, err := run(ctx, worktree.Root, "diff", "--binary", "HEAD")
+	if err != nil {
+		return HandoffResult{}, err
+	}
+	if patch == "" {
+		return HandoffResult{}, errors.New("worktree has no changes to hand off")
+	}
+	pathsOutput, err := run(ctx, worktree.Root, "diff", "--name-only", "-z", "HEAD")
+	if err != nil {
+		return HandoffResult{}, err
+	}
+	paths := make([]string, 0)
+	for _, path := range strings.Split(pathsOutput, "\x00") {
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	patchPath := filepath.Join(reference.Path, ".aether-handoff.patch")
+	if err := os.WriteFile(patchPath, []byte(patch), 0o600); err != nil {
+		return HandoffResult{}, err
+	}
+	defer os.Remove(patchPath)
+	if _, err := run(ctx, reference.Repository, "apply", "--check", "--binary", patchPath); err != nil {
+		return HandoffResult{}, fmt.Errorf("handoff conflicts with the destination worktree: %w", err)
+	}
+	if _, err := run(ctx, reference.Repository, "apply", "--binary", patchPath); err != nil {
+		return HandoffResult{}, fmt.Errorf("apply handoff patch: %w", err)
+	}
+	digest := sha256.Sum256([]byte(patch))
+	result := HandoffResult{PatchSHA256: hex.EncodeToString(digest[:]), Paths: paths, Applied: true}
+	if cleanup {
+		if err := m.Remove(ctx, reference); err != nil {
+			return result, fmt.Errorf("handoff applied but worktree cleanup failed: %w", err)
+		}
+		result.CleanedUp = true
+	}
+	return result, nil
+}
+
+func (m WorktreeManager) validateReference(reference protocol.WorktreeRef) error {
+	root, err := filepath.Abs(m.Root)
+	if err != nil {
+		return err
+	}
+	path, err := filepath.Abs(reference.Path)
+	if err != nil {
+		return err
+	}
+	relative, err := filepath.Rel(root, path)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return errors.New("worktree path is outside managed root")
+	}
+	if info, err := os.Lstat(path); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("managed worktree is unavailable or unsafe")
+	}
+	repository, err := filepath.Abs(reference.Repository)
+	if err != nil {
+		return err
+	}
+	if repository == path || reference.ID == "" {
+		return errors.New("invalid managed worktree reference")
+	}
+	return nil
 }
 
 func copyIncludedFiles(sourceRoot, destinationRoot string) error {

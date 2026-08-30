@@ -574,6 +574,17 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		}
 		jobID, err := s.Automations.RunNow(ctx, params.ID)
 		response.Result, response.Error = resultOrError(map[string]string{"job_id": jobID}, err)
+	case "automation.trigger":
+		if s.Automations == nil {
+			response.Error = "automation scheduler is unavailable"
+			break
+		}
+		var params struct {
+			EventSource string `json:"event_source"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		jobs, err := s.Automations.Trigger(ctx, params.EventSource)
+		response.Result, response.Error = resultOrError(map[string][]string{"job_ids": jobs}, err)
 	case "automation.cancel":
 		if s.Automations == nil {
 			response.Error = "automation scheduler is unavailable"
@@ -584,6 +595,28 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		}
 		_ = json.Unmarshal(request.Params, &params)
 		response.Result = map[string]bool{"cancelled": s.Automations.Cancel(params.JobID)}
+	case "automation.job":
+		if s.Automations == nil {
+			response.Error = "automation scheduler is unavailable"
+			break
+		}
+		var params struct {
+			JobID string `json:"job_id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		job, err := s.Automations.Job(ctx, params.JobID)
+		response.Result, response.Error = resultOrError(job, err)
+	case "automation.delete":
+		if s.Automations == nil {
+			response.Error = "automation scheduler is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		err := s.Automations.Delete(ctx, params.ID)
+		response.Result, response.Error = resultOrError(map[string]bool{"deleted": err == nil}, err)
 	case "plugin.list":
 		if s.PluginRegistry == nil {
 			response.Error = "plugin registry is unavailable"
@@ -844,6 +877,20 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		} else {
 			response.Result = map[string]bool{"typed": true}
 		}
+	case "browser.download":
+		if s.Browser == nil {
+			response.Error = "controlled browser is unavailable"
+			break
+		}
+		var params struct {
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid browser params"
+			break
+		}
+		path, err := s.Browser.Download(ctx, params.URL)
+		response.Result, response.Error = resultOrError(map[string]string{"path": path}, err)
 	case "computer.status":
 		if s.Computer == nil {
 			response.Error = "Computer Use is unavailable"
@@ -883,6 +930,64 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		} else {
 			response.Result = map[string]bool{"updated": true}
 		}
+	case "computer.tree":
+		if s.Computer == nil {
+			response.Error = "Computer Use is unavailable"
+			break
+		}
+		var params struct {
+			BundleID string `json:"bundle_id"`
+			Limit    int    `json:"limit"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		value, err := s.Computer.ElementTree(ctx, params.BundleID, params.Limit)
+		response.Result, response.Error = resultOrError(string(value), err)
+	case "computer.screenshot":
+		if s.Computer == nil {
+			response.Error = "Computer Use is unavailable"
+			break
+		}
+		var params struct {
+			BundleID string `json:"bundle_id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		value, err := s.Computer.Screenshot(ctx, params.BundleID)
+		response.Result, response.Error = resultOrError(base64.StdEncoding.EncodeToString(value), err)
+	case "computer.click":
+		if s.Computer == nil {
+			response.Error = "Computer Use is unavailable"
+			break
+		}
+		var params struct {
+			BundleID  string  `json:"bundle_id"`
+			X         float64 `json:"x"`
+			Y         float64 `json:"y"`
+			Confirmed bool    `json:"confirmed"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		if !params.Confirmed {
+			response.Error = "Computer Use click requires explicit confirmation"
+			break
+		}
+		err := s.Computer.Click(ctx, params.BundleID, params.X, params.Y)
+		response.Result, response.Error = resultOrError(map[string]bool{"clicked": err == nil}, err)
+	case "computer.type":
+		if s.Computer == nil {
+			response.Error = "Computer Use is unavailable"
+			break
+		}
+		var params struct {
+			BundleID  string `json:"bundle_id"`
+			Text      string `json:"text"`
+			Confirmed bool   `json:"confirmed"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		if !params.Confirmed {
+			response.Error = "Computer Use typing requires explicit confirmation"
+			break
+		}
+		err := s.Computer.Type(ctx, params.BundleID, params.Text)
+		response.Result, response.Error = resultOrError(map[string]bool{"typed": err == nil}, err)
 	case "browser.chrome_ingest":
 		if s.ChromeSessions == nil {
 			response.Error = "Chrome native messaging bridge is unavailable"
@@ -1021,6 +1126,32 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		}
 		turn, err := s.Agents.Message(ctx, params.ID, params.Message)
 		response.Result, response.Error = resultOrError(turn, err)
+	case "agent.steer":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID      string `json:"id"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			response.Error = "invalid params"
+			break
+		}
+		turn, err := s.Agents.Steer(ctx, params.ID, params.Message)
+		response.Result, response.Error = resultOrError(turn, err)
+	case "agent.wait":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		handle, err := s.Agents.Wait(ctx, params.ID)
+		response.Result, response.Error = resultOrError(handle, err)
 	case "agent.interrupt":
 		if s.Agents == nil {
 			response.Error = "multi-agent runtime is unavailable"
@@ -1053,6 +1184,18 @@ func (s *Server) dispatch(ctx context.Context, request Request) Response {
 		_ = json.Unmarshal(request.Params, &params)
 		err := s.Agents.CloseAgent(ctx, params.ID)
 		response.Result, response.Error = resultOrError(map[string]bool{"closed": err == nil}, err)
+	case "agent.handoff":
+		if s.Agents == nil {
+			response.Error = "multi-agent runtime is unavailable"
+			break
+		}
+		var params struct {
+			ID      string `json:"id"`
+			Cleanup bool   `json:"cleanup"`
+		}
+		_ = json.Unmarshal(request.Params, &params)
+		result, err := s.Agents.Handoff(ctx, params.ID, params.Cleanup)
+		response.Result, response.Error = resultOrError(result, err)
 	case "ael.start":
 		if s.AEL == nil {
 			response.Error = "AEL runtime is unavailable"

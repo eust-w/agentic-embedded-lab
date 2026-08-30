@@ -40,6 +40,7 @@ export interface ToolDefinition {
 export interface ProjectInfo {
   id: string
   root: string
+  branch: string
   permission: PermissionProfile
   tools: ToolDefinition[]
 }
@@ -101,6 +102,19 @@ export interface AgentHandle {
   worktree?: { path: string; branch: string; head: string }
 }
 
+export interface AgentResult {
+  handle: AgentHandle
+  items: Item[]
+  summary: string
+}
+
+export interface HandoffResult {
+  patch_sha256: string
+  paths: string[]
+  applied: boolean
+  cleaned_up: boolean
+}
+
 export interface AELRunRequest {
   project_id: string
   experiment_path: string
@@ -139,10 +153,19 @@ export interface AELRunRecord {
 }
 
 export interface ReleaseResult {
-  profile: 'foundation' | 'simulation' | 'software' | 'production'
+  profile: 'foundation' | 'desktop' | 'agent' | 'simulation' | 'simulation-extensions' | 'software' | 'development-package' | 'production'
   passed: boolean
   failures: string[]
   checked: string[]
+}
+
+export interface AutomationJob {
+  id: string
+  automation_id: string
+  status: 'queued' | 'running' | 'recovering' | 'waiting_for_approval' | 'completed' | 'failed' | 'cancelled'
+  attempt: number
+  created_at: string
+  updated_at: string
 }
 
 export interface BrowserStatus {

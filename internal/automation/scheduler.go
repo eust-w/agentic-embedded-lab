@@ -16,6 +16,15 @@ import (
 
 type Handler func(context.Context, protocol.AutomationSpec, string) error
 
+type Job struct {
+	ID           string `json:"id"`
+	AutomationID string `json:"automation_id"`
+	Status       string `json:"status"`
+	Attempt      int    `json:"attempt"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
 type Scheduler struct {
 	store    *store.Store
 	handler  Handler
@@ -71,6 +80,33 @@ func (s *Scheduler) List(ctx context.Context) ([]protocol.AutomationSpec, error)
 
 func (s *Scheduler) RunNow(ctx context.Context, automationID string) (string, error) {
 	return s.enqueue(ctx, automationID, time.Now().UTC())
+}
+
+func (s *Scheduler) Job(ctx context.Context, jobID string) (Job, error) {
+	var job Job
+	err := s.store.DB().QueryRowContext(ctx, `SELECT id, automation_id, status, attempt, created_at, updated_at
+		FROM automation_jobs WHERE id=?`, jobID).Scan(&job.ID, &job.AutomationID, &job.Status, &job.Attempt, &job.CreatedAt, &job.UpdatedAt)
+	return job, err
+}
+
+func (s *Scheduler) Delete(ctx context.Context, automationID string) error {
+	var active int
+	if err := s.store.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM automation_jobs
+		WHERE automation_id=? AND status IN ('queued','running','recovering')`, automationID).Scan(&active); err != nil {
+		return err
+	}
+	if active != 0 {
+		return errors.New("automation has an active job")
+	}
+	result, err := s.store.DB().ExecContext(ctx, `DELETE FROM automations WHERE id=?`, automationID)
+	if err != nil {
+		return err
+	}
+	deleted, _ := result.RowsAffected()
+	if deleted != 1 {
+		return errors.New("automation not found")
+	}
+	return nil
 }
 
 func (s *Scheduler) Trigger(ctx context.Context, eventSource string) ([]string, error) {
