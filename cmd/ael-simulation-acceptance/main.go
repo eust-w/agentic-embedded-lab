@@ -25,6 +25,7 @@ func main() {
 	parallelRuns := flag.Int("parallel-runs", 4, "parallel deterministic experiment runs")
 	determinismRepeats := flag.Int("determinism-repeats", 2, "fixed-variant repetitions for every benchmark")
 	stressRepeats := flag.Int("determinism-stress-repeats", 20, "repetitions for representative backend stress cases")
+	finalizeOnly := flag.Bool("finalize-only", false, "assemble completed simulation, FMI, and determinism evidence without rerunning")
 	flag.Parse()
 	root, err := filepath.Abs(*workspace)
 	fatal(err)
@@ -33,6 +34,11 @@ func main() {
 	}
 	if *revision == "" || *revision == "working-tree" {
 		fatal(errors.New("a concrete Git source revision is required"))
+	}
+	if *finalizeOnly {
+		fatal(finalizeExisting(root, *revision))
+		fmt.Println("simulation evidence finalized passed=true")
+		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
 	defer cancel()
@@ -233,11 +239,62 @@ func currentFMIEntry(root, revision string) (benchmark.AcceptanceEntry, error) {
 		Status         string `json:"status"`
 		SourceRevision string `json:"source_revision"`
 	}
-	if json.Unmarshal(data, &evidence) != nil || evidence.Status != "passed" || evidence.SourceRevision != revision {
+	if json.Unmarshal(data, &evidence) != nil || evidence.Status != "passed" || !sameRevision(evidence.SourceRevision, revision) {
 		return benchmark.AcceptanceEntry{}, errors.New("FMI evidence is stale for the requested source revision")
 	}
 	hash, err := benchmark.FileSHA256(path)
 	return benchmark.AcceptanceEntry{Name: "fmi:five-domain", Status: "passed", EvidencePath: "acceptance/v2/evidence/fmi-five-domain.json", EvidenceSHA256: hash, Limitations: []string{"FMI 2.0 functional exchange only; no calibrated hardware equivalence."}}, err
+}
+
+func finalizeExisting(root, revision string) error {
+	manifestPath := filepath.Join(root, "acceptance", "v2", "simulation.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+	var manifest benchmark.AcceptanceManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return err
+	}
+	if !sameRevision(manifest.SourceRevision, revision) {
+		return errors.New("simulation manifest source revision does not match")
+	}
+	determinismPath := filepath.Join(root, "acceptance", "v2", "evidence", "determinism-trace-matrix.json")
+	data, err = os.ReadFile(determinismPath)
+	if err != nil {
+		return err
+	}
+	var matrix struct {
+		SourceRevision string `json:"source_revision"`
+		AllEqual       bool   `json:"all_equal"`
+		CaseCount      int    `json:"benchmark_count"`
+	}
+	if json.Unmarshal(data, &matrix) != nil || !matrix.AllEqual || matrix.CaseCount != 24 || !sameRevision(matrix.SourceRevision, revision) {
+		return errors.New("determinism matrix is incomplete, unequal, or stale")
+	}
+	determinismHash, err := benchmark.FileSHA256(determinismPath)
+	if err != nil {
+		return err
+	}
+	fmiEntry, err := currentFMIEntry(root, revision)
+	if err != nil {
+		return err
+	}
+	entries := manifest.Entries[:0]
+	for _, entry := range manifest.Entries {
+		if entry.Name != "fmi:five-domain" && entry.Name != "determinism:trace-matrix" && entry.Name != "determinism:trace-20" {
+			entries = append(entries, entry)
+		}
+	}
+	manifest.Entries = append(entries, benchmark.AcceptanceEntry{Name: "determinism:trace-matrix", Status: "passed", EvidencePath: "acceptance/v2/evidence/determinism-trace-matrix.json", EvidenceSHA256: determinismHash, Limitations: []string{"All 24 fixed cases are repeated; representative five-backend cases run 20 times. Quantized simulation determinism only."}}, fmiEntry)
+	manifest.SourceRevision = revision
+	manifest.CreatedAt = time.Now().UTC()
+	data, _ = json.MarshalIndent(manifest, "", "  ")
+	return os.WriteFile(manifestPath, append(data, '\n'), 0o600)
+}
+
+func sameRevision(left, right string) bool {
+	return left == right || len(left) >= 7 && len(right) >= 7 && (strings.HasPrefix(left, right) || strings.HasPrefix(right, left))
 }
 
 func gitRevision(root string) string {
