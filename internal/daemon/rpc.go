@@ -88,6 +88,7 @@ func (s *Server) ConfigureProject(ctx context.Context, project store.ProjectReco
 	_ = registry.Register(tools.FileTool{Workspace: root})
 	_ = registry.Register(tools.SearchTool{Workspace: root, MaxResults: 200})
 	_ = registry.Register(tools.GitReadTool{Workspace: root})
+	_ = registry.Register(tools.GitWriteTool{Workspace: root})
 	_ = registry.Register(tools.CommandTool{Workspace: root, Executor: executor.New(), Profile: project.Permission})
 	if s.Browser != nil {
 		_ = registry.Register(tools.BrowserTool{Controller: s.Browser})

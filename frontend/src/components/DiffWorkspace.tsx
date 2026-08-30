@@ -8,7 +8,7 @@ import 'monaco-editor/languages/definitions/python/register.js'
 import 'monaco-editor/languages/definitions/rust/register.js'
 import 'monaco-editor/languages/definitions/shell/register.js'
 import 'monaco-editor/languages/definitions/yaml/register.js'
-import { FileCode2, GitBranch, LoaderCircle, RefreshCw, RotateCcw, ScanSearch, Undo2 } from 'lucide-react'
+import { FileCode2, GitBranch, LoaderCircle, RefreshCw, RotateCcw, ScanSearch, Send, Undo2 } from 'lucide-react'
 import { backend } from '../lib/backend'
 import { useWorkspace } from '../store/workspace'
 import type { GitChange, GitFileContent } from '../types'
@@ -30,6 +30,14 @@ export function DiffWorkspace() {
   const [content, setContent] = useState<GitFileContent>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [showPublish, setShowPublish] = useState(false)
+  const [commitMessage, setCommitMessage] = useState('')
+  const [remote, setRemote] = useState('origin')
+  const [branch, setBranch] = useState('')
+  const [prTitle, setPRTitle] = useState('')
+  const [prBody, setPRBody] = useState('')
+  const [prBase, setPRBase] = useState('main')
+  const [publishedURL, setPublishedURL] = useState('')
 
   const refresh = useCallback(async () => {
     const api = backend()
@@ -84,6 +92,27 @@ export function DiffWorkspace() {
     }
   }
 
+  const commit = async () => {
+    const api = backend()
+    if (!api || !commitMessage.trim() || !window.confirm(`确认提交当前已暂存修改？\n\n${commitMessage.trim()}`)) return
+    setBusy(true); setError('')
+    try { const head = await api.GitCommit(commitMessage.trim()); setCommitMessage(''); setPublishedURL(`已创建提交 ${head.slice(0, 12)}`); await refresh() } catch (reason) { setError(String(reason)) } finally { setBusy(false) }
+  }
+
+  const push = async () => {
+    const api = backend()
+    if (!api || !branch.trim() || !window.confirm(`确认推送当前HEAD到 ${remote}:${branch}？这会写入外部仓库。`)) return
+    setBusy(true); setError('')
+    try { await api.GitPush(remote.trim(), branch.trim()); setPublishedURL(`已推送 ${remote}:${branch}`) } catch (reason) { setError(String(reason)) } finally { setBusy(false) }
+  }
+
+  const createPullRequest = async () => {
+    const api = backend()
+    if (!api || !prTitle.trim() || !branch.trim() || !window.confirm(`确认在GitHub创建草稿PR？\n${branch} → ${prBase}`)) return
+    setBusy(true); setError('')
+    try { const pullRequest = await api.GitCreatePullRequest(prTitle.trim(), prBody, prBase.trim(), branch.trim(), true); setPublishedURL(pullRequest.url) } catch (reason) { setError(String(reason)) } finally { setBusy(false) }
+  }
+
   if (!project) return <section className="diff-workspace diff-empty"><GitBranch size={36}/><h2>选择 Git 项目后查看真实变更</h2><p>变更页不会使用演示 Diff，也不会在未确认时丢弃工作区修改。</p></section>
 
   return <section className="diff-workspace">
@@ -93,8 +122,10 @@ export function DiffWorkspace() {
       {scope === 'branch' || scope === 'commit' ? <input aria-label={scope === 'branch' ? '基准分支' : '提交 SHA'} value={base} onChange={(event) => setBase(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void refresh() }}/> : null}
       <button aria-label="刷新 Git 变更" onClick={() => void refresh()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={14}/></button>
       <button onClick={() => void startReview(scope, scope === 'branch' || scope === 'commit' ? base : '')} disabled={busy || changes.length === 0}><ScanSearch size={14}/>只读AI审查</button>
+      <button onClick={() => setShowPublish((value) => !value)}><Send size={14}/>提交与PR</button>
       <span>{changes.length} 个文件</span>
     </header>
+    {showPublish ? <section className="git-publish-panel"><label>提交说明<input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="描述已暂存修改"/></label><button disabled={busy || !commitMessage.trim()} onClick={() => void commit()}>创建提交</button><label>远端<input value={remote} onChange={(event) => setRemote(event.target.value)}/></label><label>分支<input value={branch} onChange={(event) => setBranch(event.target.value)} placeholder="feature/name"/></label><button disabled={busy || !branch.trim()} onClick={() => void push()}>确认后推送</button><label>PR标题<input value={prTitle} onChange={(event) => setPRTitle(event.target.value)}/></label><label>PR正文<textarea value={prBody} onChange={(event) => setPRBody(event.target.value)}/></label><label>目标分支<input value={prBase} onChange={(event) => setPRBase(event.target.value)}/></label><button disabled={busy || !prTitle.trim() || !branch.trim()} onClick={() => void createPullRequest()}>确认后创建草稿PR</button>{publishedURL ? publishedURL.startsWith('https://') ? <a href={publishedURL} target="_blank" rel="noreferrer">{publishedURL}</a> : <span>{publishedURL}</span> : null}</section> : null}
     {error ? <div className="backend-error">{error}</div> : null}
     <div className="diff-layout">
       <aside className="diff-files">

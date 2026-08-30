@@ -454,6 +454,30 @@ func (b *Backend) GitRestore(paths []string) error {
 	return repository.Restore(b.ctx, paths)
 }
 
+func (b *Backend) GitCommit(message string) (string, error) {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return "", err
+	}
+	return repository.Commit(b.ctx, message)
+}
+
+func (b *Backend) GitPush(remote, branch string) error {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return err
+	}
+	return repository.Push(b.ctx, remote, branch)
+}
+
+func (b *Backend) GitCreatePullRequest(title, body, base, head string, draft bool) (gitrepo.PullRequest, error) {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return gitrepo.PullRequest{}, err
+	}
+	return repository.CreatePullRequest(b.ctx, title, body, base, head, draft)
+}
+
 func (b *Backend) gitRepository() (*gitrepo.Repository, error) {
 	if b.currentProject == "" {
 		return nil, errors.New("请先选择 Git 项目工作区")

@@ -1,4 +1,4 @@
-import type { AELRunRecord, AELRunRequest, AgentHandle, AgentSpec, AetherMemory, AttachmentRef, AutomationSpec, BrowserConsoleEntry, BrowserNetworkEntry, BrowserStatus, GitChange, GitFileContent, InstalledPlugin, Item, PermissionProfile, ProjectInfo, ReleaseResult, TerminalInfo, TerminalSnapshot, Thread, Turn } from '../types'
+import type { AELRunRecord, AELRunRequest, AgentHandle, AgentSpec, AetherMemory, AttachmentRef, AutomationSpec, BrowserConsoleEntry, BrowserNetworkEntry, BrowserStatus, GitChange, GitFileContent, GitPullRequest, InstalledPlugin, Item, PermissionProfile, ProjectInfo, ReleaseResult, TerminalInfo, TerminalSnapshot, Thread, Turn } from '../types'
 
 export interface BackendAPI {
   Health(): Promise<{ status: string; time: string }>
@@ -47,6 +47,9 @@ export interface BackendAPI {
   GitStage(paths: string[]): Promise<void>
   GitUnstage(paths: string[]): Promise<void>
   GitRestore(paths: string[]): Promise<void>
+  GitCommit(message: string): Promise<string>
+  GitPush(remote: string, branch: string): Promise<void>
+  GitCreatePullRequest(title: string, body: string, base: string, head: string, draft: boolean): Promise<GitPullRequest>
   StartCodeReview(scope: string, base: string): Promise<Thread>
   SaveAutomation(spec: AutomationSpec): Promise<AutomationSpec>
   ListAutomations(): Promise<AutomationSpec[]>

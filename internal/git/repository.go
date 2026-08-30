@@ -28,6 +28,11 @@ type FileContent struct {
 	Language string `json:"language"`
 }
 
+type PullRequest struct {
+	URL    string `json:"url"`
+	Number string `json:"number,omitempty"`
+}
+
 func Discover(ctx context.Context, path string) (*Repository, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -175,6 +180,53 @@ func (r *Repository) Push(ctx context.Context, remote, branch string) error {
 	return err
 }
 
+func (r *Repository) CreatePullRequest(ctx context.Context, title, body, base, head string, draft bool) (PullRequest, error) {
+	title = strings.TrimSpace(title)
+	if title == "" || len(title) > 256 {
+		return PullRequest{}, errors.New("pull request title must be 1-256 characters")
+	}
+	if len(body) > 65536 {
+		return PullRequest{}, errors.New("pull request body exceeds 64 KiB")
+	}
+	if !safeRef(base) || !safeRef(head) {
+		return PullRequest{}, errors.New("valid base and head branches are required")
+	}
+	gh, err := githubCLI()
+	if err != nil {
+		return PullRequest{}, err
+	}
+	args := []string{"pr", "create", "--title", title, "--body", body, "--base", base, "--head", head}
+	if draft {
+		args = append(args, "--draft")
+	}
+	command := exec.CommandContext(ctx, gh, args...)
+	command.Dir = r.Root
+	command.Env = []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin", "LANG=C.UTF-8", "GH_PROMPT_DISABLED=1"}
+	if home, err := os.UserHomeDir(); err == nil {
+		command.Env = append(command.Env, "HOME="+home)
+	}
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Run(); err != nil {
+		return PullRequest{}, fmt.Errorf("create pull request: %s: %w", strings.TrimSpace(stderr.String()), err)
+	}
+	url := strings.TrimSpace(stdout.String())
+	if !strings.HasPrefix(url, "https://") {
+		return PullRequest{}, errors.New("GitHub CLI did not return an HTTPS pull request URL")
+	}
+	return PullRequest{URL: url}, nil
+}
+
+func githubCLI() (string, error) {
+	for _, candidate := range []string{"/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"} {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("GitHub CLI is not installed; pull request creation is explicitly unavailable")
+}
+
 func (r *Repository) FileContent(ctx context.Context, path, scope, base string) (FileContent, error) {
 	resolved, err := r.safePaths([]string{path})
 	if err != nil {
@@ -224,9 +276,33 @@ func (r *Repository) safePaths(paths []string) ([]string, error) {
 		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return nil, fmt.Errorf("path escapes repository: %s", path)
 		}
+		if err := rejectSymlinkComponents(r.Root, relative); err != nil {
+			return nil, err
+		}
 		result = append(result, relative)
 	}
 	return result, nil
+}
+
+func rejectSymlinkComponents(root, relative string) error {
+	current := root
+	for _, component := range strings.Split(filepath.Clean(relative), string(filepath.Separator)) {
+		if component == "." || component == "" {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("Git path contains a symbolic link: %s", relative)
+		}
+	}
+	return nil
 }
 
 func safeRef(value string) bool {

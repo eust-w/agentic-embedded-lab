@@ -195,6 +195,11 @@ export interface GitFileContent {
   language: string
 }
 
+export interface GitPullRequest {
+  url: string
+  number?: string
+}
+
 export interface AutomationSpec {
   api_version: 'aether.desktop/v1'
   id: string

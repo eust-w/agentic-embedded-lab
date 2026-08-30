@@ -45,7 +45,8 @@
   shell command is exposed.
 - Git status/diff/stage/restore/commit/push primitives and managed worktrees with
   dirty tracked-patch transfer, plus an offline Monaco Diff workspace and
-  read-only AI review threads.
+  read-only AI review threads. Pushes and GitHub draft PR creation are typed,
+  explicitly confirmed external writes.
 - A real daemon-owned zsh PTY with xterm.js, bounded/paged output, resize,
   cancellation and registered-workspace enforcement.
 - Hierarchical `AGENTS.md`, skills, concurrent lifecycle hooks, Ed25519-signed

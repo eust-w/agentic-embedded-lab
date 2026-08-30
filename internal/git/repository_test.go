@@ -60,6 +60,31 @@ func TestManagedWorktreeCarriesDirtyTrackedPatch(t *testing.T) {
 	}
 }
 
+func TestCreatePullRequestValidatesBeforeExternalTool(t *testing.T) {
+	repository := &Repository{Root: t.TempDir()}
+	if _, err := repository.CreatePullRequest(context.Background(), "", "", "main", "feature", true); err == nil {
+		t.Fatal("empty title was accepted")
+	}
+	if _, err := repository.CreatePullRequest(context.Background(), "title", "", "../main", "feature", true); err == nil {
+		t.Fatal("unsafe base ref was accepted")
+	}
+}
+
+func TestRepositoryRejectsSymlinkTraversal(t *testing.T) {
+	root := initialiseRepository(t)
+	external := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(external, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(root, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	repository := &Repository{Root: root}
+	if _, err := repository.FileContent(context.Background(), "link.txt", "unstaged", ""); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Fatalf("symlink traversal was not rejected: %v", err)
+	}
+}
+
 func initialiseRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

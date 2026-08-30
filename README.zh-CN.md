@@ -26,7 +26,8 @@
 - macOS Keychain凭证和Unix Socket daemon认证。
 - 类型化审批、Seatbelt执行器、Git/Worktree、AGENTS层级发现。
 - Skills、Hooks、签名插件、WASM、MCP、脱敏Memory和独立子Agent Thread。
-- daemon托管真实zsh PTY、xterm.js、离线Monaco Diff和只读AI代码审查。
+- daemon托管真实zsh PTY、xterm.js、离线Monaco Diff、只读AI代码审查，以及
+  需确认的Stage/Restore/Commit/Push/GitHub草稿PR工作流。
 - 跨Turn历史恢复、Responses长上下文自动压缩、目录级AGENTS规则注入。
 - 持久项目、租约恢复RRULE后台调度、受控CDP浏览器和一次性/持久Computer Use权限。
 - 隔离gRPC进程插件、WASM插件、固定Chromium、Chrome Native Messaging和
