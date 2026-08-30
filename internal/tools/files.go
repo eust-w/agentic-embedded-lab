@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/approval"
+	"github.com/eust-w/agentic-embedded-lab/internal/instructions"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 )
 
@@ -51,7 +52,13 @@ func (f FileTool) Execute(ctx context.Context, arguments map[string]any) (Result
 		if len(data) > 1<<20 {
 			return Result{}, errors.New("file exceeds 1 MiB read limit")
 		}
-		return Result{Output: map[string]any{"path": relative, "content": string(data)}}, nil
+		layered, _ := instructions.Discover("", f.Workspace, filepath.Dir(target), 16<<10)
+		output := map[string]any{"path": relative, "content": string(data)}
+		if layered.Content != "" {
+			output["directory_instructions"] = layered.Content
+			output["instruction_sources"] = layered.Sources
+		}
+		return Result{Output: output}, nil
 	case "write":
 		content, ok := arguments["content"].(string)
 		if !ok {

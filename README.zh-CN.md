@@ -26,7 +26,9 @@
 - macOS Keychain凭证和Unix Socket daemon认证。
 - 类型化审批、Seatbelt执行器、Git/Worktree、AGENTS层级发现。
 - Skills、Hooks、签名插件、WASM、MCP、脱敏Memory和独立子Agent Thread。
-- RRULE后台调度、受控CDP浏览器和逐应用Computer Use权限。
+- daemon托管真实zsh PTY、xterm.js、离线Monaco Diff和只读AI代码审查。
+- 跨Turn历史恢复、Responses长上下文自动压缩、目录级AGENTS规则注入。
+- 持久项目、租约恢复RRULE后台调度、受控CDP浏览器和一次性/持久Computer Use权限。
 - 隔离gRPC进程插件、WASM插件、固定Chromium、Chrome Native Messaging和
   动态加载的Sparkle 2更新器。
 - AEL v2契约、FMI/SSP、六类执行适配器、24项真实faulty/fixed机制、
@@ -50,7 +52,19 @@ go run ./cmd/schema-export --output schemas/v2
 ./scripts/fetch_macos_dependencies.sh
 ./scripts/build_mac_app.sh --development
 go run ./cmd/aether-package-check
+go run ./cmd/ael release check --profile foundation
+go run ./cmd/ael release check --profile simulation
+go run ./cmd/ael release check --profile software
+# 必须在没有真机证据时失败：
+go run ./cmd/ael release check --profile production
 ```
+
+## 数据边界
+
+OpenAI密钥只保存在macOS Keychain。Prompt、用户选择的图片和工具结果会发送到
+所配置的OpenAI API。为在单个Turn内通过`previous_response_id`继续工具调用，
+Aether开启Responses存储；最终保留期/ZDR策略以OpenAI项目配置为准。本地Memory
+默认关闭，启用后会脱敏，并可查看、删除或再次关闭。
 
 视觉规范见[设计文档](docs/design/aether-desktop-1.0/DESIGN.md)，旧Python实现保存在
 [归档分支](https://github.com/eust-w/agentic-embedded-lab/tree/archive/python-aether-pre-go)。

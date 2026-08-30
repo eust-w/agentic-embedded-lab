@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,16 +28,18 @@ const (
 )
 
 type Config struct {
-	Name      string            `json:"name"`
-	Transport Transport         `json:"transport"`
-	Command   string            `json:"command,omitempty"`
-	Arguments []string          `json:"arguments,omitempty"`
-	Directory string            `json:"directory,omitempty"`
-	Env       map[string]string `json:"env,omitempty"`
-	URL       string            `json:"url,omitempty"`
-	Bearer    string            `json:"bearer,omitempty"`
-	BearerEnv string            `json:"bearer_env,omitempty"`
-	Required  bool              `json:"required"`
+	Name           string            `json:"name"`
+	Transport      Transport         `json:"transport"`
+	Command        string            `json:"command,omitempty"`
+	Arguments      []string          `json:"arguments,omitempty"`
+	Directory      string            `json:"directory,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	URL            string            `json:"url,omitempty"`
+	Bearer         string            `json:"bearer,omitempty"`
+	BearerEnv      string            `json:"bearer_env,omitempty"`
+	Required       bool              `json:"required"`
+	SandboxRoot    string            `json:"-"`
+	NetworkAllowed bool              `json:"-"`
 }
 
 type Tool struct {
@@ -103,6 +107,12 @@ func NewWithToken(config Config, tokens TokenProvider) (*Client, error) {
 	}
 	if config.Bearer != "" {
 		return nil, errors.New("inline MCP bearer tokens are forbidden; use a Secret-backed TokenProvider")
+	}
+	for key := range config.Env {
+		upper := strings.ToUpper(key)
+		if strings.Contains(upper, "TOKEN") || strings.Contains(upper, "SECRET") || strings.Contains(upper, "PASSWORD") || strings.Contains(upper, "API_KEY") {
+			return nil, errors.New("MCP secrets must use a Secret-backed provider, not inline environment values")
+		}
 	}
 	if tokens == nil && config.BearerEnv != "" {
 		tokens = EnvironmentToken(config.BearerEnv)
@@ -218,8 +228,15 @@ func (c *Client) startSTDIO(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	command := exec.CommandContext(ctx, executable, c.config.Arguments...)
+	commandName := executable
+	arguments := append([]string(nil), c.config.Arguments...)
+	if runtime.GOOS == "darwin" && c.config.SandboxRoot != "" {
+		arguments = append([]string{"-p", mcpSeatbeltProfile(c.config.SandboxRoot, c.config.NetworkAllowed), "--", executable}, arguments...)
+		commandName = "/usr/bin/sandbox-exec"
+	}
+	command := exec.CommandContext(ctx, commandName, arguments...)
 	command.Dir = c.config.Directory
+	command.Env = mcpEnvironment(c.config.Env)
 	stdin, err := command.StdinPipe()
 	if err != nil {
 		return err
@@ -233,6 +250,27 @@ func (c *Client) startSTDIO(ctx context.Context) error {
 	}
 	c.cmd, c.stdin, c.reader = command, stdin, bufio.NewReader(stdout)
 	return nil
+}
+
+func mcpEnvironment(values map[string]string) []string {
+	result := []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin", "HOME=" + os.Getenv("HOME"), "LANG=C.UTF-8", "LC_ALL=C.UTF-8", "TMPDIR=" + os.TempDir()}
+	for key, value := range values {
+		if key == "PATH" || key == "HOME" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, '\x00') {
+			continue
+		}
+		result = append(result, key+"="+value)
+	}
+	return result
+}
+
+func mcpSeatbeltProfile(root string, network bool) string {
+	root, _ = filepath.Abs(root)
+	root = strings.ReplaceAll(root, "\"", "\\\"")
+	lines := []string{"(version 1)", "(deny default)", "(allow process*)", "(allow sysctl-read)", "(allow file-read* (subpath \"/System\") (subpath \"/usr\") (subpath \"/bin\") (subpath \"/opt/homebrew\"))", fmt.Sprintf("(allow file-read* (subpath \"%s\"))", root), "(allow file-write* (literal \"/dev/null\"))"}
+	if network {
+		lines = append(lines, "(allow network-outbound)")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (c *Client) call(ctx context.Context, method string, params any, target any) error {

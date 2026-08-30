@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -35,7 +36,11 @@ func TestThreadTurnAndItemsSurviveReopen(t *testing.T) {
 	if item.Sequence != 1 {
 		t.Fatalf("expected sequence 1, got %d", item.Sequence)
 	}
-	if _, _, err := store.PutArtifact(strings.NewReader("trace")); err != nil {
+	digest, _, err := store.PutArtifact(strings.NewReader("trace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ArtifactPath(digest); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Close(); err != nil {
@@ -60,5 +65,29 @@ func TestThreadTurnAndItemsSurviveReopen(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].Payload["text"] != "Investigate UART overrun" {
 		t.Fatalf("unexpected items: %#v", items)
+	}
+}
+
+func TestProjectsPersistForBackgroundAutomationRecovery(t *testing.T) {
+	ctx := context.Background()
+	state, err := Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	projectRoot := t.TempDir()
+	canonicalRoot, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := state.SaveProject(ctx, ProjectRecord{ID: "project-1", Root: projectRoot, Permission: protocol.PermissionWorkspace}); err != nil {
+		t.Fatal(err)
+	}
+	projects, err := state.ListProjects(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 || projects[0].ID != "project-1" || projects[0].Root != canonicalRoot {
+		t.Fatalf("unexpected projects: %#v", projects)
 	}
 }

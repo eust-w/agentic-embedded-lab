@@ -15,7 +15,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 2
+const schemaVersion = 3
+
+type ProjectRecord struct {
+	ID         string                     `json:"id"`
+	Root       string                     `json:"root"`
+	Permission protocol.PermissionProfile `json:"permission"`
+	UpdatedAt  time.Time                  `json:"updated_at"`
+}
 
 type Store struct {
 	db   *sql.DB
@@ -52,6 +59,12 @@ func (s *Store) migrate(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY,
 			applied_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS projects (
+			id TEXT PRIMARY KEY,
+			root TEXT NOT NULL UNIQUE,
+			permission TEXT NOT NULL,
+			updated_at TEXT NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS threads (
 			id TEXT PRIMARY KEY,
@@ -173,6 +186,45 @@ func (s *Store) migrate(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *Store) SaveProject(ctx context.Context, project ProjectRecord) error {
+	validPermission := project.Permission == protocol.PermissionReadOnly || project.Permission == protocol.PermissionWorkspace || project.Permission == protocol.PermissionFullAccess
+	if project.ID == "" || !filepath.IsAbs(project.Root) || !validPermission {
+		return errors.New("project id, absolute root, and permission are required")
+	}
+	root, err := filepath.EvalSymlinks(project.Root)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return errors.New("project root must be an accessible directory")
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO projects(id, root, permission, updated_at)
+		VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET root=excluded.root,
+		permission=excluded.permission, updated_at=excluded.updated_at`, project.ID, root,
+		project.Permission, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func (s *Store) ListProjects(ctx context.Context) ([]ProjectRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, root, permission, updated_at FROM projects ORDER BY updated_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []ProjectRecord
+	for rows.Next() {
+		var project ProjectRecord
+		var updated string
+		if err := rows.Scan(&project.ID, &project.Root, &project.Permission, &updated); err != nil {
+			return nil, err
+		}
+		project.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
+		result = append(result, project)
+	}
+	return result, rows.Err()
 }
 
 func (s *Store) CreateThread(ctx context.Context, projectID, title, model string, permission protocol.PermissionProfile) (protocol.Thread, error) {
@@ -369,6 +421,44 @@ func (s *Store) Items(ctx context.Context, threadID string, after int64, limit i
 		result = append(result, item)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) RecentItems(ctx context.Context, threadID string, limit int) ([]protocol.Item, error) {
+	if limit <= 0 || limit > 2000 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, turn_id, sequence, type, payload_json,
+		created_at FROM items WHERE thread_id = ? ORDER BY sequence DESC LIMIT ?`, threadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []protocol.Item
+	for rows.Next() {
+		var item protocol.Item
+		var payload []byte
+		var created string
+		item.APIVersion = protocol.APIVersion
+		item.ThreadID = threadID
+		if err := rows.Scan(&item.ID, &item.TurnID, &item.Sequence, &item.Type, &payload, &created); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(payload, &item.Payload); err != nil {
+			return nil, fmt.Errorf("decode item payload: %w", err)
+		}
+		item.CreatedAt, err = parseTime(created)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for left, right := 0, len(result)-1; left < right; left, right = left+1, right-1 {
+		result[left], result[right] = result[right], result[left]
+	}
+	return result, nil
 }
 
 func (s *Store) DB() *sql.DB { return s.db }

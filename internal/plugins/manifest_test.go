@@ -3,6 +3,7 @@ package plugins
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -30,6 +31,19 @@ func TestSignedManifestLoadsAndTamperingFails(t *testing.T) {
 	}
 }
 
+func TestTrustStoreLoadsStrictEd25519Keys(t *testing.T) {
+	publicKey, _, _ := ed25519.GenerateKey(rand.Reader)
+	path := filepath.Join(t.TempDir(), "keys.json")
+	payload, _ := json.Marshal(map[string]string{"official": base64.StdEncoding.EncodeToString(publicKey)})
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := LoadTrustStore(path)
+	if err != nil || len(store["official"]) != ed25519.PublicKeySize {
+		t.Fatalf("trust store: %#v %v", store, err)
+	}
+}
+
 func TestUnsignedManifestRequiresDevelopmentMode(t *testing.T) {
 	manifest := Manifest{APIVersion: ManifestVersion, ID: "local", Name: "Local", Version: "0.1.0"}
 	path := filepath.Join(t.TempDir(), "plugin.json")
@@ -39,6 +53,13 @@ func TestUnsignedManifestRequiresDevelopmentMode(t *testing.T) {
 	}
 	if _, err := LoadManifest(path, StaticTrustStore{}, true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestManifestRejectsPathLikePluginIdentity(t *testing.T) {
+	manifest := Manifest{APIVersion: ManifestVersion, ID: "../escape", Name: "Escape", Version: "1.0.0"}
+	if err := manifest.Validate(); err == nil {
+		t.Fatal("path-like plugin id was accepted")
 	}
 }
 

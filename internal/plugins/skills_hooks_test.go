@@ -37,3 +37,22 @@ func TestHooksCanBlockToolUse(t *testing.T) {
 		t.Fatalf("unexpected hook result: %#v %v", results, err)
 	}
 }
+
+func TestDeclarativeHookBlocksOnlyMatchingTool(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hook.json")
+	if err := os.WriteFile(path, []byte(`{"event":"PreToolUse","tool":"command","block":true,"reason":"command disabled"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := LoadHookConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed, err := config.Handler()(context.Background(), HookPayload{Event: HookPreToolUse, Data: map[string]any{"tool": "file"}})
+	if err != nil || allowed.Block {
+		t.Fatalf("unmatched tool was blocked: %#v %v", allowed, err)
+	}
+	blocked, err := config.Handler()(context.Background(), HookPayload{Event: HookPreToolUse, Data: map[string]any{"tool": "command"}})
+	if err != nil || !blocked.Block || blocked.Reason != "command disabled" {
+		t.Fatalf("matching tool was not blocked: %#v %v", blocked, err)
+	}
+}

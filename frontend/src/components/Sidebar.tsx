@@ -1,8 +1,8 @@
-import { CalendarClock, ChevronDown, Cpu, Plus, Search } from 'lucide-react'
+import { useState } from 'react'
+import { CalendarClock, ChevronDown, Cpu, Play, Plus, Search } from 'lucide-react'
 import { useWorkspace } from '../store/workspace'
 
 export function Sidebar() {
-  const threads = useWorkspace((state) => state.threads)
   const selectedThread = useWorkspace((state) => state.selectedThread)
   const project = useWorkspace((state) => state.project)
   const liveThreads = useWorkspace((state) => state.liveThreads)
@@ -11,7 +11,17 @@ export function Sidebar() {
   const selectProject = useWorkspace((state) => state.selectProject)
   const startDaemon = useWorkspace((state) => state.startDaemon)
   const selectThread = useWorkspace((state) => state.selectThread)
-  const displayedThreads = project ? liveThreads.map((thread) => ({ id: thread.id, title: thread.title, subtitle: thread.status === 'running' ? '正在运行' : thread.status === 'failed' ? '运行失败' : thread.model, updated: new Date(thread.updated_at).toLocaleString('zh-CN') })) : threads
+  const automations = useWorkspace((state) => state.automations)
+  const saveAutomation = useWorkspace((state) => state.saveAutomation)
+  const runAutomation = useWorkspace((state) => state.runAutomation)
+  const plugins = useWorkspace((state) => state.plugins)
+  const installPlugin = useWorkspace((state) => state.installPlugin)
+  const revokePlugin = useWorkspace((state) => state.revokePlugin)
+  const [showAutomation, setShowAutomation] = useState(false)
+  const [automationName, setAutomationName] = useState('夜间嵌入式回归')
+  const [automationPrompt, setAutomationPrompt] = useState('运行项目测试和AEL快速回归，分析失败并生成证据摘要。')
+  const [automationRRULE, setAutomationRRULE] = useState('FREQ=DAILY;BYHOUR=2;BYMINUTE=0')
+  const displayedThreads = project ? liveThreads.map((thread) => ({ id: thread.id, title: thread.title, subtitle: thread.status === 'running' ? '正在运行' : thread.status === 'failed' ? '运行失败' : thread.model, updated: new Date(thread.updated_at).toLocaleString('zh-CN') })) : []
   return (
     <aside className="sidebar">
       <section className="sidebar-section worktree-section">
@@ -30,21 +40,21 @@ export function Sidebar() {
               <span><strong>{thread.title}</strong><small>{thread.subtitle}</small></span><time>{thread.updated}</time>
             </button>
           ))}
+          {displayedThreads.length === 0 ? <p className="sidebar-empty">尚无真实任务。</p> : null}
         </div>
       </section>
       <section className="sidebar-section compact-section">
-        <div className="section-label">自动化任务</div>
-        <div className="utility-row"><CalendarClock size={14} /><span>夜间 HIL 扫描</span><time>02:00</time></div>
-        <div className="utility-row"><CalendarClock size={14} /><span>每周静态分析</span><time>周日</time></div>
+        <div className="section-label">自动化任务 <button aria-label="新建自动化" disabled={!project} onClick={() => setShowAutomation((value) => !value)}><Plus size={12}/></button></div>
+        {!project ? <p className="sidebar-empty">选择项目后显示真实RRULE任务。</p> : automations.length === 0 ? <p className="sidebar-empty">尚未创建自动化。</p> : automations.map((automation) => <div className="utility-row" key={automation.id}><CalendarClock size={14}/><span>{automation.name}</span><button aria-label={`立即运行${automation.name}`} onClick={() => void runAutomation(automation.id)}><Play size={12}/></button></div>)}
+        {showAutomation && project ? <form className="automation-form" onSubmit={(event) => { event.preventDefault(); void saveAutomation(automationName, automationPrompt, automationRRULE); setShowAutomation(false) }}><input aria-label="自动化名称" value={automationName} onChange={(event) => setAutomationName(event.target.value)}/><textarea aria-label="自动化任务" value={automationPrompt} onChange={(event) => setAutomationPrompt(event.target.value)}/><input aria-label="RRULE" value={automationRRULE} onChange={(event) => setAutomationRRULE(event.target.value)}/><button className="primary-button">保存</button></form> : null}
       </section>
       <section className="sidebar-section compact-section plugins-section">
         <div className="section-label">插件</div>
-        {['STM32Cube', 'pyOCD', 'Renode', 'clang-tidy'].map((name, index) => (
-          <div className="utility-row" key={name}><Cpu size={14} /><span>{name}</span><span className={`status-dot ${index < 3 ? 'online' : ''}`} /></div>
-        ))}
-        <button className="add-plugin"><Plus size={14} /> 添加插件</button>
+        {plugins.length === 0 ? <p className="sidebar-empty">仅加载受信任Ed25519签名插件。</p> : plugins.map((plugin) => <div className="utility-row" key={plugin.manifest.id}><Cpu size={14}/><span>{plugin.manifest.name}<small> {plugin.manifest.version}</small></span><span className={`status-dot ${plugin.active && !plugin.revoked ? 'online' : ''}`}/>{plugin.active && !plugin.revoked ? <button aria-label={`撤销${plugin.manifest.name}`} onClick={() => void revokePlugin(plugin.manifest.id)}>×</button> : null}</div>)}
+        <button className="add-plugin" disabled={!project} onClick={() => void installPlugin(false)}><Plus size={14} /> 添加签名插件</button>
+        {backendError?.includes('additional permissions') ? <button className="add-plugin danger" onClick={() => void installPlugin(true)}>批准新增权限并升级</button> : null}
       </section>
-      <footer className="sidebar-footer" title={backendError}><span className={`status-dot ${connection === 'ready' ? 'online' : ''}`} /> {backendError ? '后台连接异常' : connection === 'ready' ? 'Aether 后台已连接' : '离线预览模式'}</footer>
+      <footer className="sidebar-footer" title={backendError}><span className={`status-dot ${connection === 'ready' ? 'online' : ''}`} /> {backendError ? '后台连接异常' : connection === 'ready' ? 'Aether 后台已连接' : '后台尚未连接'}</footer>
     </aside>
   )
 }

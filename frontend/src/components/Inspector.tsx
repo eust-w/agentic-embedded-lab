@@ -1,47 +1,87 @@
 import { Activity, CheckCircle2, CircleAlert, CircleX, GitBranch, Globe2, MonitorCog, Settings, ShieldCheck, TextCursorInput } from 'lucide-react'
 import { useWorkspace } from '../store/workspace'
+import { backend } from '../lib/backend'
+import type { AgentHandle } from '../types'
+import type { AetherMemory } from '../types'
 
 const tabLabels = { context: '上下文', agents: 'Agent', evidence: '证据' }
-const statusLabels = { working: '工作中', running: '运行中', idle: '空闲' }
 
 export function Inspector() {
   const tab = useWorkspace((state) => state.inspectorTab)
   const view = useWorkspace((state) => state.view)
   const setTab = useWorkspace((state) => state.setInspectorTab)
-  const agents = useWorkspace((state) => state.agents)
+  const project = useWorkspace((state) => state.project)
+  const liveAgents = useWorkspace((state) => state.liveAgents)
   return (
     <aside className="inspector">
       <nav className="inspector-tabs">
         {(['context', 'agents', 'evidence'] as const).map((item) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>{tabLabels[item]}</button>)}
       </nav>
-      {view === 'browser' ? <PermissionInspector /> : tab === 'agents' ? <AgentInspector agents={agents} /> : tab === 'evidence' ? <EvidenceInspector /> : <ContextInspector />}
+      {view === 'browser' ? <PermissionInspector /> : tab === 'agents' ? project ? <LiveAgentInspector agents={liveAgents}/> : <AgentInspector /> : tab === 'evidence' ? <EvidenceInspector /> : <ContextInspector />}
     </aside>
   )
 }
 
+function LiveAgentInspector({ agents }: { agents: AgentHandle[] }) {
+  const [prompt, setPrompt] = useState('')
+  const spawn = useWorkspace((state) => state.spawnAgent)
+  const interrupt = useWorkspace((state) => state.interruptAgent)
+  return <div className="inspector-content">
+    <div className="inspector-heading">真实子Agent <span>{agents.length}</span></div>
+    <form className="subagent-form" onSubmit={(event) => { event.preventDefault(); void spawn(prompt); setPrompt('') }}><textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="描述可并行执行的只读子任务…"/><button className="primary-button" disabled={!prompt.trim()}>启动子Agent</button></form>
+    {agents.length === 0 ? <p className="empty-agent-state">尚未启动子Agent。写操作子Agent会使用独立Worktree；当前表单默认只读。</p> : agents.map((agent) => <article className="agent-card" key={agent.id}>
+      <header><span className="agent-avatar blue">{agent.spec.name[0]}</span><div><strong>{agent.spec.name}</strong><small>{agent.status === 'active' ? '运行中' : agent.status === 'done' ? '已完成' : agent.status === 'failed' ? '失败' : '已中断'}</small></div><span className={`status-dot ${agent.status === 'active' ? 'online' : ''}`}/></header>
+      <p>{agent.spec.role}</p><small>工作区</small><a>{agent.worktree?.branch || '只读项目快照'}</a><GitBranch size={13}/>{agent.status === 'active' ? <button className="secondary-button agent-stop" onClick={() => void interrupt(agent.id)}>中断</button> : null}
+    </article>)}
+    <EvidenceInspector compact />
+  </div>
+}
+
 function PermissionInspector() {
+  const [decision, setDecision] = useState<'ask' | 'allow' | 'deny'>('ask')
+  const [native, setNative] = useState({ accessibility: false, screen_recording: false })
+  const [error, setError] = useState('')
+  const refresh = async (prompt = false) => {
+    const api = backend()
+    if (!api) return
+    try {
+      const [nextNative, nextDecision] = await Promise.all([api.ComputerStatus(prompt), api.ComputerDecision('com.google.Chrome')])
+      setNative(nextNative)
+      setDecision(nextDecision.decision)
+      setError('')
+    } catch (reason) {
+      setError(String(reason))
+    }
+  }
+  useEffect(() => { void refresh() }, [])
+  const decide = async (allow: boolean, scope: string) => {
+    const api = backend()
+    if (!api) return
+    try {
+      await api.SetComputerPermission('com.google.Chrome', allow, scope)
+      await refresh()
+    } catch (reason) {
+      setError(String(reason))
+    }
+  }
   return <div className="inspector-content permission-content">
     <div className="inspector-heading">权限</div>
     <div className="permission-row"><ShieldCheck size={17}/><span><strong>localhost</strong><small>站点访问</small></span><b className="allowed">已允许</b></div>
     <div className="inspector-heading permission-subheading">电脑操作</div>
-    <div className="permission-row"><Globe2 size={17}/><span><strong>Google Chrome</strong><small>当前标签页</small></span><b className="pending">待批准</b></div>
-    <div className="permission-row"><TextCursorInput size={17}/><span><strong>文本编辑</strong><small>应用程序</small></span><b className="allowed">已允许</b></div>
+    <div className="permission-row"><Globe2 size={17}/><span><strong>Google Chrome</strong><small>应用程序</small></span><b className={decision === 'allow' ? 'allowed' : decision === 'deny' ? 'denied' : 'pending'}>{decision === 'allow' ? '已允许' : decision === 'deny' ? '已拒绝' : '待批准'}</b></div>
+    <div className="permission-row"><TextCursorInput size={17}/><span><strong>安全文本输入</strong><small>密码框始终禁止</small></span><b className="allowed">强制策略</b></div>
     <div className="permission-row"><Settings size={17}/><span><strong>系统设置</strong><small>应用程序</small></span><b className="denied">已拒绝</b></div>
-    <div className="computer-approval"><MonitorCog size={21}/><strong>允许 Aether 在本任务中控制 Chrome 吗？</strong><p>Aether 需要与当前 Chrome 标签页交互，才能完成此步骤。</p><button className="primary-button">仅允许本次</button><button className="secondary-button">始终允许 Chrome</button><button className="secondary-button">拒绝</button></div>
-    <div className="permission-row"><CheckCircle2 size={17}/><span><strong>屏幕录制</strong><small>macOS 权限</small></span><b className="allowed">已授予</b></div>
-    <div className="permission-row"><CircleAlert size={17}/><span><strong>辅助功能</strong><small>macOS 权限</small></span><b className="pending">等待中</b></div>
-    <button className="revoke-button">撤销全部控制权限</button>
+    {decision === 'ask' ? <div className="computer-approval"><MonitorCog size={21}/><strong>允许 Aether 控制当前前台 Chrome 吗？</strong><p>一次性授权将在下一次Computer Use调用后自动失效；macOS Accessibility仍需单独授权。</p><button className="primary-button" onClick={() => void decide(true, 'once')}>仅允许本次</button><button className="secondary-button" onClick={() => void decide(true, 'persistent')}>始终允许 Chrome</button><button className="secondary-button" onClick={() => void decide(false, 'persistent')}>拒绝</button></div> : null}
+    <div className="permission-row"><CheckCircle2 size={17}/><span><strong>屏幕录制</strong><small>macOS 权限</small></span><b className={native.screen_recording ? 'allowed' : 'pending'}>{native.screen_recording ? '已授予' : '未授予'}</b></div>
+    <div className="permission-row"><CircleAlert size={17}/><span><strong>辅助功能</strong><small>macOS 权限</small></span><b className={native.accessibility ? 'allowed' : 'pending'}>{native.accessibility ? '已授予' : '未授予'}</b></div>
+    {!native.accessibility || !native.screen_recording ? <button className="link-button" onClick={() => void refresh(true)}>请求macOS权限</button> : null}
+    {error ? <div className="backend-error">{error}</div> : null}
+    <button className="revoke-button" onClick={() => void decide(false, 'persistent')}>撤销Chrome控制权限</button>
   </div>
 }
 
-function AgentInspector({ agents }: { agents: ReturnType<typeof useWorkspace.getState>['agents'] }) {
-  return <div className="inspector-content"><div className="inspector-heading">活动 Agent <span>{agents.length}</span></div>{agents.map((agent) => (
-    <article className="agent-card" key={agent.id}>
-      <header><span className={`agent-avatar ${agent.tone}`}>{agent.name[0]}</span><div><strong>{agent.name}</strong><small>{statusLabels[agent.status]}</small></div><span className="status-dot online" /></header>
-      <div className="progress-track"><i style={{ width: `${agent.progress}%` }} /></div>
-      <p>{agent.detail}</p><small>工作树</small><a>{agent.worktree}</a><GitBranch size={13} />
-    </article>
-  ))}<EvidenceInspector compact /></div>
+function AgentInspector() {
+  return <div className="inspector-content"><div className="inspector-heading">活动 Agent <span>0</span></div><p className="empty-agent-state">尚无真实Agent。选择项目并启动任务后，此处显示独立线程、工作区和运行状态。</p></div>
 }
 
 function EvidenceInspector({ compact = false }: { compact?: boolean }) {
@@ -57,13 +97,53 @@ function EvidenceInspector({ compact = false }: { compact?: boolean }) {
   }
   return <div className={compact ? 'evidence-block compact' : 'inspector-content evidence-content'}>
     {!compact ? <div className="inspector-heading">证据</div> : <h3>证据</h3>}
-    <div className="evidence-row good"><CheckCircle2 size={20} /><span><strong>仿真已验证</strong><small>Renode 1.16.1 · 刚刚</small></span></div>
-    <div className="evidence-row warn"><CircleAlert size={20} /><span><strong>硬件尚未验证</strong><small>暂无真机运行记录</small></span></div>
-    {!compact ? <div className="evidence-row bad"><CircleX size={20} /><span><strong>生产声明已阻止</strong><small>必须提供真机证据</small></span></div> : null}
-    {!compact ? <><dl className="fidelity-list"><dt>固件</dt><dd>功能级</dd><dt>时序</dt><dd>依赖模型</dd><dt>物理</dt><dd>未验证</dd></dl><button className="link-button">打开证据日志</button></> : null}
+    <div className="evidence-row warn"><CircleAlert size={20} /><span><strong>尚无运行证据</strong><small>选择项目并执行实验后生成Evidence Bundle</small></span></div>
+    {!compact ? <div className="evidence-row bad"><CircleX size={20} /><span><strong>硬件与生产声明不可用</strong><small>需要签名Validation Envelope</small></span></div> : null}
   </div>
 }
 
 function ContextInspector() {
-  return <div className="inspector-content"><div className="inspector-heading">上下文</div><div className="context-stat"><Activity size={17} /><span><strong>14 个文件</strong><small>38.2k 加权 Token</small></span></div><dl className="fidelity-list"><dt>项目规则</dt><dd>AGENTS.md</dd><dt>工作区</dt><dd>feature/uart-fix</dd><dt>权限</dt><dd>工作区写入</dd><dt>模型</dt><dd>gpt-5.6</dd></dl></div>
+  const project = useWorkspace((state) => state.project)
+  const selectedThread = useWorkspace((state) => state.selectedThread)
+  if (!project) return <div className="inspector-content"><div className="inspector-heading">上下文预览</div><div className="context-stat"><Activity size={17} /><span><strong>未选择项目</strong><small>不会显示伪造Token统计</small></span></div><dl className="fidelity-list"><dt>项目规则</dt><dd>等待项目</dd><dt>权限</dt><dd>未授予</dd><dt>模型</dt><dd>gpt-5.6</dd></dl></div>
+  return <div className="inspector-content"><div className="inspector-heading">真实上下文</div><div className="context-stat"><Activity size={17}/><span><strong>{project.root.split('/').at(-1)}</strong><small>AGENTS规则按目录动态加载</small></span></div><dl className="fidelity-list"><dt>项目ID</dt><dd>{project.id.slice(0, 12)}</dd><dt>权限</dt><dd>{project.permission}</dd><dt>当前任务</dt><dd>{selectedThread ? selectedThread.slice(0, 8) : '无'}</dd></dl><MemoryPanel projectID={project.id} threadID={selectedThread}/></div>
 }
+
+function MemoryPanel({ projectID, threadID }: { projectID: string; threadID: string }) {
+  const [enabled, setEnabled] = useState(false)
+  const [memories, setMemories] = useState<AetherMemory[]>([])
+  const [content, setContent] = useState('')
+  const [error, setError] = useState('')
+  const refresh = async () => {
+    const api = backend()
+    if (!api) return
+    try {
+      const status = await api.MemoryStatus()
+      setEnabled(status.project)
+      setMemories(status.project ? await api.ListMemories('project') : [])
+      setError('')
+    } catch (reason) {
+      setError(String(reason))
+    }
+  }
+  useEffect(() => { void refresh() }, [projectID])
+  const toggle = async () => {
+    const api = backend()
+    if (!api) return
+    await api.SetMemoryEnabled('project', !enabled)
+    await refresh()
+  }
+  const save = async () => {
+    const api = backend()
+    if (!api || !content.trim()) return
+    try {
+      await api.SaveMemory('project', content.trim(), threadID)
+      setContent('')
+      await refresh()
+    } catch (reason) {
+      setError(String(reason))
+    }
+  }
+  return <section className="memory-panel"><header><strong>本地项目记忆</strong><button className={enabled ? 'allowed' : ''} onClick={() => void toggle()}>{enabled ? '已启用' : '选择加入'}</button></header>{enabled ? <><textarea value={content} onChange={(event) => setContent(event.target.value)} placeholder="写入会先脱敏，且不能覆盖AGENTS规则…"/><button className="primary-button" disabled={!content.trim()} onClick={() => void save()}>保存记忆</button>{memories.map((memory) => <article key={memory.id}><p>{memory.content}</p><button onClick={async () => { await backend()?.DeleteMemory(memory.id); await refresh() }}>删除</button></article>)}</> : <p>默认关闭。启用后每轮最多加载最近20条脱敏记忆。</p>}{error ? <div className="backend-error">{error}</div> : null}</section>
+}
+import { useEffect, useState } from 'react'

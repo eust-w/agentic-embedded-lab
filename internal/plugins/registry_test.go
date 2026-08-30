@@ -29,6 +29,10 @@ func TestRegistryInstallPermissionDiffRollbackAndRevoke(t *testing.T) {
 	if _, err := registry.Install(second, true); err != nil {
 		t.Fatal(err)
 	}
+	listed, err := registry.List()
+	if err != nil || len(listed) != 1 || listed[0].Manifest.ID != "fixture" {
+		t.Fatalf("list failed: %#v %v", listed, err)
+	}
 	rolledBack, err := registry.Rollback("fixture", "1.0.0")
 	if err != nil || rolledBack.Manifest.Version != "1.0.0" {
 		t.Fatalf("rollback failed: %#v %v", rolledBack, err)
@@ -39,6 +43,32 @@ func TestRegistryInstallPermissionDiffRollbackAndRevoke(t *testing.T) {
 	current, err := registry.Current("fixture")
 	if err != nil || !current.Revoked || current.Active {
 		t.Fatalf("revoke failed: %#v %v", current, err)
+	}
+}
+
+func TestRegistryPreservesProcessExecutableBit(t *testing.T) {
+	publicKey, privateKey, _ := ed25519.GenerateKey(nil)
+	registry := Registry{Root: t.TempDir(), Trust: StaticTrustStore{"official": publicKey}}
+	root := t.TempDir()
+	executable := filepath.Join(root, "plugin-server")
+	if err := os.WriteFile(executable, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := Sign(Manifest{APIVersion: ManifestVersion, ID: "process", Name: "Process", Version: "1.0.0", Permissions: []Permission{PermissionCommands}, Process: &ProcessEntry{Executable: "plugin-server", Protocol: "grpc"}}, "official", privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(root, "plugin.json"), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installed, err := registry.Install(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(installed.Path, "plugin-server"))
+	if err != nil || info.Mode()&0o111 == 0 {
+		t.Fatalf("process executable bit was lost: %v %#v", err, info)
 	}
 }
 

@@ -89,6 +89,18 @@ export interface AgentSpec {
   max_concurrency: number
 }
 
+export interface AgentHandle {
+  id: string
+  parent_id: string
+  thread: Thread
+  turn_id: string
+  spec: AgentSpec
+  status: 'active' | 'done' | 'failed' | 'interrupted'
+  started_at: string
+  updated_at: string
+  worktree?: { path: string; branch: string; head: string }
+}
+
 export interface AELRunRequest {
   project_id: string
   experiment_path: string
@@ -152,4 +164,79 @@ export interface BrowserNetworkEntry {
   status: number
   mime_type: string
   timestamp: string
+}
+
+export interface TerminalInfo {
+  id: string
+  workspace: string
+  shell: string
+  running: boolean
+  exit_code: number
+  created_at: string
+}
+
+export interface TerminalSnapshot extends TerminalInfo {
+  offset: number
+  next_offset: number
+  data_base64: string
+  truncated: boolean
+}
+
+export interface GitChange {
+  path: string
+  index: string
+  worktree: string
+}
+
+export interface GitFileContent {
+  path: string
+  original: string
+  modified: string
+  language: string
+}
+
+export interface AutomationSpec {
+  api_version: 'aether.desktop/v1'
+  id: string
+  name: string
+  prompt: string
+  rrule?: string
+  event_source?: string
+  project_id: string
+  use_worktree: boolean
+  permission: PermissionProfile
+  enabled: boolean
+  stop_policy?: Record<string, unknown>
+}
+
+export interface InstalledPlugin {
+  manifest: {
+    api_version: string
+    id: string
+    name: string
+    version: string
+    description: string
+    permissions: string[]
+  }
+  path: string
+  active: boolean
+  revoked: boolean
+  installed_at: string
+}
+
+export interface AetherMemory {
+  id: string
+  scope: 'global' | 'project'
+  project_id?: string
+  content: string
+  source_thread_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AttachmentRef {
+  sha256: string
+  name: string
+  mime_type: string
+  bytes: number
 }

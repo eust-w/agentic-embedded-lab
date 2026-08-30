@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -23,13 +24,20 @@ import (
 const ProcessProtocolVersion = "aether.plugin.process/v1"
 
 type ProcessRuntime struct {
-	mu      sync.Mutex
-	plugin  Installed
-	runtime string
-	socket  string
-	command *exec.Cmd
-	cancel  context.CancelFunc
-	conn    *grpc.ClientConn
+	mu           sync.Mutex
+	plugin       Installed
+	runtime      string
+	socket       string
+	command      *exec.Cmd
+	cancel       context.CancelFunc
+	conn         *grpc.ClientConn
+	capabilities []ProcessCapability
+}
+
+type ProcessCapability struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	InputSchema map[string]any `json:"input_schema"`
 }
 
 type ProcessServer interface {
@@ -132,7 +140,26 @@ func StartProcess(ctx context.Context, plugin Installed, runtimeRoot string) (*P
 		runtimeClient.Close()
 		return nil, errors.New("plugin process protocol mismatch")
 	}
+	if raw := response["capabilities"]; raw != nil {
+		payload, _ := json.Marshal(raw)
+		if err := json.Unmarshal(payload, &runtimeClient.capabilities); err != nil {
+			runtimeClient.Close()
+			return nil, errors.New("plugin process returned invalid capabilities")
+		}
+		for _, capability := range runtimeClient.capabilities {
+			if !packageIdentifier.MatchString(capability.Name) {
+				runtimeClient.Close()
+				return nil, errors.New("plugin process capability name is required")
+			}
+		}
+	}
 	return runtimeClient, nil
+}
+
+func (p *ProcessRuntime) Capabilities() []ProcessCapability {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]ProcessCapability(nil), p.capabilities...)
 }
 
 func processHandshakeHandler(server any, ctx context.Context, decode func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {

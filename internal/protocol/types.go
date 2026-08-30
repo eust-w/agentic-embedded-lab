@@ -72,6 +72,13 @@ type Item struct {
 	CreatedAt  time.Time      `json:"created_at"`
 }
 
+type AttachmentRef struct {
+	SHA256   string `json:"sha256"`
+	Name     string `json:"name"`
+	MimeType string `json:"mime_type"`
+	Bytes    int64  `json:"bytes"`
+}
+
 type ToolCall struct {
 	ID             string         `json:"id"`
 	ThreadID       string         `json:"thread_id"`

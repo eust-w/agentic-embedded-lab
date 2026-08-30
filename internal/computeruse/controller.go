@@ -3,6 +3,7 @@ package computeruse
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/store"
@@ -30,10 +31,12 @@ type Native interface {
 type Controller struct {
 	state  *store.Store
 	native Native
+	mu     sync.Mutex
+	once   map[string]bool
 }
 
 func New(state *store.Store, native Native) *Controller {
-	return &Controller{state: state, native: native}
+	return &Controller{state: state, native: native, once: make(map[string]bool)}
 }
 
 func (c *Controller) SetApplicationPermission(ctx context.Context, bundleID string, decision Decision, scope string) error {
@@ -42,6 +45,16 @@ func (c *Controller) SetApplicationPermission(ctx context.Context, bundleID stri
 	}
 	if protectedApplication(bundleID) && decision == DecisionAllow {
 		return errors.New("macOS security and login applications cannot be controlled")
+	}
+	if scope == "once" {
+		c.mu.Lock()
+		if decision == DecisionAllow {
+			c.once[bundleID] = true
+		} else {
+			delete(c.once, bundleID)
+		}
+		c.mu.Unlock()
+		return nil
 	}
 	_, err := c.state.DB().ExecContext(ctx, `INSERT INTO permissions(kind, resource, decision, scope, updated_at)
 		VALUES ('application', ?, ?, ?, ?) ON CONFLICT(kind, resource) DO UPDATE SET
@@ -53,6 +66,12 @@ func (c *Controller) SetApplicationPermission(ctx context.Context, bundleID stri
 func (c *Controller) ApplicationDecision(ctx context.Context, bundleID string) Decision {
 	if protectedApplication(bundleID) {
 		return DecisionDeny
+	}
+	c.mu.Lock()
+	once := c.once[bundleID]
+	c.mu.Unlock()
+	if once {
+		return DecisionAllow
 	}
 	var decision Decision
 	if err := c.state.DB().QueryRowContext(ctx, `SELECT decision FROM permissions
@@ -107,7 +126,10 @@ func (c *Controller) Screenshot(ctx context.Context, bundleID string) ([]byte, e
 }
 
 func (c *Controller) authorize(ctx context.Context, bundleID string) error {
-	if c.ApplicationDecision(ctx, bundleID) != DecisionAllow {
+	c.mu.Lock()
+	once := c.once[bundleID]
+	c.mu.Unlock()
+	if !once && c.ApplicationDecision(ctx, bundleID) != DecisionAllow {
 		return errors.New("application control is not allowed")
 	}
 	if !c.native.AccessibilityTrusted(false) {
@@ -119,6 +141,11 @@ func (c *Controller) authorize(ctx context.Context, bundleID string) error {
 	}
 	if frontmost != bundleID {
 		return errors.New("authorized application is not frontmost")
+	}
+	if once {
+		c.mu.Lock()
+		delete(c.once, bundleID)
+		c.mu.Unlock()
 	}
 	return nil
 }

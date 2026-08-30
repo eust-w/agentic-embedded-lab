@@ -3,6 +3,7 @@ package multiagent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -105,6 +106,18 @@ func (m *Manager) Spawn(ctx context.Context, parent protocol.Thread, projectID, 
 		return Handle{}, errors.New("subagent concurrency limit reached")
 	}
 	m.mu.Unlock()
+	hooks := m.runtime.ProjectHooks(projectID)
+	if hooks != nil {
+		results, err := hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookSubagentStart, ThreadID: parent.ID, Data: map[string]any{"prompt": prompt, "spec": spec}})
+		if err != nil {
+			return Handle{}, err
+		}
+		for _, result := range results {
+			if result.Block {
+				return Handle{}, fmt.Errorf("subagent blocked by hook: %s", result.Reason)
+			}
+		}
+	}
 	childProjectID := projectID
 	var worktree *protocol.WorktreeRef
 	if spec.Permission != protocol.PermissionReadOnly {
@@ -129,8 +142,13 @@ func (m *Manager) Spawn(ctx context.Context, parent protocol.Thread, projectID, 
 		registry := tools.NewRegistry()
 		_ = registry.Register(tools.FileTool{Workspace: reference.Path})
 		_ = registry.Register(tools.SearchTool{Workspace: reference.Path, MaxResults: 200})
+		_ = registry.Register(tools.GitReadTool{Workspace: reference.Path})
 		_ = registry.Register(tools.CommandTool{Workspace: reference.Path, Executor: executor.New(), Profile: spec.Permission})
-		m.runtime.ConfigureProjectTools(childProjectID, registry, approval.New(), plugins.NewHookDispatcher())
+		if hooks == nil {
+			hooks = plugins.NewHookDispatcher()
+		}
+		m.runtime.ConfigureProjectTools(childProjectID, registry, approval.New(), hooks)
+		m.runtime.CopyProjectInstructions(projectID, childProjectID)
 	}
 	thread, err := m.store.CreateChildThread(ctx, parent.ID, childProjectID, spec.Name, spec.Model, spec.Permission)
 	if err != nil {
@@ -279,6 +297,7 @@ func (m *Manager) observe(channel <-chan events.Event) {
 		turnID, _ := data["turn_id"].(string)
 		m.mu.Lock()
 		id := m.turnAgents[turnID]
+		var completed *Handle
 		if handle := m.handles[id]; handle != nil {
 			if event.Topic == "turn.completed" {
 				handle.Status = StatusDone
@@ -286,8 +305,15 @@ func (m *Manager) observe(channel <-chan events.Event) {
 				handle.Status = StatusFailed
 			}
 			handle.UpdatedAt = time.Now().UTC()
+			copy := *handle
+			completed = &copy
 		}
 		delete(m.turnAgents, turnID)
 		m.mu.Unlock()
+		if completed != nil {
+			if hooks := m.runtime.ProjectHooks(completed.Thread.ProjectID); hooks != nil {
+				_, _ = hooks.Dispatch(context.Background(), plugins.HookPayload{Event: plugins.HookSubagentStop, ThreadID: completed.Thread.ID, TurnID: completed.TurnID, Data: map[string]any{"status": completed.Status}})
+			}
+		}
 	}
 }

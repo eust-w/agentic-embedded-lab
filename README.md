@@ -44,11 +44,18 @@
 - Typed permission engine and macOS Seatbelt command preparation; no model-built
   shell command is exposed.
 - Git status/diff/stage/restore/commit/push primitives and managed worktrees with
-  dirty tracked-patch transfer.
+  dirty tracked-patch transfer, plus an offline Monaco Diff workspace and
+  read-only AI review threads.
+- A real daemon-owned zsh PTY with xterm.js, bounded/paged output, resize,
+  cancellation and registered-workspace enforcement.
 - Hierarchical `AGENTS.md`, skills, concurrent lifecycle hooks, Ed25519-signed
-  plugins, wazero/WASM, MCP STDIO/HTTP and local redacted memory.
-- Independent child-agent threads, persistent RRULE automation, controlled CDP
-  browser APIs and per-application Computer Use permissions.
+  plugins, isolated gRPC/WASM processes, sandboxed MCP STDIO/HTTP and opt-in
+  local redacted memory.
+- Cross-turn conversation restoration and official Responses context management
+  compaction for long-running tool-heavy tasks.
+- Independent child-agent threads, persisted projects, lease-recovered RRULE
+  automation, controlled CDP browser APIs and one-time/persistent Computer Use
+  permissions.
 - Isolated gRPC process plugins, WASM plugins, a pinned Chromium runtime,
   Chrome Native Messaging and a dynamically loaded Sparkle 2 updater.
 - AEL v2 contracts, FMI/SSP orchestration, six execution adapters, 24 real
@@ -80,6 +87,11 @@ go run ./cmd/schema-export --output schemas/v2
 ./scripts/fetch_macos_dependencies.sh
 ./scripts/build_mac_app.sh --development
 go run ./cmd/aether-package-check
+go run ./cmd/ael release check --profile foundation
+go run ./cmd/ael release check --profile simulation
+go run ./cmd/ael release check --profile software
+# Must fail without real hardware evidence:
+go run ./cmd/ael release check --profile production
 ```
 
 Run the frontend visual shell:
@@ -90,6 +102,14 @@ npm --prefix frontend run dev -- --host 127.0.0.1
 
 The Wails CLI is pinned to v2.12.0. The app entrypoint is
 `cmd/aether-desktop`; the background process is `cmd/aetherd`.
+
+## Data boundary
+
+OpenAI credentials remain in macOS Keychain. Prompts, selected images and tool
+results are sent to the configured OpenAI API. Aether enables Responses storage
+inside a Turn so `previous_response_id` can continue tool calls; OpenAI project
+retention/ZDR policy remains authoritative. Local memories are opt-in, redacted,
+inspectable and deletable.
 
 ## Evidence boundary
 

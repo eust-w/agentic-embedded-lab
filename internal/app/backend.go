@@ -7,22 +7,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net/url"
+	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
 	"github.com/eust-w/agentic-embedded-lab/internal/browser"
 	"github.com/eust-w/agentic-embedded-lab/internal/daemon"
+	gitrepo "github.com/eust-w/agentic-embedded-lab/internal/git"
 	"github.com/eust-w/agentic-embedded-lab/internal/launchagent"
+	aethermemory "github.com/eust-w/agentic-embedded-lab/internal/memory"
 	"github.com/eust-w/agentic-embedded-lab/internal/multiagent"
+	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/release"
 	"github.com/eust-w/agentic-embedded-lab/internal/secret"
-	"github.com/eust-w/agentic-embedded-lab/internal/store"
+	"github.com/eust-w/agentic-embedded-lab/internal/terminal"
 	"github.com/eust-w/agentic-embedded-lab/internal/updater"
 	"github.com/google/uuid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -35,8 +37,7 @@ type Backend struct {
 	client         *daemon.Client
 	service        launchagent.Service
 	currentProject string
-	browser        *browser.Controller
-	browserStore   *store.Store
+	projectID      string
 	updaterStarted bool
 }
 
@@ -53,30 +54,13 @@ func (b *Backend) Startup(ctx context.Context) {
 	b.ctx = ctx
 	_ = b.refreshClient()
 	b.updaterStarted = updater.Start()
-	root := applicationSupportRoot()
-	state, err := store.Open(ctx, filepath.Join(root, "browser-state"))
-	if err == nil {
-		b.browserStore = state
-		b.browser = &browser.Controller{
-			Executable:  bundledChromiumExecutable(),
-			ProfilePath: filepath.Join(root, "ChromiumProfile"),
-			Permissions: browser.NewPermissionStore(state),
-		}
-	}
 }
 
 func (b *Backend) UpdateStatus() map[string]bool {
 	return map[string]bool{"available": updater.Available(), "started": b.updaterStarted}
 }
 
-func (b *Backend) Shutdown(context.Context) {
-	if b.browser != nil {
-		b.browser.Stop()
-	}
-	if b.browserStore != nil {
-		_ = b.browserStore.Close()
-	}
-}
+func (b *Backend) Shutdown(context.Context) {}
 
 func (b *Backend) Health() (map[string]any, error) {
 	if err := b.refreshClient(); err != nil {
@@ -120,6 +104,7 @@ func (b *Backend) SelectProject(permission protocol.PermissionProfile) (ProjectI
 		return ProjectInfo{}, err
 	}
 	b.currentProject = root
+	b.projectID = projectID
 	tools := make([]protocol.ToolDefinition, 0)
 	if value, ok := result["tools"]; ok {
 		payload, _ := json.Marshal(value)
@@ -162,10 +147,45 @@ func (b *Backend) Items(threadID string, after int64) ([]protocol.Item, error) {
 }
 
 func (b *Backend) RunTurn(thread protocol.Thread, input string) (protocol.Turn, error) {
+	return b.RunTurnWithAttachments(thread, input, nil)
+}
+
+func (b *Backend) RunTurnWithAttachments(thread protocol.Thread, input string, attachments []protocol.AttachmentRef) (protocol.Turn, error) {
 	var turn protocol.Turn
-	params, _ := json.Marshal(map[string]any{"thread": thread, "input": input})
+	params, _ := json.Marshal(map[string]any{"thread": thread, "input": input, "attachments": attachments})
 	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "turn.run", Params: params}, &turn)
 	return turn, err
+}
+
+func (b *Backend) PickImageAttachments() ([]protocol.AttachmentRef, error) {
+	paths, err := runtime.OpenMultipleFilesDialog(b.ctx, runtime.OpenDialogOptions{Title: "选择图片附件（最多5张，每张≤10 MiB）", Filters: []runtime.FileFilter{{DisplayName: "图片", Pattern: "*.png;*.jpg;*.jpeg;*.gif;*.webp"}}})
+	if err != nil {
+		return nil, err
+	}
+	if len(paths) > 5 {
+		return nil, errors.New("最多选择5张图片")
+	}
+	var result []protocol.AttachmentRef
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if len(data) == 0 || len(data) > 10*1024*1024 {
+			return nil, errors.New("图片必须介于1字节和10 MiB之间")
+		}
+		mimeType := http.DetectContentType(data)
+		if mimeType != "image/png" && mimeType != "image/jpeg" && mimeType != "image/gif" && mimeType != "image/webp" {
+			return nil, errors.New("附件内容不是受支持的图片格式")
+		}
+		var attachment protocol.AttachmentRef
+		params, _ := json.Marshal(map[string]string{"name": filepath.Base(path), "mime_type": mimeType, "data_base64": base64.StdEncoding.EncodeToString(data)})
+		if err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "attachment.put", Params: params}, &attachment); err != nil {
+			return nil, err
+		}
+		result = append(result, attachment)
+	}
+	return result, nil
 }
 
 func (b *Backend) CancelTurn(turnID string) (bool, error) {
@@ -285,89 +305,66 @@ func (b *Backend) InstallBackgroundService() error { return b.service.Register()
 
 func (b *Backend) UninstallBackgroundService() error { return b.service.Unregister() }
 
-func (b *Backend) BrowserStatus() browser.Status {
-	if b.browser == nil {
-		return browser.Status{Executable: bundledChromiumExecutable()}
-	}
-	return b.browser.Status()
+func (b *Backend) BrowserStatus() (browser.Status, error) {
+	var result browser.Status
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.status"}, &result)
+	return result, err
 }
 
 func (b *Backend) StartBrowser() error {
-	if b.browser == nil {
-		return errors.New("浏览器状态存储不可用")
-	}
-	return b.browser.Start(b.ctx)
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.start"}, nil)
 }
 
-func (b *Backend) StopBrowser() {
-	if b.browser != nil {
-		b.browser.Stop()
-	}
+func (b *Backend) StopBrowser() error {
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.stop"}, nil)
 }
 
 func (b *Backend) SetSitePermission(rawURL string, allow bool) error {
-	if b.browser == nil || b.browser.Permissions == nil {
-		return errors.New("浏览器权限存储不可用")
-	}
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Hostname() == "" {
-		return errors.New("请输入包含协议和主机名的有效网址")
-	}
-	decision := browser.DecisionDeny
+	decision := "deny"
 	if allow {
-		decision = browser.DecisionAllow
+		decision = "allow"
 	}
-	return b.browser.Permissions.Set(b.ctx, "site", strings.ToLower(parsed.Hostname()), decision, "persistent")
+	params, _ := json.Marshal(map[string]string{"url": rawURL, "decision": decision})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.site_permission", Params: params}, nil)
 }
 
 func (b *Backend) RevokeSitePermission(rawURL string) error {
-	if b.browser == nil || b.browser.Permissions == nil {
-		return errors.New("浏览器权限存储不可用")
-	}
-	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.Hostname() == "" {
-		return errors.New("请输入包含协议和主机名的有效网址")
-	}
-	return b.browser.Permissions.Revoke(b.ctx, "site", strings.ToLower(parsed.Hostname()))
+	params, _ := json.Marshal(map[string]string{"url": rawURL, "decision": "revoke"})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.site_permission", Params: params}, nil)
 }
 
 func (b *Backend) NavigateBrowser(target string) error {
-	if b.browser == nil {
-		return errors.New("浏览器不可用")
-	}
-	return b.browser.Navigate(b.ctx, target)
+	params, _ := json.Marshal(map[string]string{"url": target})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.navigate", Params: params}, nil)
 }
 
 func (b *Backend) BrowserDOM() (string, error) {
-	if b.browser == nil {
-		return "", errors.New("浏览器不可用")
-	}
-	return b.browser.DOM(b.ctx)
+	var result string
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.dom"}, &result)
+	return result, err
 }
 
 func (b *Backend) BrowserScreenshot() (string, error) {
-	if b.browser == nil {
-		return "", errors.New("浏览器不可用")
-	}
-	payload, err := b.browser.Screenshot(b.ctx)
+	var payload []byte
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.screenshot"}, &payload)
 	if err != nil {
 		return "", err
 	}
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(payload), nil
 }
 
-func (b *Backend) BrowserConsole(after int) []browser.ConsoleEntry {
-	if b.browser == nil {
-		return nil
-	}
-	return b.browser.Console(after)
+func (b *Backend) BrowserConsole(after int) ([]browser.ConsoleEntry, error) {
+	var result []browser.ConsoleEntry
+	params, _ := json.Marshal(map[string]int{"after": after})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.console", Params: params}, &result)
+	return result, err
 }
 
-func (b *Backend) BrowserNetwork(after int) []browser.NetworkEntry {
-	if b.browser == nil {
-		return nil
-	}
-	return b.browser.Network(after)
+func (b *Backend) BrowserNetwork(after int) ([]browser.NetworkEntry, error) {
+	var result []browser.NetworkEntry
+	params, _ := json.Marshal(map[string]int{"after": after})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.network", Params: params}, &result)
+	return result, err
 }
 
 func (b *Backend) LatestChromeSnapshot() (map[string]any, error) {
@@ -379,53 +376,232 @@ func (b *Backend) LatestChromeSnapshot() (map[string]any, error) {
 	return result, err
 }
 
+func (b *Backend) StartTerminal(columns, rows uint16) (terminal.Info, error) {
+	if b.currentProject == "" {
+		return terminal.Info{}, errors.New("请先选择项目工作区")
+	}
+	var result terminal.Info
+	params, _ := json.Marshal(map[string]any{"workspace": b.currentProject, "columns": columns, "rows": rows})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "terminal.start", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) ListTerminals() ([]terminal.Info, error) {
+	var result []terminal.Info
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "terminal.list"}, &result)
+	return result, err
+}
+
+func (b *Backend) ReadTerminal(id string, after int64) (terminal.Snapshot, error) {
+	var result terminal.Snapshot
+	params, _ := json.Marshal(map[string]any{"id": id, "after": after, "limit": 64 * 1024})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "terminal.read", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) WriteTerminal(id, dataBase64 string) error {
+	params, _ := json.Marshal(map[string]string{"id": id, "data_base64": dataBase64})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "terminal.write", Params: params}, nil)
+}
+
+func (b *Backend) ResizeTerminal(id string, columns, rows uint16) error {
+	params, _ := json.Marshal(map[string]any{"id": id, "columns": columns, "rows": rows})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "terminal.resize", Params: params}, nil)
+}
+
+func (b *Backend) StopTerminal(id string) error {
+	params, _ := json.Marshal(map[string]string{"id": id})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "terminal.stop", Params: params}, nil)
+}
+
+func (b *Backend) GitChanges(scope, base string) ([]gitrepo.Change, error) {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return nil, err
+	}
+	return repository.Changes(b.ctx, scope, base)
+}
+
+func (b *Backend) GitFileContent(path, scope, base string) (gitrepo.FileContent, error) {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return gitrepo.FileContent{}, err
+	}
+	return repository.FileContent(b.ctx, path, scope, base)
+}
+
+func (b *Backend) GitStage(paths []string) error {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return err
+	}
+	return repository.Stage(b.ctx, paths)
+}
+
+func (b *Backend) GitUnstage(paths []string) error {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return err
+	}
+	return repository.Unstage(b.ctx, paths)
+}
+
+func (b *Backend) GitRestore(paths []string) error {
+	repository, err := b.gitRepository()
+	if err != nil {
+		return err
+	}
+	return repository.Restore(b.ctx, paths)
+}
+
+func (b *Backend) gitRepository() (*gitrepo.Repository, error) {
+	if b.currentProject == "" {
+		return nil, errors.New("请先选择 Git 项目工作区")
+	}
+	return gitrepo.Discover(b.ctx, b.currentProject)
+}
+
+func (b *Backend) StartCodeReview(scope, base string) (protocol.Thread, error) {
+	if b.projectID == "" {
+		return protocol.Thread{}, errors.New("请先选择Git项目")
+	}
+	thread, err := b.CreateThread(b.projectID, "代码审查："+scope, protocol.PermissionReadOnly)
+	if err != nil {
+		return protocol.Thread{}, err
+	}
+	prompt := "对当前Git变更执行只读语义代码审查。使用git_read工具，范围=" + scope
+	if base != "" {
+		prompt += "，base=" + base
+	}
+	prompt += "。按严重级别输出findings；每条必须包含文件路径、1-based行号、问题机制和最小修复建议。不要修改任何文件；如果没有问题，明确说明未发现finding。"
+	if _, err := b.RunTurn(thread, prompt); err != nil {
+		return protocol.Thread{}, err
+	}
+	return thread, nil
+}
+
 func (b *Backend) BrowserClick(selector string, confirmed bool) error {
-	if b.browser == nil {
-		return errors.New("浏览器不可用")
-	}
-	if sensitiveBrowserAction(selector) && !confirmed {
-		return errors.New("该选择器可能触发提交、购买或删除；需要二次确认")
-	}
-	return b.browser.Click(b.ctx, selector)
+	params, _ := json.Marshal(map[string]any{"selector": selector, "confirmed": confirmed})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.click", Params: params}, nil)
 }
 
 func (b *Backend) BrowserType(selector, text string) error {
-	if b.browser == nil {
-		return errors.New("浏览器不可用")
-	}
-	return b.browser.Type(b.ctx, selector, text)
+	params, _ := json.Marshal(map[string]string{"selector": selector, "text": text})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "browser.type", Params: params}, nil)
 }
 
-func sensitiveBrowserAction(selector string) bool {
-	value := strings.ToLower(selector)
-	for _, marker := range []string{"submit", "purchase", "buy", "delete", "remove", "upload", "付款", "购买", "删除", "提交", "上传"} {
-		if strings.Contains(value, marker) {
-			return true
-		}
-	}
-	return false
+func (b *Backend) ComputerStatus(prompt bool) (map[string]bool, error) {
+	var result map[string]bool
+	params, _ := json.Marshal(map[string]bool{"prompt": prompt})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.status", Params: params}, &result)
+	return result, err
 }
 
-func applicationSupportRoot() string {
-	home, err := os.UserHomeDir()
+func (b *Backend) ComputerDecision(bundleID string) (map[string]any, error) {
+	var result map[string]any
+	params, _ := json.Marshal(map[string]string{"bundle_id": bundleID})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.decision", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) SetComputerPermission(bundleID string, allow bool, scope string) error {
+	decision := "deny"
+	if allow {
+		decision = "allow"
+	}
+	params, _ := json.Marshal(map[string]string{"bundle_id": bundleID, "decision": decision, "scope": scope})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "computer.permission", Params: params}, nil)
+}
+
+func (b *Backend) SaveAutomation(spec protocol.AutomationSpec) (protocol.AutomationSpec, error) {
+	var result protocol.AutomationSpec
+	params, _ := json.Marshal(spec)
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.save", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) ListAutomations() ([]protocol.AutomationSpec, error) {
+	var result []protocol.AutomationSpec
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.list"}, &result)
+	return result, err
+}
+
+func (b *Backend) RunAutomation(id string) (string, error) {
+	var result map[string]string
+	params, _ := json.Marshal(map[string]string{"id": id})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.run", Params: params}, &result)
+	return result["job_id"], err
+}
+
+func (b *Backend) CancelAutomation(jobID string) (bool, error) {
+	var result map[string]bool
+	params, _ := json.Marshal(map[string]string{"job_id": jobID})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "automation.cancel", Params: params}, &result)
+	return result["cancelled"], err
+}
+
+func (b *Backend) ListPlugins() ([]plugins.Installed, error) {
+	var result []plugins.Installed
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "plugin.list"}, &result)
+	return result, err
+}
+
+func (b *Backend) SelectAndInstallPlugin(approvePermissions bool) (plugins.Installed, error) {
+	path, err := runtime.OpenDirectoryDialog(b.ctx, runtime.OpenDialogOptions{Title: "选择Aether插件目录"})
 	if err != nil {
-		return filepath.Join(os.TempDir(), "Aether")
+		return plugins.Installed{}, err
 	}
-	return filepath.Join(home, "Library", "Application Support", "Aether")
+	if path == "" {
+		return plugins.Installed{}, errors.New("未选择插件目录")
+	}
+	var result plugins.Installed
+	params, _ := json.Marshal(map[string]any{"source": path, "approve_permissions": approvePermissions})
+	err = b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "plugin.install", Params: params}, &result)
+	return result, err
 }
 
-func bundledChromiumExecutable() string {
-	if override := strings.TrimSpace(os.Getenv("AETHER_CHROMIUM_PATH")); override != "" {
-		if absolute, err := filepath.Abs(override); err == nil {
-			return absolute
-		}
+func (b *Backend) RevokePlugin(id, reason string) error {
+	params, _ := json.Marshal(map[string]string{"id": id, "reason": reason})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "plugin.revoke", Params: params}, nil)
+}
+
+func (b *Backend) MemoryStatus() (map[string]bool, error) {
+	var result map[string]bool
+	params, _ := json.Marshal(map[string]string{"project_id": b.currentProjectID()})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "memory.status", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) SetMemoryEnabled(scope aethermemory.Scope, enabled bool) error {
+	params, _ := json.Marshal(map[string]any{"scope": scope, "project_id": b.currentProjectID(), "enabled": enabled})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "memory.enable", Params: params}, nil)
+}
+
+func (b *Backend) ListMemories(scope aethermemory.Scope) ([]aethermemory.Memory, error) {
+	var result []aethermemory.Memory
+	params, _ := json.Marshal(map[string]any{"scope": scope, "project_id": b.currentProjectID()})
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "memory.list", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) SaveMemory(scope aethermemory.Scope, content, sourceThreadID string) (aethermemory.Memory, error) {
+	var result aethermemory.Memory
+	value := aethermemory.Memory{Scope: scope, ProjectID: b.currentProjectID(), Content: content, SourceThreadID: sourceThreadID}
+	if scope == aethermemory.ScopeGlobal {
+		value.ProjectID = ""
 	}
-	executable, err := os.Executable()
-	if err != nil {
-		return filepath.Join(string(filepath.Separator), "Applications", "Aether Desktop.app", "Contents", "Resources", "Chromium.app", "Contents", "MacOS", "Chromium")
-	}
-	contents := filepath.Dir(filepath.Dir(executable))
-	return filepath.Join(contents, "Resources", "Chromium.app", "Contents", "MacOS", "Chromium")
+	params, _ := json.Marshal(value)
+	err := b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "memory.save", Params: params}, &result)
+	return result, err
+}
+
+func (b *Backend) DeleteMemory(id string) error {
+	params, _ := json.Marshal(map[string]string{"id": id})
+	return b.client.Call(b.ctx, daemon.Request{ID: uuid.NewString(), Method: "memory.delete", Params: params}, nil)
+}
+
+func (b *Backend) currentProjectID() string {
+	return b.projectID
 }
 
 func defaultSocketPath() string {

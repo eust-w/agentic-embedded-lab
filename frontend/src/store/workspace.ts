@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { backend } from '../lib/backend'
-import type { AELRunRecord, AgentStatus, Approval, Item, ProjectInfo, ReleaseResult, Thread, ThreadSummary, WorkspaceView } from '../types'
+import type { AELRunRecord, AgentHandle, AgentStatus, Approval, AttachmentRef, AutomationSpec, InstalledPlugin, Item, ProjectInfo, ReleaseResult, Thread, ThreadSummary, WorkspaceView } from '../types'
 
 interface WorkspaceState {
   view: WorkspaceView
@@ -10,11 +10,16 @@ interface WorkspaceState {
   approval: Approval
   threads: ThreadSummary[]
   agents: AgentStatus[]
+  liveAgents: AgentHandle[]
+  automations: AutomationSpec[]
+  plugins: InstalledPlugin[]
+  runningAutomationJob?: string
   connection: 'checking' | 'offline_preview' | 'ready' | 'error'
   project?: ProjectInfo
   liveThreads: Thread[]
   items: Item[]
   input: string
+  attachments: AttachmentRef[]
   busy: boolean
   activeTurn?: string
   experimentRun?: AELRunRecord
@@ -29,11 +34,20 @@ interface WorkspaceState {
   selectProject: () => Promise<void>
   selectThread: (threadID: string) => Promise<void>
   setInput: (input: string) => void
+  pickAttachments: () => Promise<void>
+  removeAttachment: (sha256: string) => void
   submit: () => Promise<void>
   resolveLiveApproval: (approvalID: string, allow: boolean) => Promise<void>
   startExperiment: () => Promise<void>
   cancelExperiment: () => Promise<void>
   checkRelease: () => Promise<void>
+  spawnAgent: (prompt: string) => Promise<void>
+  interruptAgent: (id: string) => Promise<void>
+  saveAutomation: (name: string, prompt: string, rrule: string) => Promise<void>
+  runAutomation: (id: string) => Promise<void>
+  installPlugin: (approvePermissions: boolean) => Promise<void>
+  revokePlugin: (id: string) => Promise<void>
+  startReview: (scope: string, base: string) => Promise<void>
 }
 
 const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
@@ -41,33 +55,19 @@ const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeo
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   view: 'chat',
   running: false,
-  selectedThread: 'uart-overrun',
+  selectedThread: '',
   inspectorTab: 'agents',
-  approval: {
-    id: 'approval-1',
-    title: '修改工作区文件',
-    description: '在当前工作树中应用 UART RX 缓冲修复。',
-    resources: ['src/uart.c', 'src/uart_isr.c', 'include/uart.h', 'tests/uart_overrun_test.c'],
-    additions: 42,
-    deletions: 17,
-    status: 'pending',
-  },
-  threads: [
-    { id: 'uart-overrun', title: '修复 UART 时序溢出', subtitle: '115200 波特率下发生时序漂移', updated: '2 分钟前' },
-    { id: 'spi-dma', title: 'SPI DMA 吞吐下降', subtitle: '排查数据下溢', updated: '1 小时前' },
-    { id: 'power-race', title: '电源模式进入竞争', subtitle: '未能进入 WFI', updated: '3 小时前' },
-    { id: 'can-recovery', title: 'CAN 总线错误恢复', subtitle: 'Bus-off 恢复反复抖动', updated: '1 天前' },
-    { id: 'itm-trace', title: '添加 ITM 追踪标记', subtitle: '追踪通道 1', updated: '2 天前' },
-  ],
-  agents: [
-    { id: 'coder', name: '编码 Agent', role: '实现', status: 'working', progress: 74, detail: '正在检查 UART ISR 和环形缓冲区', worktree: 'feature/uart-fix', tone: 'blue' },
-    { id: 'sim', name: '仿真 Agent', role: 'Renode', status: 'running', progress: 52, detail: '正在运行 uart_overrun_high_load.repl', worktree: 'feature/uart-fix', tone: 'violet' },
-    { id: 'test', name: '测试 Agent', role: '验证', status: 'idle', progress: 0, detail: '正在等待变更', worktree: 'feature/uart-fix', tone: 'green' },
-  ],
+  approval: { id: '', title: '', description: '', resources: [], additions: 0, deletions: 0, status: 'denied' },
+  threads: [],
+  agents: [],
+  liveAgents: [],
+  automations: [],
+  plugins: [],
   connection: 'checking',
   liveThreads: [],
   items: [],
   input: '',
+  attachments: [],
   busy: false,
   releaseGates: {},
   setView: (view) => set({
@@ -118,10 +118,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
     try {
       const project = await api.SelectProject('workspace_write')
-      const liveThreads = await api.ListThreads(project.id)
+      const [liveThreads, liveAgents, automations, plugins] = await Promise.all([api.ListThreads(project.id), api.ListAgents(), api.ListAutomations(), api.ListPlugins()])
       const selectedThread = liveThreads[0]?.id ?? ''
       const items = selectedThread ? await api.Items(selectedThread, 0) : []
-      set({ project, liveThreads, selectedThread, items, connection: 'ready', backendError: undefined })
+      set({ project, liveThreads, liveAgents, automations: automations.filter((automation) => automation.project_id === project.id), plugins, selectedThread, items, connection: 'ready', backendError: undefined })
       void get().checkRelease()
     } catch (error) {
       set({ backendError: error instanceof Error ? error.message : String(error) })
@@ -138,19 +138,30 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
   },
   setInput: (input) => set({ input }),
+  pickAttachments: async () => {
+    const api = backend()
+    if (!api) return
+    try {
+      set({ attachments: await api.PickImageAttachments(), backendError: undefined })
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    }
+  },
+  removeAttachment: (sha256) => set((state) => ({ attachments: state.attachments.filter((attachment) => attachment.sha256 !== sha256) })),
   submit: async () => {
     const api = backend()
     const state = get()
     const prompt = state.input.trim()
     if (!api || !state.project || !prompt || state.busy) return
-    set({ busy: true, input: '', backendError: undefined })
+    const attachments = state.attachments
+    set({ busy: true, input: '', attachments: [], backendError: undefined })
     try {
       let thread = state.liveThreads.find((candidate) => candidate.id === state.selectedThread)
       if (!thread) {
         thread = await api.CreateThread(state.project.id, prompt.slice(0, 48), state.project.permission)
         set((current) => ({ liveThreads: [thread!, ...current.liveThreads], selectedThread: thread!.id }))
       }
-      const turn = await api.RunTurn(thread, prompt)
+      const turn = attachments.length > 0 ? await api.RunTurnWithAttachments(thread, prompt, attachments) : await api.RunTurn(thread, prompt)
       set({ activeTurn: turn.id })
       let after = state.items.at(-1)?.sequence ?? 0
       for (let attempt = 0; attempt < 480; attempt += 1) {
@@ -159,9 +170,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
           after = incoming.at(-1)!.sequence
           set((current) => ({ items: [...current.items, ...incoming.filter((item) => !current.items.some((existing) => existing.id === item.id))] }))
         }
-        const threads = await api.ListThreads(state.project.id)
+        const [threads, liveAgents] = await Promise.all([api.ListThreads(state.project.id), api.ListAgents()])
         const currentThread = threads.find((candidate) => candidate.id === thread!.id)
-        set({ liveThreads: threads })
+        set({ liveThreads: threads, liveAgents })
         if (currentThread && currentThread.status !== 'running' && currentThread.status !== 'waiting_for_approval') break
         await sleep(250)
       }
@@ -223,5 +234,102 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       try { return await api.CheckRelease(profile) } catch (error) { return { profile, passed: false, failures: [error instanceof Error ? error.message : String(error)], checked: [] } }
     }))
     set({ releaseGates: Object.fromEntries(values.map((value) => [value.profile, value])) })
+  },
+  spawnAgent: async (prompt) => {
+    const api = backend()
+    const state = get()
+    const parent = state.liveThreads.find((thread) => thread.id === state.selectedThread)
+    if (!api || !parent || !prompt.trim()) return
+    try {
+      await api.SpawnAgent(parent, prompt.trim(), {
+        name: `子Agent ${state.liveAgents.length + 1}`,
+        role: '并行工程任务',
+        model: parent.model,
+        reasoning_effort: 'medium',
+        permission: 'read_only',
+        tools: ['file', 'search'],
+        max_concurrency: 1,
+      })
+      set({ liveAgents: await api.ListAgents(), backendError: undefined })
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    }
+  },
+  interruptAgent: async (id) => {
+    const api = backend()
+    if (!api) return
+    try {
+      await api.InterruptAgent(id)
+      set({ liveAgents: await api.ListAgents(), backendError: undefined })
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    }
+  },
+  saveAutomation: async (name, prompt, rrule) => {
+    const api = backend()
+    const project = get().project
+    if (!api || !project || !name.trim() || !prompt.trim() || !rrule.trim()) return
+    try {
+      await api.SaveAutomation({ api_version: 'aether.desktop/v1', id: crypto.randomUUID(), name: name.trim(), prompt: prompt.trim(), rrule: rrule.trim(), project_id: project.id, use_worktree: true, permission: 'workspace_write', enabled: true, stop_policy: { timeout_seconds: 7200 } })
+      set({ automations: (await api.ListAutomations()).filter((automation) => automation.project_id === project.id), backendError: undefined })
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    }
+  },
+  runAutomation: async (id) => {
+    const api = backend()
+    if (!api) return
+    try {
+      set({ runningAutomationJob: await api.RunAutomation(id), backendError: undefined })
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    }
+  },
+  installPlugin: async (approvePermissions) => {
+    const api = backend()
+    if (!api) return
+    try {
+      await api.SelectAndInstallPlugin(approvePermissions)
+      set({ plugins: await api.ListPlugins(), backendError: undefined })
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    }
+  },
+  revokePlugin: async (id) => {
+    const api = backend()
+    if (!api) return
+    try {
+      await api.RevokePlugin(id, '用户从Aether Desktop撤销')
+      set({ plugins: await api.ListPlugins(), backendError: undefined })
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    }
+  },
+  startReview: async (scope, base) => {
+    const api = backend()
+    const project = get().project
+    if (!api || !project || get().busy) return
+    set({ busy: true, view: 'chat', backendError: undefined })
+    try {
+      const review = await api.StartCodeReview(scope, base)
+      set({ selectedThread: review.id, liveThreads: await api.ListThreads(project.id), items: [] })
+      let after = 0
+      for (let attempt = 0; attempt < 480; attempt += 1) {
+        const incoming = await api.Items(review.id, after)
+        if (incoming.length > 0) {
+          after = incoming.at(-1)!.sequence
+          set((state) => ({ items: [...state.items, ...incoming] }))
+        }
+        const threads = await api.ListThreads(project.id)
+        const current = threads.find((thread) => thread.id === review.id)
+        set({ liveThreads: threads })
+        if (current && current.status !== 'running' && current.status !== 'waiting_for_approval') break
+        await sleep(250)
+      }
+    } catch (error) {
+      set({ backendError: error instanceof Error ? error.message : String(error) })
+    } finally {
+      set({ busy: false })
+    }
   },
 }))

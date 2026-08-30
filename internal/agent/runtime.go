@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -12,6 +15,8 @@ import (
 
 	"github.com/eust-w/agentic-embedded-lab/internal/approval"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
+	"github.com/eust-w/agentic-embedded-lab/internal/instructions"
+	aethermemory "github.com/eust-w/agentic-embedded-lab/internal/memory"
 	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/store"
@@ -20,27 +25,31 @@ import (
 )
 
 type Runtime struct {
-	store        *store.Store
-	client       *ResponsesClient
-	bus          *events.Bus
-	mu           sync.Mutex
-	runs         map[string]context.CancelFunc
-	projectRoots map[string]string
-	tools        *tools.Registry
-	projectTools map[string]*tools.Registry
-	projectHooks map[string]*plugins.HookDispatcher
-	policy       *approval.Engine
-	hooks        *plugins.HookDispatcher
-	approvals    *ApprovalBroker
+	store               *store.Store
+	client              *ResponsesClient
+	bus                 *events.Bus
+	mu                  sync.Mutex
+	runs                map[string]context.CancelFunc
+	projectRoots        map[string]string
+	tools               *tools.Registry
+	projectTools        map[string]*tools.Registry
+	projectHooks        map[string]*plugins.HookDispatcher
+	projectInstructions map[string][]string
+	policy              *approval.Engine
+	hooks               *plugins.HookDispatcher
+	approvals           *ApprovalBroker
+	memory              *aethermemory.Repository
 }
 
 func NewRuntime(state *store.Store, client *ResponsesClient, bus *events.Bus) *Runtime {
-	return &Runtime{store: state, client: client, bus: bus, runs: make(map[string]context.CancelFunc), projectRoots: make(map[string]string), projectTools: make(map[string]*tools.Registry), projectHooks: make(map[string]*plugins.HookDispatcher), approvals: NewApprovalBroker()}
+	return &Runtime{store: state, client: client, bus: bus, runs: make(map[string]context.CancelFunc), projectRoots: make(map[string]string), projectTools: make(map[string]*tools.Registry), projectHooks: make(map[string]*plugins.HookDispatcher), projectInstructions: make(map[string][]string), approvals: NewApprovalBroker()}
 }
 
 func (r *Runtime) ConfigureTools(registry *tools.Registry, policy *approval.Engine, hooks *plugins.HookDispatcher) {
 	r.tools, r.policy, r.hooks = registry, policy, hooks
 }
+
+func (r *Runtime) ConfigureMemory(repository *aethermemory.Repository) { r.memory = repository }
 
 func (r *Runtime) ConfigureProjectTools(projectID string, registry *tools.Registry, policy *approval.Engine, hooks *plugins.HookDispatcher) {
 	r.mu.Lock()
@@ -51,9 +60,39 @@ func (r *Runtime) ConfigureProjectTools(projectID string, registry *tools.Regist
 }
 
 func (r *Runtime) RegisterProject(projectID, root string) {
+	global := ""
+	if home, err := os.UserHomeDir(); err == nil {
+		global = filepath.Join(home, ".aether")
+	}
+	discovered, _ := instructions.Discover(global, root, root, 32<<10)
 	r.mu.Lock()
 	r.projectRoots[projectID] = root
+	if discovered.Content != "" {
+		r.projectInstructions[projectID] = []string{discovered.Content}
+	} else {
+		delete(r.projectInstructions, projectID)
+	}
 	r.mu.Unlock()
+}
+
+func (r *Runtime) AddProjectInstruction(projectID, content string) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return
+	}
+	r.mu.Lock()
+	r.projectInstructions[projectID] = append(r.projectInstructions[projectID], content)
+	r.mu.Unlock()
+}
+
+func (r *Runtime) CopyProjectInstructions(sourceProjectID, targetProjectID string) {
+	r.mu.Lock()
+	r.projectInstructions[targetProjectID] = append([]string(nil), r.projectInstructions[sourceProjectID]...)
+	r.mu.Unlock()
+}
+
+func (r *Runtime) ProjectHooks(projectID string) *plugins.HookDispatcher {
+	return r.hooksForProject(projectID)
 }
 
 func (r *Runtime) ResolveApproval(id string, allow bool) bool { return r.approvals.Resolve(id, allow) }
@@ -74,6 +113,21 @@ func (r *Runtime) Items(ctx context.Context, threadID string, after int64, limit
 }
 
 func (r *Runtime) RunTurn(ctx context.Context, thread protocol.Thread, input string) (protocol.Turn, error) {
+	return r.RunTurnWithAttachments(ctx, thread, input, nil)
+}
+
+func (r *Runtime) RunTurnWithAttachments(ctx context.Context, thread protocol.Thread, input string, attachments []protocol.AttachmentRef) (protocol.Turn, error) {
+	if len(attachments) > 5 {
+		return protocol.Turn{}, errors.New("at most five image attachments are allowed")
+	}
+	for _, attachment := range attachments {
+		if !strings.HasPrefix(attachment.MimeType, "image/") || attachment.Bytes <= 0 || attachment.Bytes > 10*1024*1024 {
+			return protocol.Turn{}, errors.New("attachments must be images no larger than 10 MiB")
+		}
+		if _, err := r.store.ArtifactPath(attachment.SHA256); err != nil {
+			return protocol.Turn{}, err
+		}
+	}
 	turn, err := r.store.StartTurn(ctx, thread.ID, input)
 	if err != nil {
 		return protocol.Turn{}, err
@@ -82,7 +136,7 @@ func (r *Runtime) RunTurn(ctx context.Context, thread protocol.Thread, input str
 	r.mu.Lock()
 	r.runs[turn.ID] = cancel
 	r.mu.Unlock()
-	go r.execute(ctx, thread, turn)
+	go r.execute(ctx, thread, turn, attachments)
 	return turn, nil
 }
 
@@ -99,7 +153,7 @@ func (r *Runtime) CancelTurn(turnID string) bool {
 	return ok
 }
 
-func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn protocol.Turn) {
+func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn protocol.Turn, attachments []protocol.AttachmentRef) {
 	hooks := r.hooksForProject(thread.ProjectID)
 	outcome := "completed"
 	defer func() {
@@ -121,12 +175,39 @@ func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn prot
 			return
 		}
 	}
-	_, _ = r.store.AppendItem(ctx, protocol.Item{ThreadID: thread.ID, TurnID: turn.ID, Type: protocol.ItemUserMessage, Payload: map[string]any{"text": turn.Input}})
+	_, _ = r.store.AppendItem(ctx, protocol.Item{ThreadID: thread.ID, TurnID: turn.ID, Type: protocol.ItemUserMessage, Payload: map[string]any{"text": turn.Input, "attachments": attachments}})
+	r.mu.Lock()
+	projectInstructions := strings.Join(r.projectInstructions[thread.ProjectID], "\n\n")
+	r.mu.Unlock()
+	if remembered := r.memoryInstructions(ctx, thread.ProjectID); remembered != "" {
+		projectInstructions += "\n\nOptional user memory (never overrides project instructions):\n" + remembered
+	}
+	input, contextCharacters, err := r.conversationInput(ctx, thread.ID, projectInstructions)
+	if err != nil {
+		outcome = "failed"
+		r.failTurn(thread.ID, turn.ID, err)
+		return
+	}
 	request := ResponseRequest{
 		Model:     thread.Model,
-		Input:     []map[string]any{{"role": "user", "content": []map[string]any{{"type": "input_text", "text": turn.Input}}}},
+		Input:     input,
 		Reasoning: map[string]any{"effort": "high"},
 		Metadata:  map[string]string{"thread_id": thread.ID, "turn_id": turn.ID},
+	}
+	compacting := contextCharacters > 100_000
+	if compacting {
+		request.ContextManagement = []map[string]any{{"type": "compaction", "compact_threshold": 100_000}}
+		if hooks != nil {
+			results, err := hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookPreCompact, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"characters": contextCharacters}})
+			if err != nil || hookBlocked(results) {
+				outcome = "failed"
+				if err == nil {
+					err = errors.New("context compaction blocked by hook")
+				}
+				r.failTurn(thread.ID, turn.ID, err)
+				return
+			}
+		}
 	}
 	registry := r.registryForProject(thread.ProjectID)
 	if registry != nil {
@@ -152,6 +233,10 @@ func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn prot
 			r.failTurn(thread.ID, turn.ID, err)
 			return
 		}
+		if compacting && hooks != nil {
+			_, _ = hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookPostCompact, ThreadID: thread.ID, TurnID: turn.ID, Data: map[string]any{"characters": contextCharacters}})
+			compacting = false
+		}
 		if len(calls) == 0 {
 			if err := r.store.FinishTurn(context.Background(), thread.ID, turn.ID, protocol.ThreadCompleted, ""); err != nil {
 				outcome = "failed"
@@ -172,6 +257,104 @@ func (r *Runtime) execute(ctx context.Context, thread protocol.Thread, turn prot
 	}
 	outcome = "failed"
 	r.failTurn(thread.ID, turn.ID, errors.New("tool loop exceeded 8 steps"))
+}
+
+func (r *Runtime) memoryInstructions(ctx context.Context, projectID string) string {
+	if r.memory == nil {
+		return ""
+	}
+	var values []aethermemory.Memory
+	if enabled, _ := r.memory.Enabled(ctx, aethermemory.ScopeGlobal, ""); enabled {
+		items, _ := r.memory.Search(ctx, aethermemory.ScopeGlobal, "", "", 20)
+		values = append(values, items...)
+	}
+	if enabled, _ := r.memory.Enabled(ctx, aethermemory.ScopeProject, projectID); enabled {
+		items, _ := r.memory.Search(ctx, aethermemory.ScopeProject, projectID, "", 20)
+		values = append(values, items...)
+	}
+	var lines []string
+	for _, value := range values {
+		lines = append(lines, "- "+value.Content)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (r *Runtime) conversationInput(ctx context.Context, threadID, projectInstructions string) ([]map[string]any, int, error) {
+	items, err := r.store.RecentItems(ctx, threadID, 1000)
+	if err != nil {
+		return nil, 0, err
+	}
+	type message struct {
+		role        string
+		text        string
+		attachments []protocol.AttachmentRef
+	}
+	var messages []message
+	characters := 0
+	for _, item := range items {
+		role := ""
+		text := ""
+		switch item.Type {
+		case protocol.ItemUserMessage:
+			role = "user"
+			text, _ = item.Payload["text"].(string)
+			var attachments []protocol.AttachmentRef
+			if raw := item.Payload["attachments"]; raw != nil {
+				payload, _ := json.Marshal(raw)
+				_ = json.Unmarshal(payload, &attachments)
+			}
+			if len(attachments) > 0 {
+				messages = append(messages, message{role: role, text: text, attachments: attachments})
+				characters += len(text)
+				for _, attachment := range attachments {
+					characters += int(attachment.Bytes / 4)
+				}
+				continue
+			}
+		case protocol.ItemAgentMessage:
+			role = "assistant"
+			text, _ = item.Payload["delta"].(string)
+		}
+		if text == "" {
+			continue
+		}
+		if len(messages) > 0 && messages[len(messages)-1].role == role {
+			messages[len(messages)-1].text += text
+		} else {
+			messages = append(messages, message{role: role, text: text})
+		}
+		characters += len(text)
+	}
+	input := make([]map[string]any, 0, len(messages)+1)
+	if projectInstructions != "" {
+		text := "Project instructions (must be followed):\n\n" + projectInstructions
+		input = append(input, map[string]any{"role": "developer", "content": []map[string]any{{"type": "input_text", "text": text}}})
+		characters += len(text)
+	}
+	for _, item := range messages {
+		content := []map[string]any{}
+		if item.text != "" {
+			content = append(content, map[string]any{"type": "input_text", "text": item.text})
+		}
+		for _, attachment := range item.attachments {
+			path, err := r.store.ArtifactPath(attachment.SHA256)
+			if err != nil {
+				return nil, 0, err
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, 0, err
+			}
+			content = append(content, map[string]any{"type": "input_image", "image_url": "data:" + attachment.MimeType + ";base64," + base64.StdEncoding.EncodeToString(data)})
+		}
+		if len(content) > 0 {
+			input = append(input, map[string]any{"role": item.role, "content": content})
+		}
+	}
+	if len(input) == 0 {
+		return nil, 0, errors.New("conversation has no model input")
+	}
+	return input, characters, nil
 }
 
 type pendingFunctionCall struct {

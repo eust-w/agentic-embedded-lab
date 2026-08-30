@@ -37,15 +37,16 @@ type ImageInput struct {
 }
 
 type ResponseRequest struct {
-	Model      string                    `json:"model"`
-	Input      []map[string]any          `json:"input"`
-	Tools      []protocol.ToolDefinition `json:"tools,omitempty"`
-	Stream     bool                      `json:"stream"`
-	Store      bool                      `json:"store"`
-	PreviousID string                    `json:"previous_response_id,omitempty"`
-	Reasoning  map[string]any            `json:"reasoning,omitempty"`
-	Metadata   map[string]string         `json:"metadata,omitempty"`
-	Text       map[string]any            `json:"text,omitempty"`
+	Model             string                    `json:"model"`
+	Input             []map[string]any          `json:"input"`
+	Tools             []protocol.ToolDefinition `json:"tools,omitempty"`
+	Stream            bool                      `json:"stream"`
+	Store             bool                      `json:"store"`
+	PreviousID        string                    `json:"previous_response_id,omitempty"`
+	Reasoning         map[string]any            `json:"reasoning,omitempty"`
+	Metadata          map[string]string         `json:"metadata,omitempty"`
+	Text              map[string]any            `json:"text,omitempty"`
+	ContextManagement []map[string]any          `json:"context_management,omitempty"`
 }
 
 type ResponseEvent struct {
@@ -92,7 +93,7 @@ func (c *ResponsesClient) Stream(
 		request.Model = DefaultModel
 	}
 	request.Stream = true
-	request.Store = false
+	request.Store = true
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("encode response request: %w", err)

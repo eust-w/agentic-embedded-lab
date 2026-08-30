@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"regexp"
 	"sort"
 	"sync"
 
@@ -26,12 +27,14 @@ type Registry struct {
 	tools map[string]Tool
 }
 
+var functionName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
 func NewRegistry() *Registry { return &Registry{tools: make(map[string]Tool)} }
 
 func (r *Registry) Register(tool Tool) error {
 	definition := tool.Definition()
-	if definition.Name == "" {
-		return errors.New("tool name is required")
+	if !functionName.MatchString(definition.Name) {
+		return errors.New("tool name must match the model function-name contract")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

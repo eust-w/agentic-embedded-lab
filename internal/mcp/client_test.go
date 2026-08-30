@@ -52,6 +52,16 @@ func TestRejectsInsecureRemoteHTTP(t *testing.T) {
 	}
 }
 
+func TestRejectsInlineSecretEnvironmentAndBuildsNetworkClosedSandbox(t *testing.T) {
+	if _, err := New(Config{Name: "secret-env", Transport: TransportSTDIO, Command: "tool", Env: map[string]string{"API_KEY": "plaintext"}}); err == nil {
+		t.Fatal("inline secret environment was accepted")
+	}
+	profile := mcpSeatbeltProfile(t.TempDir(), false)
+	if strings.Contains(profile, "(allow network-outbound)") {
+		t.Fatalf("network-closed MCP sandbox is too broad: %s", profile)
+	}
+}
+
 func TestRejectsInlineBearerAndDecodesStreamableHTTPSSE(t *testing.T) {
 	if _, err := New(Config{Name: "secret", Transport: TransportHTTP, URL: "https://mcp.example.test", Bearer: "plaintext"}); err == nil {
 		t.Fatal("inline bearer was accepted")

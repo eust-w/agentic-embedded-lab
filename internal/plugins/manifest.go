@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 const ManifestVersion = "aether.plugin/v1"
+
+var packageIdentifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 type Permission string
 
@@ -58,6 +61,31 @@ func (s StaticTrustStore) PublicKey(keyID string) (ed25519.PublicKey, bool) {
 	return key, ok
 }
 
+func LoadTrustStore(path string) (StaticTrustStore, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return StaticTrustStore{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	var encoded map[string]string
+	if err := decoder.Decode(&encoded); err != nil {
+		return nil, err
+	}
+	result := make(StaticTrustStore, len(encoded))
+	for id, value := range encoded {
+		key, err := base64.StdEncoding.DecodeString(value)
+		if err != nil || len(key) != ed25519.PublicKeySize || strings.TrimSpace(id) == "" {
+			return nil, fmt.Errorf("invalid trusted plugin key %q", id)
+		}
+		result[id] = ed25519.PublicKey(key)
+	}
+	return result, nil
+}
+
 func LoadManifest(path string, trust TrustStore, developmentMode bool) (Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -97,7 +125,7 @@ func LoadManifest(path string, trust TrustStore, developmentMode bool) (Manifest
 }
 
 func (m Manifest) Validate() error {
-	if m.APIVersion != ManifestVersion || m.ID == "" || m.Name == "" || m.Version == "" {
+	if m.APIVersion != ManifestVersion || !packageIdentifier.MatchString(m.ID) || m.Name == "" || !packageIdentifier.MatchString(m.Version) {
 		return errors.New("plugin api_version, id, name, and version are required")
 	}
 	for _, relative := range append(append(append([]string{}, m.Skills...), m.Hooks...), m.WASM...) {

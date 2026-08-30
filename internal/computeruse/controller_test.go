@@ -62,3 +62,22 @@ func TestComputerUseRejectsFrontmostMismatchSecureFieldsAndSystemSettings(t *tes
 		t.Fatal("System Settings control was accepted")
 	}
 }
+
+func TestOneTimePermissionIsConsumed(t *testing.T) {
+	state, err := store.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	native := &fakeNative{frontmost: "com.apple.TextEdit"}
+	controller := New(state, native)
+	if err := controller.SetApplicationPermission(context.Background(), "com.apple.TextEdit", DecisionAllow, "once"); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Click(context.Background(), "com.apple.TextEdit", 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Click(context.Background(), "com.apple.TextEdit", 1, 1); err == nil {
+		t.Fatal("one-time permission was not consumed")
+	}
+}

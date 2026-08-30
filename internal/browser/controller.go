@@ -199,6 +199,14 @@ func (c *Controller) Type(ctx context.Context, selector, text string) error {
 	if selector == "" {
 		return errors.New("selector is required")
 	}
+	var inputType string
+	var exists bool
+	if err := c.run(ctx, chromedp.AttributeValue(selector, "type", &inputType, &exists, chromedp.ByQuery)); err != nil {
+		return err
+	}
+	if exists && strings.EqualFold(inputType, "password") {
+		return errors.New("typing into password fields is prohibited")
+	}
 	return c.run(ctx, chromedp.SendKeys(selector, text, chromedp.ByQuery))
 }
 
@@ -209,7 +217,7 @@ func (c *Controller) run(ctx context.Context, actions ...chromedp.Action) error 
 	if browserContext == nil {
 		return errors.New("browser is not running")
 	}
-	merged, cancel := context.WithCancel(browserContext)
+	merged, cancel := context.WithTimeout(browserContext, 30*time.Second)
 	defer cancel()
 	go func() {
 		select {

@@ -22,6 +22,10 @@ func TestResponsesClientStreamsEventsWithoutPersisting(t *testing.T) {
 		if request.Header.Get("Authorization") != "Bearer test-key" {
 			t.Fatal("missing authorization header")
 		}
+		payload, _ := io.ReadAll(request.Body)
+		if !strings.Contains(string(payload), `"stream":true`) || !strings.Contains(string(payload), `"store":true`) {
+			t.Fatalf("Responses continuation flags missing: %s", payload)
+		}
 		body := "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n" +
 			"data: {\"type\":\"response.completed\"}\n" + "data: [DONE]\n"
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, nil

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,10 +11,13 @@ import (
 	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/agent"
+	"github.com/eust-w/agentic-embedded-lab/internal/automation"
 	"github.com/eust-w/agentic-embedded-lab/internal/browser"
 	"github.com/eust-w/agentic-embedded-lab/internal/events"
+	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/eust-w/agentic-embedded-lab/internal/store"
+	"github.com/eust-w/agentic-embedded-lab/internal/terminal"
 )
 
 func TestDaemonRequiresCapabilityToken(t *testing.T) {
@@ -46,9 +50,103 @@ func TestDaemonRequiresCapabilityToken(t *testing.T) {
 	}
 }
 
+func TestDaemonTerminalIsRestrictedToRegisteredProject(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state, err := store.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	terminals := terminal.NewManager(ctx)
+	server := &Server{Token: "capability", Runtime: agent.NewRuntime(state, agent.NewResponsesClient(agent.StaticAPIKey("test")), events.New()), Terminals: terminals}
+	workspace := t.TempDir()
+	opened := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "1", Token: "capability", Method: "project.open", Params: mustJSON(t, map[string]any{"project_id": "p", "root": workspace, "permission": protocol.PermissionWorkspace})})
+	if opened.Error != "" {
+		t.Fatal(opened.Error)
+	}
+	started := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "2", Token: "capability", Method: "terminal.start", Params: mustJSON(t, map[string]any{"workspace": workspace, "columns": 80, "rows": 24})})
+	info, ok := started.Result.(terminal.Info)
+	if started.Error != "" || !ok || info.ID == "" {
+		t.Fatalf("terminal start: %#v", started)
+	}
+	defer terminals.Stop(info.ID)
+	denied := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "3", Token: "capability", Method: "terminal.start", Params: mustJSON(t, map[string]any{"workspace": filepath.Dir(workspace), "columns": 80, "rows": 24})})
+	if denied.Error == "" {
+		t.Fatal("unregistered terminal workspace was accepted")
+	}
+}
+
+func TestDaemonAutomationContractPersistsRRULE(t *testing.T) {
+	ctx := context.Background()
+	state, err := store.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	scheduler := automation.New(state, func(context.Context, protocol.AutomationSpec, string) error { return nil })
+	server := &Server{Token: "capability", Automations: scheduler}
+	spec := protocol.AutomationSpec{APIVersion: protocol.APIVersion, ID: "nightly", Name: "夜间回归", Prompt: "run tests", RRULE: "FREQ=DAILY;BYHOUR=2", ProjectID: "p", Permission: protocol.PermissionWorkspace, Enabled: true}
+	saved := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "1", Token: "capability", Method: "automation.save", Params: mustJSON(t, spec)})
+	if saved.Error != "" {
+		t.Fatal(saved.Error)
+	}
+	listed := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "2", Token: "capability", Method: "automation.list"})
+	values, ok := listed.Result.([]protocol.AutomationSpec)
+	if listed.Error != "" || !ok || len(values) != 1 || values[0].ID != "nightly" {
+		t.Fatalf("automation list: %#v", listed)
+	}
+}
+
+func TestConfigureProjectLoadsSignedPluginSkillAndHook(t *testing.T) {
+	ctx := context.Background()
+	state, err := store.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer state.Close()
+	publicKey, privateKey, _ := ed25519.GenerateKey(nil)
+	source := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(source, "skills", "review"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(source, "hooks"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "skills", "review", "SKILL.md"), []byte("---\nname: review\ndescription: Safe review\n---\nFollow REVIEW_PLUGIN_RULE."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "hooks", "block.json"), []byte(`{"event":"PreToolUse","tool":"command","block":true,"reason":"plugin policy"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := plugins.Sign(plugins.Manifest{APIVersion: plugins.ManifestVersion, ID: "review", Name: "Review", Version: "1.0.0", Permissions: []plugins.Permission{plugins.PermissionFiles}, Skills: []string{"skills"}, Hooks: []string{"hooks/block.json"}}, "official", privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(source, "plugin.json"), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registry := &plugins.Registry{Root: t.TempDir(), Trust: plugins.StaticTrustStore{"official": publicKey}}
+	if _, err := registry.Install(source, false); err != nil {
+		t.Fatal(err)
+	}
+	runtime := agent.NewRuntime(state, agent.NewResponsesClient(agent.StaticAPIKey("test")), events.New())
+	server := &Server{Runtime: runtime, State: state, PluginRegistry: registry}
+	projectRoot := t.TempDir()
+	if _, err := server.ConfigureProject(ctx, store.ProjectRecord{ID: "p", Root: projectRoot, Permission: protocol.PermissionReadOnly}, false); err != nil {
+		t.Fatal(err)
+	}
+	hooks := runtime.ProjectHooks("p")
+	results, err := hooks.Dispatch(ctx, plugins.HookPayload{Event: plugins.HookPreToolUse, Data: map[string]any{"tool": "command"}})
+	if err != nil || len(results) != 1 || !results[0].Block {
+		t.Fatalf("plugin hook missing: %#v %v", results, err)
+	}
+}
+
 func TestDaemonAcceptsOnlyTypedChromeSnapshots(t *testing.T) {
 	ctx := context.Background()
-	server := &Server{Token: "capability", Chrome: &browser.ChromeSessionStore{}}
+	server := &Server{Token: "capability", ChromeSessions: &browser.ChromeSessionStore{}}
 	message := browser.NativeMessage{Type: "snapshot", ID: "capture-1", TabID: 8, Payload: map[string]any{"url": "https://example.com", "title": "Example", "dom": "<html></html>"}}
 	ingested := server.dispatch(ctx, Request{APIVersion: protocol.APIVersion, ID: "1", Token: "capability", Method: "browser.chrome_ingest", Params: mustJSON(t, message)})
 	if ingested.Error != "" {

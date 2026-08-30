@@ -18,12 +18,20 @@ func TestRepositoryStagesSpecificPathsAndRejectsEscape(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("changed\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	unstaged, err := repository.FileContent(ctx, "file.txt", "unstaged", "")
+	if err != nil || unstaged.Original != "base\n" || unstaged.Modified != "changed\n" {
+		t.Fatalf("unexpected unstaged content: %#v %v", unstaged, err)
+	}
 	if err := repository.Stage(ctx, []string{"file.txt"}); err != nil {
 		t.Fatal(err)
 	}
 	diff, err := repository.Diff(ctx, "staged", "")
 	if err != nil || !strings.Contains(diff, "changed") {
 		t.Fatalf("unexpected staged diff: %q %v", diff, err)
+	}
+	staged, err := repository.FileContent(ctx, "file.txt", "staged", "")
+	if err != nil || staged.Original != "base\n" || staged.Modified != "changed\n" {
+		t.Fatalf("unexpected staged content: %#v %v", staged, err)
 	}
 	if err := repository.Stage(ctx, []string{"../escape"}); err == nil {
 		t.Fatal("expected path escape to fail")

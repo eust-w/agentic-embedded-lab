@@ -160,6 +160,33 @@ func (r Registry) Versions(id string) ([]string, error) {
 	return versions, nil
 }
 
+func (r Registry) List() ([]Installed, error) {
+	root, err := filepath.Abs(r.Root)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var result []Installed
+	for _, entry := range entries {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		installed, err := r.Current(entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, installed)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Manifest.ID < result[j].Manifest.ID })
+	return result, nil
+}
+
 func validatePackageFiles(root string, manifest Manifest) error {
 	paths := append(append(append(append([]string{}, manifest.Skills...), manifest.Hooks...), manifest.MCP...), manifest.WASM...)
 	if manifest.Process != nil {
@@ -201,7 +228,11 @@ func copyPackage(source, destination string) error {
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(target, data, 0o600)
+		mode := os.FileMode(0o600)
+		if info, err := entry.Info(); err == nil && info.Mode()&0o111 != 0 {
+			mode = 0o700
+		}
+		return os.WriteFile(target, data, mode)
 	})
 }
 
