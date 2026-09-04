@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 )
@@ -18,7 +20,9 @@ func TestProductionEvidenceRequiresTrustedValidSignature(t *testing.T) {
 	public, private, _ := ed25519.GenerateKey(rand.Reader)
 	keys, _ := json.Marshal(map[string]string{"reviewer": base64.StdEncoding.EncodeToString(public)})
 	_ = os.WriteFile(filepath.Join(root, "lab", "trusted-reviewers.json"), keys, 0o600)
-	envelope := ael.ValidationEnvelope{ID: "e", ModelID: "m", HardwareRevision: "r", EvidenceRunIDs: []string{"run"}, SignedBy: "reviewer", Conditions: map[string]string{}, Tolerances: map[string]float64{}}
+	now := time.Now().UTC()
+	digest := strings.Repeat("a", 64)
+	envelope := ael.ValidationEnvelope{ID: "e", ModelID: "m", ModelVersion: "1", HardwareRevision: "r", BoardIDs: []string{"board"}, EvidenceRunIDs: []string{"run"}, CalibrationIDs: []string{"cal"}, InstrumentEvidenceIDs: []string{"instrument"}, SignedBy: "reviewer", Conditions: map[string]string{"temperature": "25 Cel"}, Tolerances: map[string]float64{"voltage": 0.1}, ModelSHA256: map[string]string{"model": digest}, ToolDigests: map[string]string{"tool": digest}, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
 	payload, _ := json.Marshal(envelope)
 	envelope.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(private, payload))
 	evidence, _ := json.Marshal(map[string]any{"hardware_validated": true, "human_approved": true, "envelope": envelope})

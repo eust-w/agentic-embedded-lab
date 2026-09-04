@@ -8,5 +8,8 @@ Cload protected 0 100n
 .model TVS D(BV={clamp_voltage} IBV=1m RS=0.1)
 .tran 0.2n 2u
 .measure tran ael_peak_voltage MAX v(protected)
-.measure tran ael_failure PARAM='ael_peak_voltage > 40'
+.measure tran ael_recovery_voltage FIND v(protected) AT=900n
+.measure tran ael_late_voltage FIND v(protected) AT=1900n
+.measure tran ael_peak_series_current PARAM='(1000-ael_peak_voltage)/series_resistance'
+.measure tran ael_failure PARAM='ael_peak_voltage > 40 || abs(ael_late_voltage) > 1'
 .end

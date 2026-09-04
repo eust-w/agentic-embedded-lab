@@ -35,6 +35,18 @@ components:
           type: real
           unit: dB
         - direction: output
+          name: packet_loss
+          type: real
+          unit: "1"
+        - direction: output
+          name: latency_ms
+          type: real
+          unit: ms
+        - direction: output
+          name: energy_j
+          type: real
+          unit: J
+        - direction: output
           name: retries
           type: real
           unit: "1"

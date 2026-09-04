@@ -25,8 +25,17 @@
         "model_id": {
           "type": "string"
         },
+        "model_version": {
+          "type": "string"
+        },
         "hardware_revision": {
           "type": "string"
+        },
+        "board_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "conditions": {
           "additionalProperties": {
@@ -46,6 +55,38 @@
           },
           "type": "array"
         },
+        "calibration_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "instrument_evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "model_sha256": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "tool_digests": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
         "signed_by": {
           "type": "string"
         },
@@ -58,10 +99,18 @@
       "required": [
         "id",
         "model_id",
+        "model_version",
         "hardware_revision",
+        "board_ids",
         "conditions",
         "tolerances",
         "evidence_run_ids",
+        "calibration_ids",
+        "instrument_evidence_ids",
+        "model_sha256",
+        "tool_digests",
+        "created_at",
+        "expires_at",
         "signed_by",
         "signature"
       ]

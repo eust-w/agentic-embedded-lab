@@ -12,8 +12,18 @@ components:
       - {name: damping, direction: input, type: real, unit: "N.m.s"}
       - {name: torque, direction: input, type: real, unit: "N.m"}
       - {name: load_torque, direction: input, type: real, unit: "N.m"}
+      - {name: thermal_resistance_K_per_W, direction: input, type: real, unit: "K/W"}
+      - {name: thermal_capacity_J_per_K, direction: input, type: real, unit: "J/K"}
+      - {name: ambient_temperature_C, direction: input, type: real, unit: "Cel"}
       - {name: speed_limit, direction: input, type: real, unit: "rad/s"}
+      - {name: temperature_limit_C, direction: input, type: real, unit: "Cel"}
+      - {name: maximum_settling_error, direction: input, type: real, unit: "1"}
+      - {name: speed_100ms, direction: output, type: real, unit: "rad/s"}
+      - {name: speed_1s, direction: output, type: real, unit: "rad/s"}
       - {name: speed, direction: output, type: real, unit: "rad/s"}
+      - {name: steady_speed, direction: output, type: real, unit: "rad/s"}
+      - {name: settling_error, direction: output, type: real, unit: "1"}
+      - {name: temperature_C, direction: output, type: real, unit: "Cel"}
       - {name: failure, direction: output, type: real, unit: "1"}
     properties: {}
     fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: ["Uncalibrated lumped electromechanical model."]}

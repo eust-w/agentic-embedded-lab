@@ -22,6 +22,11 @@ components:
           name: rf_loss_db
           type: real
           unit: dB
+        - {direction: output, name: resonance_hz, type: real, unit: Hz}
+        - {direction: output, name: s11_db, type: real, unit: dB}
+        - {direction: output, name: target_s11_db, type: real, unit: dB}
+        - {direction: output, name: nominal_mismatch_loss_db, type: real, unit: dB}
+        - {direction: output, name: requested_mismatch_loss_db, type: real, unit: dB}
         - direction: output
           name: failure
           type: real
@@ -63,6 +68,18 @@ components:
           name: protocol
           type: integer
           unit: "1"
+        - direction: output
+          name: packet_loss
+          type: real
+          unit: "1"
+        - direction: output
+          name: latency_ms
+          type: real
+          unit: ms
+        - direction: output
+          name: energy_j
+          type: real
+          unit: J
         - direction: output
           name: retries
           type: real

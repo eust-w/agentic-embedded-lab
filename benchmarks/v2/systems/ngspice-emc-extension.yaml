@@ -11,6 +11,9 @@ components:
       - {name: clamp_voltage_V, direction: input, type: real, unit: "V"}
       - {name: series_resistance_ohm, direction: input, type: real, unit: "Ohm"}
       - {name: peak_voltage, direction: output, type: real, unit: "V"}
+      - {name: recovery_voltage, direction: output, type: real, unit: "V"}
+      - {name: late_voltage, direction: output, type: real, unit: "V"}
+      - {name: peak_series_current, direction: output, type: real, unit: "A"}
       - {name: failure, direction: output, type: real, unit: "1"}
     properties: {}
     fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: ["Circuit-level EFT surrogate; no IEC immunity certification."]}

@@ -176,14 +176,51 @@ type EvidenceBundle struct {
 }
 
 type ValidationEnvelope struct {
-	ID               string             `json:"id"`
-	ModelID          string             `json:"model_id"`
-	HardwareRevision string             `json:"hardware_revision"`
-	Conditions       map[string]string  `json:"conditions"`
-	Tolerances       map[string]float64 `json:"tolerances"`
-	EvidenceRunIDs   []string           `json:"evidence_run_ids"`
-	SignedBy         string             `json:"signed_by"`
-	Signature        string             `json:"signature"`
+	ID                    string             `json:"id"`
+	ModelID               string             `json:"model_id"`
+	ModelVersion          string             `json:"model_version"`
+	HardwareRevision      string             `json:"hardware_revision"`
+	BoardIDs              []string           `json:"board_ids"`
+	Conditions            map[string]string  `json:"conditions"`
+	Tolerances            map[string]float64 `json:"tolerances"`
+	EvidenceRunIDs        []string           `json:"evidence_run_ids"`
+	CalibrationIDs        []string           `json:"calibration_ids"`
+	InstrumentEvidenceIDs []string           `json:"instrument_evidence_ids"`
+	ModelSHA256           map[string]string  `json:"model_sha256"`
+	ToolDigests           map[string]string  `json:"tool_digests"`
+	CreatedAt             time.Time          `json:"created_at"`
+	ExpiresAt             time.Time          `json:"expires_at"`
+	SignedBy              string             `json:"signed_by"`
+	Signature             string             `json:"signature"`
+}
+
+type CalibrationRecord struct {
+	APIVersion        string             `json:"api_version"`
+	ID                string             `json:"id"`
+	InstrumentID      string             `json:"instrument_id"`
+	InstrumentKind    string             `json:"instrument_kind"`
+	SerialNumber      string             `json:"serial_number"`
+	CertificateSHA256 string             `json:"certificate_sha256"`
+	CalibratedAt      time.Time          `json:"calibrated_at"`
+	ExpiresAt         time.Time          `json:"expires_at"`
+	Uncertainty       map[string]float64 `json:"uncertainty"`
+	Units             map[string]string  `json:"units"`
+	ApprovedBy        string             `json:"approved_by"`
+	Signature         string             `json:"signature"`
+}
+
+type InstrumentEvidence struct {
+	APIVersion        string             `json:"api_version"`
+	ID                string             `json:"id"`
+	RunID             string             `json:"run_id"`
+	InstrumentID      string             `json:"instrument_id"`
+	CalibrationID     string             `json:"calibration_id"`
+	Operation         string             `json:"operation"`
+	RawArtifactSHA256 string             `json:"raw_artifact_sha256"`
+	Observations      map[string]float64 `json:"observations"`
+	Units             map[string]string  `json:"units"`
+	CapturedAt        time.Time          `json:"captured_at"`
+	Signature         string             `json:"signature"`
 }
 
 type Claim struct {

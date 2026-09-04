@@ -76,6 +76,13 @@
 - Optional tool-executed model packs cover an OpenModelica electromechanical
   motor, battery aging and sensor dynamics, plus ngspice PCB series parasitics
   and EFT clamping. All remain uncalibrated functional evidence.
+- Extension oracles now cover RTL reset/hold/wrap/IRQ behavior, motor dynamics
+  and temperature, battery fade/resistance/loaded voltage, sensor lag/scale/
+  saturation, PCB transients and EFT recovery rather than a single failure bit.
+- Every fixed extension requires 20 identical event-trace and assertion-result
+  hashes; the 24-case matrix verifies both trace and Oracle outcomes.
+- Lab software defines strict calibration, instrument-evidence, Validation
+  Envelope and allow-listed operation contracts; raw SCPI is never exposed.
 
 ## Remaining release gates
 

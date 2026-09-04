@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/calibration-record",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "instrument_id": {
+      "type": "string"
+    },
+    "instrument_kind": {
+      "type": "string"
+    },
+    "serial_number": {
+      "type": "string"
+    },
+    "certificate_sha256": {
+      "type": "string"
+    },
+    "calibrated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "uncertainty": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "type": "object"
+    },
+    "units": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "signature": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "instrument_id",
+    "instrument_kind",
+    "serial_number",
+    "certificate_sha256",
+    "calibrated_at",
+    "expires_at",
+    "uncertainty",
+    "units",
+    "approved_by",
+    "signature"
+  ]
+}

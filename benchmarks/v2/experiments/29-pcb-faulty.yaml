@@ -5,7 +5,7 @@ duration_us: 1000
 macro_step_us: 1000
 seed: 1029
 timeout: 120000000000
-stimuli: [{at_us: 0, target: pcb.trace_inductance_nH, value: 80}, {at_us: 0, target: pcb.trace_resistance_ohm, value: 1.0}, {at_us: 0, target: pcb.decoupling_uF, value: 0.1}, {at_us: 0, target: pcb.load_mA, value: 800}]
+stimuli: [{at_us: 0, target: pcb.trace_inductance_nH, value: 80}, {at_us: 0, target: pcb.trace_resistance_ohm, value: 1.0}, {at_us: 0, target: pcb.decoupling_uF, value: 0.1}, {at_us: 0, target: pcb.capacitor_esr_ohm, value: 1.0}, {at_us: 0, target: pcb.load_mA, value: 800}]
 faults: []
 assertions: [{id: A01, metric: pcb.failure, operator: "==", expected: 0}]
 required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

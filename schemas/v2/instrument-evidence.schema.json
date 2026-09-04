@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/ael/instrument-evidence",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "instrument_id": {
+      "type": "string"
+    },
+    "calibration_id": {
+      "type": "string"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "raw_artifact_sha256": {
+      "type": "string"
+    },
+    "observations": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "type": "object"
+    },
+    "units": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "signature": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "id",
+    "run_id",
+    "instrument_id",
+    "calibration_id",
+    "operation",
+    "raw_artifact_sha256",
+    "observations",
+    "units",
+    "captured_at",
+    "signature"
+  ]
+}

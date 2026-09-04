@@ -50,6 +50,10 @@ components:
           name: latency_ms
           type: real
           unit: ms
+        - direction: output
+          name: energy_j
+          type: real
+          unit: J
       properties:
         program: scratch/ael-network
       rollback: false

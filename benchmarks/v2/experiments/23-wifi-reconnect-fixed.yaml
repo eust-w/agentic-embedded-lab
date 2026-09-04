@@ -8,6 +8,10 @@ assertions:
       id: A02
       metric: mcu.failure
       operator: ==
+    - {id: A03, metric: network.packet_loss, operator: "==", expected: 0}
+    - {id: A04, metric: network.retries, operator: "<=", expected: 8}
+    - {id: A05, metric: network.latency_ms, operator: "<", expected: 20}
+    - {id: A06, metric: network.energy_j, operator: ">=", expected: 0}
 duration_us: 6000
 faults: null
 id: 23-wifi-reconnect-fixed

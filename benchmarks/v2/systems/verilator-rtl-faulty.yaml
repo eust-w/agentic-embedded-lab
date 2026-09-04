@@ -9,6 +9,9 @@ components:
     event_driven: false
     ports:
       - {name: count, direction: output, type: real, unit: "1"}
+      - {name: wraps, direction: output, type: real, unit: "1"}
+      - {name: irq_count, direction: output, type: real, unit: "1"}
+      - {name: hold_violations, direction: output, type: real, unit: "1"}
       - {name: failure, direction: output, type: real, unit: "1"}
     properties: {faulty: true}
     fidelity:

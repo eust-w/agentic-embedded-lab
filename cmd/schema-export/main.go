@@ -10,6 +10,7 @@ import (
 	capability "github.com/eust-w/agentic-embedded-lab/internal/acceptance"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/modeling"
+	"github.com/eust-w/agentic-embedded-lab/internal/lab"
 	"github.com/eust-w/agentic-embedded-lab/internal/plugins"
 	"github.com/eust-w/agentic-embedded-lab/internal/protocol"
 	"github.com/invopop/jsonschema"
@@ -36,6 +37,10 @@ func main() {
 		"ael-evidence-bundle":        ael.EvidenceBundle{},
 		"ael-claim":                  ael.Claim{},
 		"validation-envelope":        ael.ValidationEnvelope{},
+		"calibration-record":         ael.CalibrationRecord{},
+		"instrument-evidence":        ael.InstrumentEvidence{},
+		"lab-operation-request":      lab.OperationRequest{},
+		"lab-operation-result":       lab.OperationResult{},
 		"hardware-behavior-ir":       modeling.IR{},
 		"model-package":              modeling.Package{},
 		"model-generation-request":   modeling.GenerationRequest{},

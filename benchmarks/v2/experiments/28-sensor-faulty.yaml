@@ -5,7 +5,7 @@ duration_us: 1000
 macro_step_us: 1000
 seed: 1028
 timeout: 120000000000
-stimuli: [{at_us: 0, target: sensor.true_value, value: 25}, {at_us: 0, target: sensor.bias, value: 3}, {at_us: 0, target: sensor.time_constant_s, value: 0.5}, {at_us: 0, target: sensor.max_error, value: 1}]
+stimuli: [{at_us: 0, target: sensor.true_value, value: 25}, {at_us: 0, target: sensor.bias, value: 3}, {at_us: 0, target: sensor.scale_factor, value: 1}, {at_us: 0, target: sensor.time_constant_s, value: 0.5}, {at_us: 0, target: sensor.minimum_output, value: -40}, {at_us: 0, target: sensor.maximum_output, value: 85}, {at_us: 0, target: sensor.max_error, value: 1}]
 faults: []
 assertions: [{id: A01, metric: sensor.failure, operator: "==", expected: 0}]
 required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

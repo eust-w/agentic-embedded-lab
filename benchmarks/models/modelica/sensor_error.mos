@@ -1,16 +1,25 @@
 model AelSensorError
   parameter Real trueValue = {{true_value}};
   parameter Real bias = {{bias}};
+  parameter Real scaleFactor = {{scale_factor}};
   parameter Real timeConstant = {{time_constant_s}};
+  parameter Real minimumOutput = {{minimum_output}};
+  parameter Real maximumOutput = {{maximum_output}};
   Real estimate(start=0, fixed=true);
 equation
-  der(estimate) = (trueValue + bias - estimate) / timeConstant;
+  der(estimate) = (min(maximumOutput, max(minimumOutput, trueValue * scaleFactor + bias)) - estimate) / timeConstant;
 end AelSensorError;
-result := simulate(AelSensorError, stopTime=5.0, numberOfIntervals=500, outputFormat="mat", fileNamePrefix="ael_sensor");
+result := simulate(AelSensorError, stopTime=5.0, numberOfIntervals=1000, tolerance=1e-9, outputFormat="mat", fileNamePrefix="ael_sensor");
+estimate500ms := val(estimate, 0.5, "ael_sensor_res.mat");
+estimate1s := val(estimate, 1.0, "ael_sensor_res.mat");
 estimate := val(estimate, 5.0, "ael_sensor_res.mat");
 error := abs(estimate - {{true_value}});
+normalizedError := error / max(1e-9, abs({{true_value}}));
 failure := if error > {{max_error}} then 1.0 else 0.0;
+print("AEL_METRIC estimate_500ms=" + String(estimate500ms) + "\n");
+print("AEL_METRIC estimate_1s=" + String(estimate1s) + "\n");
 print("AEL_METRIC estimate=" + String(estimate) + "\n");
 print("AEL_METRIC error=" + String(error) + "\n");
+print("AEL_METRIC normalized_error=" + String(normalizedError) + "\n");
 print("AEL_METRIC failure=" + String(failure) + "\n");
-print("AEL_EVENT modelica.sensor_error {\"calibrated\":false}\n");
+print("AEL_EVENT modelica.sensor_error {\"effects\":[\"bias\",\"scale\",\"saturation\",\"lag\"],\"calibrated\":false}\n");

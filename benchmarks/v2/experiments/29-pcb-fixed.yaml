@@ -5,7 +5,7 @@ duration_us: 1000
 macro_step_us: 1000
 seed: 1029
 timeout: 120000000000
-stimuli: [{at_us: 0, target: pcb.trace_inductance_nH, value: 5}, {at_us: 0, target: pcb.trace_resistance_ohm, value: 0.05}, {at_us: 0, target: pcb.decoupling_uF, value: 47}, {at_us: 0, target: pcb.load_mA, value: 100}]
+stimuli: [{at_us: 0, target: pcb.trace_inductance_nH, value: 5}, {at_us: 0, target: pcb.trace_resistance_ohm, value: 0.05}, {at_us: 0, target: pcb.decoupling_uF, value: 47}, {at_us: 0, target: pcb.capacitor_esr_ohm, value: 0.02}, {at_us: 0, target: pcb.load_mA, value: 100}]
 faults: []
-assertions: [{id: A01, metric: pcb.failure, operator: "==", expected: 0}]
+assertions: [{id: A01, metric: pcb.failure, operator: "==", expected: 0}, {id: A02, metric: pcb.supply_voltage, operator: ">", expected: 3.0}, {id: A03, metric: pcb.ringing_peak, operator: "<", expected: 3.6}, {id: A04, metric: pcb.final_voltage, operator: ">", expected: 3.1}, {id: A05, metric: pcb.droop, operator: "<", expected: 0.3}, {id: A06, metric: pcb.ripple, operator: "<", expected: 0.4}]
 required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

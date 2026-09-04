@@ -10,9 +10,16 @@ components:
     ports:
       - {name: true_value, direction: input, type: real, unit: "1"}
       - {name: bias, direction: input, type: real, unit: "1"}
+      - {name: scale_factor, direction: input, type: real, unit: "1"}
       - {name: time_constant_s, direction: input, type: real, unit: "s"}
+      - {name: minimum_output, direction: input, type: real, unit: "1"}
+      - {name: maximum_output, direction: input, type: real, unit: "1"}
       - {name: max_error, direction: input, type: real, unit: "1"}
+      - {name: estimate_500ms, direction: output, type: real, unit: "1"}
+      - {name: estimate_1s, direction: output, type: real, unit: "1"}
+      - {name: estimate, direction: output, type: real, unit: "1"}
       - {name: error, direction: output, type: real, unit: "1"}
+      - {name: normalized_error, direction: output, type: real, unit: "1"}
       - {name: failure, direction: output, type: real, unit: "1"}
     properties: {}
     fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: ["Deterministic bias/dynamics model; no calibrated stochastic noise."]}

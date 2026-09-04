@@ -7,5 +7,5 @@ seed: 1030
 timeout: 120000000000
 stimuli: [{at_us: 0, target: emc.clamp_voltage_V, value: 20}, {at_us: 0, target: emc.series_resistance_ohm, value: 100}]
 faults: []
-assertions: [{id: A01, metric: emc.failure, operator: "==", expected: 0}]
+assertions: [{id: A01, metric: emc.failure, operator: "==", expected: 0}, {id: A02, metric: emc.peak_voltage, operator: "<", expected: 40}, {id: A03, metric: emc.recovery_voltage, operator: "<", expected: 1}, {id: A04, metric: emc.late_voltage, operator: "<", expected: 1}, {id: A05, metric: emc.peak_series_current, operator: "<", expected: 15}]
 required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

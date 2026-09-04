@@ -43,6 +43,16 @@ assertions:
       metric: plant.temperature
       operator: "<"
       unit: Cel
+    - {id: A10, metric: antenna.rf_loss_db, operator: "==", expected: 0}
+    - {id: A11, metric: antenna.resonance_hz, operator: ">", expected: 1900000000}
+    - {id: A12, metric: antenna.resonance_hz, operator: "<", expected: 3000000000}
+    - {id: A13, metric: antenna.s11_db, operator: "<", expected: 0}
+    - {id: A14, metric: antenna.target_s11_db, operator: "<", expected: 0}
+    - {id: A15, metric: antenna.nominal_mismatch_loss_db, operator: "<", expected: 30}
+    - {id: A16, metric: antenna.requested_mismatch_loss_db, operator: "<", expected: 30}
+    - {id: A17, metric: network.packet_loss, operator: "==", expected: 0}
+    - {id: A18, metric: network.latency_ms, operator: "<", expected: 20}
+    - {id: A19, metric: network.energy_j, operator: ">=", expected: 0}
 duration_us: 6000
 faults: null
 id: 24-antenna-cross-domain-fixed

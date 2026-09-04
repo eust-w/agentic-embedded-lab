@@ -12,8 +12,19 @@ components:
       - {name: fade_per_cycle, direction: input, type: real, unit: "1"}
       - {name: cycles, direction: input, type: real, unit: "1"}
       - {name: load_current_A, direction: input, type: real, unit: "A"}
+      - {name: ambient_temperature_C, direction: input, type: real, unit: "Cel"}
+      - {name: temperature_coefficient_per_C, direction: input, type: real, unit: "1/K"}
+      - {name: nominal_voltage_V, direction: input, type: real, unit: "V"}
+      - {name: base_resistance_ohm, direction: input, type: real, unit: "Ohm"}
+      - {name: resistance_growth_per_cycle, direction: input, type: real, unit: "1"}
       - {name: minimum_runtime_h, direction: input, type: real, unit: "h"}
+      - {name: cutoff_voltage_V, direction: input, type: real, unit: "V"}
+      - {name: minimum_capacity_retention, direction: input, type: real, unit: "1"}
+      - {name: remaining_capacity_Ah, direction: output, type: real, unit: "A.h"}
+      - {name: capacity_retention, direction: output, type: real, unit: "1"}
       - {name: runtime_hours, direction: output, type: real, unit: "h"}
+      - {name: internal_resistance_ohm, direction: output, type: real, unit: "Ohm"}
+      - {name: loaded_voltage_V, direction: output, type: real, unit: "V"}
       - {name: failure, direction: output, type: real, unit: "1"}
     properties: {}
     fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: ["Uncalibrated capacity-fade model; not electrochemical equivalence."]}

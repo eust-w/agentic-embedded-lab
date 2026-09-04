@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/lab/operation-request",
+  "properties": {
+    "api_version": {
+      "type": "string"
+    },
+    "instrument_id": {
+      "type": "string"
+    },
+    "calibration_id": {
+      "type": "string"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "parameters": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "api_version",
+    "instrument_id",
+    "calibration_id",
+    "operation",
+    "parameters"
+  ]
+}

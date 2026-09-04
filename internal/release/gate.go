@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/eust-w/agentic-embedded-lab/internal/ael"
 	"github.com/eust-w/agentic-embedded-lab/internal/ael/benchmark"
@@ -203,6 +204,9 @@ func validateEntries(root string, manifest benchmark.AcceptanceManifest, require
 		if strings.HasPrefix(name, "extension:") {
 			failures = append(failures, validateExtensionRuns(root, path, manifest.SourceRevision)...)
 		}
+		if name == "determinism:trace-matrix" {
+			failures = append(failures, validateDeterminismRuns(root, path, manifest.SourceRevision)...)
+		}
 		if strings.HasPrefix(name, "hardware:") || strings.HasPrefix(name, "calibration:") || strings.HasPrefix(name, "claims:") {
 			failures = append(failures, validateProductionEvidence(root, path)...)
 		}
@@ -222,6 +226,9 @@ func validateProductionEvidence(root, path string) []string {
 	}
 	if json.Unmarshal(data, &evidence) != nil || !evidence.HardwareValidated || !evidence.HumanApproved || evidence.Envelope.SignedBy == "" || evidence.Envelope.Signature == "" || len(evidence.Envelope.EvidenceRunIDs) == 0 {
 		return []string{"production evidence lacks hardware validation, human approval, runs, or signature: " + path}
+	}
+	if err := ael.ValidateEnvelope(evidence.Envelope, time.Now().UTC()); err != nil {
+		return []string{"production validation envelope is incomplete: " + err.Error()}
 	}
 	keysData, err := os.ReadFile(filepath.Join(root, "lab", "trusted-reviewers.json"))
 	if err != nil {
@@ -248,6 +255,84 @@ func validateProductionEvidence(root, path string) []string {
 	return nil
 }
 
+func validateDeterminismRuns(root, path, revision string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	type matrixEntry struct {
+		TraceHashes   []string `json:"trace_hashes"`
+		OutcomeHashes []string `json:"outcome_hashes"`
+		RunPaths      []string `json:"run_paths"`
+		AllEqual      bool     `json:"all_equal"`
+	}
+	var evidence struct {
+		SourceRevision string                 `json:"source_revision"`
+		BenchmarkCount int                    `json:"benchmark_count"`
+		BaseRepeats    int                    `json:"base_repeats"`
+		StressRepeats  int                    `json:"stress_repeats"`
+		StressCaseIDs  []int                  `json:"stress_case_ids"`
+		Matrix         map[string]matrixEntry `json:"matrix"`
+		AllEqual       bool                   `json:"all_equal"`
+	}
+	if json.Unmarshal(data, &evidence) != nil || evidence.SourceRevision != revision || evidence.BenchmarkCount != 24 || evidence.BaseRepeats < 2 || evidence.StressRepeats < 20 || !evidence.AllEqual || len(evidence.Matrix) != 24 {
+		return []string{"determinism matrix is incomplete or stale: " + path}
+	}
+	stress := map[string]bool{}
+	for _, id := range evidence.StressCaseIDs {
+		stress[fmt.Sprintf("%02d-", id)] = true
+	}
+	var failures []string
+	for name, entry := range evidence.Matrix {
+		expected := evidence.BaseRepeats
+		for prefix := range stress {
+			if strings.HasPrefix(name, prefix) {
+				expected = evidence.StressRepeats
+			}
+		}
+		if !entry.AllEqual || len(entry.TraceHashes) != expected || len(entry.OutcomeHashes) != expected || len(entry.RunPaths) != expected {
+			failures = append(failures, "determinism case is incomplete: "+name)
+			continue
+		}
+		for index, runPath := range entry.RunPaths {
+			if filepath.IsAbs(runPath) || !strings.HasPrefix(filepath.ToSlash(runPath), "runs/") {
+				failures = append(failures, "invalid determinism run path: "+runPath)
+				continue
+			}
+			runRoot := filepath.Join(root, filepath.FromSlash(runPath))
+			failures = append(failures, validateRunBundle(runRoot, revision)...)
+			var provenance struct {
+				TraceSHA256 string `json:"trace_sha256"`
+			}
+			provenanceData, readErr := os.ReadFile(filepath.Join(runRoot, "provenance.json"))
+			if readErr != nil || json.Unmarshal(provenanceData, &provenance) != nil || provenance.TraceSHA256 != entry.TraceHashes[index] {
+				failures = append(failures, "determinism trace mismatch: "+runPath)
+			}
+			assertionsData, readErr := os.ReadFile(filepath.Join(runRoot, "assertions.json"))
+			var assertions []ael.AssertionResult
+			if readErr != nil || json.Unmarshal(assertionsData, &assertions) != nil || assertionOutcomeHash(assertions) != entry.OutcomeHashes[index] {
+				failures = append(failures, "determinism outcome mismatch: "+runPath)
+			}
+		}
+	}
+	return failures
+}
+
+func assertionOutcomeHash(assertions []ael.AssertionResult) string {
+	type outcome struct {
+		ID          string  `json:"id"`
+		Passed      bool    `json:"passed"`
+		Expected    float64 `json:"expected"`
+		Aggregation string  `json:"aggregation"`
+	}
+	values := make([]outcome, 0, len(assertions))
+	for _, assertion := range assertions {
+		values = append(values, outcome{ID: assertion.ID, Passed: assertion.Passed, Expected: assertion.Expected, Aggregation: assertion.Aggregation})
+	}
+	payload, _ := json.Marshal(values)
+	return fmt.Sprintf("%x", sha256.Sum256(payload))
+}
+
 func validateExtensionRuns(root, path, revision string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -259,6 +344,13 @@ func validateExtensionRuns(root, path, revision string) []string {
 			RunPath string `json:"run_path"`
 			Passed  bool   `json:"passed"`
 		} `json:"checks"`
+		Determinism struct {
+			Repeats         int      `json:"repeats"`
+			TraceHashes     []string `json:"trace_hashes"`
+			AssertionHashes []string `json:"assertion_hashes"`
+			RunPaths        []string `json:"run_paths"`
+			AllEqual        bool     `json:"all_equal"`
+		} `json:"determinism"`
 	}
 	if json.Unmarshal(data, &evidence) != nil || evidence.SourceRevision != revision {
 		return []string{"invalid or stale extension evidence: " + path}
@@ -270,6 +362,29 @@ func validateExtensionRuns(root, path, revision string) []string {
 			continue
 		}
 		failures = append(failures, validateRunBundle(filepath.Join(root, filepath.FromSlash(check.RunPath)), revision)...)
+	}
+	if evidence.Determinism.Repeats < 20 || !evidence.Determinism.AllEqual || len(evidence.Determinism.TraceHashes) != evidence.Determinism.Repeats || len(evidence.Determinism.AssertionHashes) != evidence.Determinism.Repeats || len(evidence.Determinism.RunPaths) != evidence.Determinism.Repeats {
+		failures = append(failures, "extension determinism evidence is incomplete: "+path)
+		return failures
+	}
+	for index, runPath := range evidence.Determinism.RunPaths {
+		if filepath.IsAbs(runPath) || !strings.HasPrefix(filepath.ToSlash(runPath), "runs/") || evidence.Determinism.TraceHashes[index] == "" {
+			failures = append(failures, "invalid extension determinism run reference: "+runPath)
+			continue
+		}
+		runRoot := filepath.Join(root, filepath.FromSlash(runPath))
+		failures = append(failures, validateRunBundle(runRoot, revision)...)
+		var provenance struct {
+			TraceSHA256 string `json:"trace_sha256"`
+		}
+		data, err := os.ReadFile(filepath.Join(runRoot, "provenance.json"))
+		if err != nil || json.Unmarshal(data, &provenance) != nil || provenance.TraceSHA256 != evidence.Determinism.TraceHashes[index] {
+			failures = append(failures, "extension determinism trace mismatch: "+runPath)
+		}
+		assertionHash, err := benchmark.FileSHA256(filepath.Join(runRoot, "assertions.json"))
+		if err != nil || assertionHash != evidence.Determinism.AssertionHashes[index] {
+			failures = append(failures, "extension determinism assertion mismatch: "+runPath)
+		}
 	}
 	return failures
 }

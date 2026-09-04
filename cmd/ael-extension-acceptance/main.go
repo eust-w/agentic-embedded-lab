@@ -23,18 +23,25 @@ type runEvidence struct {
 	RunID           string `json:"run_id"`
 	RunPath         string `json:"run_path"`
 	TraceSHA256     string `json:"trace_sha256"`
+	AssertionSHA256 string `json:"assertion_sha256"`
 	ExpectedFailure bool   `json:"expected_failure"`
 	Passed          bool   `json:"passed"`
+	AssertionCount  int    `json:"assertion_count"`
+	ArtifactCount   int    `json:"artifact_count"`
 }
 
 func main() {
 	workspace := flag.String("workspace", ".", "workspace")
+	determinismRepeats := flag.Int("determinism-repeats", 20, "fixed variant deterministic repetitions")
 	flag.Parse()
 	root, err := filepath.Abs(*workspace)
 	fatal(err)
 	revision := gitRevision(root)
 	if revision == "" {
 		fatal(errors.New("Git revision is required"))
+	}
+	if *determinismRepeats < 2 {
+		fatal(errors.New("determinism-repeats must be at least 2"))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -45,6 +52,9 @@ func main() {
 	manifest := benchmark.AcceptanceManifest{APIVersion: ael.APIVersion, Profile: "simulation-extensions", SourceRevision: revision, CreatedAt: time.Now().UTC()}
 	for _, item := range items {
 		var checks []runEvidence
+		fixedHashes := make([]string, 0, *determinismRepeats)
+		fixedAssertionHashes := make([]string, 0, *determinismRepeats)
+		fixedRuns := make([]string, 0, *determinismRepeats)
 		for _, variant := range []string{"faulty", "fixed"} {
 			system := item.System
 			if item.ID == "rtl" {
@@ -60,10 +70,40 @@ func main() {
 			expectedFailure := variant == "faulty"
 			relative, relErr := filepath.Rel(root, path)
 			fatal(relErr)
-			checks = append(checks, runEvidence{Variant: variant, RunID: bundle.RunID, RunPath: filepath.ToSlash(relative), TraceSHA256: bundle.TraceSHA256, ExpectedFailure: expectedFailure, Passed: failed == expectedFailure})
+			assertionHash, hashErr := benchmark.FileSHA256(filepath.Join(path, "assertions.json"))
+			fatal(hashErr)
+			checks = append(checks, runEvidence{Variant: variant, RunID: bundle.RunID, RunPath: filepath.ToSlash(relative), TraceSHA256: bundle.TraceSHA256, AssertionSHA256: assertionHash, ExpectedFailure: expectedFailure, Passed: failed == expectedFailure, AssertionCount: len(bundle.Assertions), ArtifactCount: len(bundle.Artifacts)})
+			if variant == "fixed" {
+				fixedHashes = append(fixedHashes, bundle.TraceSHA256)
+				fixedAssertionHashes = append(fixedAssertionHashes, assertionHash)
+				fixedRuns = append(fixedRuns, filepath.ToSlash(relative))
+			}
 		}
+		for repeat := 1; repeat < *determinismRepeats; repeat++ {
+			system := item.System
+			if item.ID == "rtl" {
+				system += "-fixed"
+			}
+			experimentPath := fmt.Sprintf("benchmarks/v2/experiments/%s-fixed.yaml", item.Slug)
+			systemPath := fmt.Sprintf("benchmarks/v2/systems/%s.yaml", system)
+			bundle, runPath, runErr := lab.Run(ctx, experimentPath, systemPath, revision)
+			fatal(runErr)
+			for _, assertion := range bundle.Assertions {
+				if !assertion.Passed {
+					fatal(fmt.Errorf("extension %s deterministic repeat %d assertion %s failed", item.ID, repeat, assertion.ID))
+				}
+			}
+			relative, relErr := filepath.Rel(root, runPath)
+			fatal(relErr)
+			assertionHash, hashErr := benchmark.FileSHA256(filepath.Join(runPath, "assertions.json"))
+			fatal(hashErr)
+			fixedHashes = append(fixedHashes, bundle.TraceSHA256)
+			fixedAssertionHashes = append(fixedAssertionHashes, assertionHash)
+			fixedRuns = append(fixedRuns, filepath.ToSlash(relative))
+		}
+		deterministic := allEqual(fixedHashes) && allEqual(fixedAssertionHashes)
 		path := filepath.Join(root, "acceptance", "v2", "evidence", "extension-"+item.ID+".json")
-		payload := map[string]any{"api_version": ael.APIVersion, "id": item.ID, "source_revision": revision, "checks": checks, "hardware_validated": false}
+		payload := map[string]any{"api_version": ael.APIVersion, "id": item.ID, "source_revision": revision, "checks": checks, "determinism": map[string]any{"repeats": *determinismRepeats, "trace_hashes": fixedHashes, "assertion_hashes": fixedAssertionHashes, "run_paths": fixedRuns, "all_equal": deterministic}, "hardware_validated": false}
 		data, _ := json.MarshalIndent(payload, "", "  ")
 		fatal(os.MkdirAll(filepath.Dir(path), 0o700))
 		fatal(os.WriteFile(path, append(data, '\n'), 0o600))
@@ -73,6 +113,7 @@ func main() {
 		for _, check := range checks {
 			passed = passed && check.Passed
 		}
+		passed = passed && deterministic
 		status := "failed"
 		if passed {
 			status = "passed"
@@ -88,6 +129,18 @@ func main() {
 		}
 	}
 	fmt.Printf("extensions=%d passed=true revision=%s\n", len(manifest.Entries), revision[:12])
+}
+
+func allEqual(values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	for _, value := range values[1:] {
+		if value != values[0] {
+			return false
+		}
+	}
+	return true
 }
 
 func buildWorker(ctx context.Context, root, output string) error {

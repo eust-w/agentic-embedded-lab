@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -102,9 +103,10 @@ func main() {
 	}
 	stressCases := map[int]bool{4: true, 18: true, 21: true, 22: true, 24: true}
 	type traceSet struct {
-		seed   int64
-		hashes []string
-		runs   []string
+		seed          int64
+		hashes        []string
+		outcomeHashes []string
+		runs          []string
 	}
 	sets := map[string]*traceSet{}
 	type deterministicJob struct {
@@ -132,6 +134,7 @@ func main() {
 				}
 				determinismMu.Lock()
 				sets[job.prefix].hashes[job.repeat] = bundle.TraceSHA256
+				sets[job.prefix].outcomeHashes[job.repeat] = assertionOutcomeHash(bundle.Assertions)
 				sets[job.prefix].runs[job.repeat] = filepath.ToSlash(relative)
 				determinismMu.Unlock()
 			}
@@ -148,7 +151,7 @@ func main() {
 		if stressCases[item.ID] {
 			repeatCount = *stressRepeats
 		}
-		sets[prefix] = &traceSet{seed: experiment.Seed, hashes: make([]string, repeatCount), runs: make([]string, repeatCount)}
+		sets[prefix] = &traceSet{seed: experiment.Seed, hashes: make([]string, repeatCount), outcomeHashes: make([]string, repeatCount), runs: make([]string, repeatCount)}
 		for repeat := 0; repeat < repeatCount; repeat++ {
 			determinismJobs <- deterministicJob{prefix: prefix, experimentPath: experimentPath, systemPath: systemPath, repeat: repeat}
 		}
@@ -166,9 +169,9 @@ func main() {
 	matrix := map[string]any{}
 	deterministic := true
 	for prefix, set := range sets {
-		equal := allEqual(set.hashes)
+		equal := allEqual(set.hashes) && allEqual(set.outcomeHashes)
 		deterministic = deterministic && equal
-		matrix[prefix] = map[string]any{"seed": set.seed, "trace_hashes": set.hashes, "run_paths": set.runs, "all_equal": equal}
+		matrix[prefix] = map[string]any{"seed": set.seed, "trace_hashes": set.hashes, "outcome_hashes": set.outcomeHashes, "run_paths": set.runs, "all_equal": equal}
 	}
 	determinismPath := filepath.Join(root, "acceptance", "v2", "evidence", "determinism-trace-matrix.json")
 	determinismPayload := map[string]any{"api_version": ael.APIVersion, "source_revision": *revision, "benchmark_count": len(catalog.Cases), "base_repeats": *determinismRepeats, "stress_repeats": *stressRepeats, "stress_case_ids": []int{4, 18, 21, 22, 24}, "matrix": matrix, "all_equal": deterministic, "hardware_validated": false}
@@ -227,6 +230,21 @@ func allEqual(values []string) bool {
 		}
 	}
 	return len(values) > 0
+}
+
+func assertionOutcomeHash(assertions []ael.AssertionResult) string {
+	type outcome struct {
+		ID          string  `json:"id"`
+		Passed      bool    `json:"passed"`
+		Expected    float64 `json:"expected"`
+		Aggregation string  `json:"aggregation"`
+	}
+	values := make([]outcome, 0, len(assertions))
+	for _, assertion := range assertions {
+		values = append(values, outcome{ID: assertion.ID, Passed: assertion.Passed, Expected: assertion.Expected, Aggregation: assertion.Aggregation})
+	}
+	payload, _ := json.Marshal(values)
+	return fmt.Sprintf("%x", sha256.Sum256(payload))
 }
 
 func currentFMIEntry(root, revision string) (benchmark.AcceptanceEntry, error) {

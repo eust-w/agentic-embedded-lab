@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/eust-w/agentic-embedded-lab/internal/lab/operation-result",
+  "properties": {
+    "instrument_id": {
+      "type": "string"
+    },
+    "calibration_id": {
+      "type": "string"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "observations": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "type": "object"
+    },
+    "units": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "artifact_path": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "required": [
+    "instrument_id",
+    "calibration_id",
+    "operation",
+    "observations",
+    "units",
+    "artifact_path"
+  ]
+}

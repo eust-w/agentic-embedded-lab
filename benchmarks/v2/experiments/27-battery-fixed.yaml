@@ -5,7 +5,7 @@ duration_us: 1000
 macro_step_us: 1000
 seed: 1027
 timeout: 120000000000
-stimuli: [{at_us: 0, target: battery.capacity_Ah, value: 2.4}, {at_us: 0, target: battery.fade_per_cycle, value: 0.0002}, {at_us: 0, target: battery.cycles, value: 800}, {at_us: 0, target: battery.load_current_A, value: 0.02}, {at_us: 0, target: battery.minimum_runtime_h, value: 50}]
+stimuli: [{at_us: 0, target: battery.capacity_Ah, value: 2.4}, {at_us: 0, target: battery.fade_per_cycle, value: 0.0002}, {at_us: 0, target: battery.cycles, value: 800}, {at_us: 0, target: battery.load_current_A, value: 0.02}, {at_us: 0, target: battery.ambient_temperature_C, value: 25}, {at_us: 0, target: battery.temperature_coefficient_per_C, value: 0.002}, {at_us: 0, target: battery.nominal_voltage_V, value: 3.7}, {at_us: 0, target: battery.base_resistance_ohm, value: 0.05}, {at_us: 0, target: battery.resistance_growth_per_cycle, value: 0.0005}, {at_us: 0, target: battery.minimum_runtime_h, value: 50}, {at_us: 0, target: battery.cutoff_voltage_V, value: 3.0}, {at_us: 0, target: battery.minimum_capacity_retention, value: 0.7}]
 faults: []
-assertions: [{id: A01, metric: battery.failure, operator: "==", expected: 0}]
+assertions: [{id: A01, metric: battery.failure, operator: "==", expected: 0}, {id: A02, metric: battery.remaining_capacity_Ah, operator: ">", expected: 2.0}, {id: A03, metric: battery.capacity_retention, operator: ">", expected: 0.8}, {id: A04, metric: battery.runtime_hours, operator: ">", expected: 100}, {id: A05, metric: battery.loaded_voltage_V, operator: ">", expected: 3.5}, {id: A06, metric: battery.internal_resistance_ohm, operator: "<", expected: 0.1}]
 required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

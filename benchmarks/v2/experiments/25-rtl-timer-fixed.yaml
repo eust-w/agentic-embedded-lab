@@ -9,5 +9,8 @@ stimuli: []
 faults: []
 assertions:
   - {id: A01, metric: rtl.failure, operator: "==", expected: 0}
-  - {id: A02, metric: rtl.count, operator: "==", expected: 8}
+  - {id: A02, metric: rtl.count, operator: "==", expected: 7}
+  - {id: A03, metric: rtl.wraps, operator: "==", expected: 1}
+  - {id: A04, metric: rtl.irq_count, operator: "==", expected: 2}
+  - {id: A05, metric: rtl.hold_violations, operator: "==", expected: 0}
 required_fidelity: {firmware: unsupported, register: functional, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

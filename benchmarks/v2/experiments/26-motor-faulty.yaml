@@ -5,7 +5,7 @@ duration_us: 1000
 macro_step_us: 1000
 seed: 1026
 timeout: 120000000000
-stimuli: [{at_us: 0, target: motor.inertia, value: 0.02}, {at_us: 0, target: motor.damping, value: 0.002}, {at_us: 0, target: motor.torque, value: 1.2}, {at_us: 0, target: motor.load_torque, value: 0.1}, {at_us: 0, target: motor.speed_limit, value: 50}]
+stimuli: [{at_us: 0, target: motor.inertia, value: 0.02}, {at_us: 0, target: motor.damping, value: 0.002}, {at_us: 0, target: motor.torque, value: 1.2}, {at_us: 0, target: motor.load_torque, value: 0.1}, {at_us: 0, target: motor.thermal_resistance_K_per_W, value: 15}, {at_us: 0, target: motor.thermal_capacity_J_per_K, value: 8}, {at_us: 0, target: motor.ambient_temperature_C, value: 25}, {at_us: 0, target: motor.speed_limit, value: 50}, {at_us: 0, target: motor.temperature_limit_C, value: 60}, {at_us: 0, target: motor.maximum_settling_error, value: 0.1}]
 faults: []
 assertions: [{id: A01, metric: motor.failure, operator: "==", expected: 0}]
 required_fidelity: {firmware: unsupported, register: unsupported, protocol: functional, timing: functional, physical: unsupported, hardware_validated: false, limitations: []}

@@ -1,11 +1,38 @@
 package release
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestDeterminismEvidenceRequiresAssertionHashesAndStressRuns(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "matrix.json")
+	payload, _ := json.Marshal(map[string]any{"source_revision": "rev", "benchmark_count": 24, "base_repeats": 2, "stress_repeats": 20, "all_equal": true, "matrix": map[string]any{}})
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failures := validateDeterminismRuns(root, path, "rev")
+	if len(failures) == 0 || !strings.Contains(failures[0], "incomplete") {
+		t.Fatalf("incomplete determinism evidence was accepted: %#v", failures)
+	}
+}
+
+func TestExtensionEvidenceRequiresTwentyResultStableRuns(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "extension.json")
+	payload, _ := json.Marshal(map[string]any{"source_revision": "rev", "checks": []any{}, "determinism": map[string]any{"repeats": 2, "trace_hashes": []string{"a", "a"}, "assertion_hashes": []string{"b", "b"}, "run_paths": []string{"runs/1", "runs/2"}, "all_equal": true}})
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failures := validateExtensionRuns(root, path, "rev")
+	if len(failures) == 0 || !strings.Contains(failures[0], "incomplete") {
+		t.Fatalf("short extension determinism evidence was accepted: %#v", failures)
+	}
+}
 
 func TestCurrentTreePassesFoundationAndValidatesAvailableSimulationEvidence(t *testing.T) {
 	workspace, err := filepath.Abs(filepath.Join("..", ".."))

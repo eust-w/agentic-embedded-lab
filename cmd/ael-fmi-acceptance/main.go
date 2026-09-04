@@ -147,6 +147,8 @@ func main() {
 	if len(nonzero) == 0 {
 		fatal(errors.New("FMI acceptance produced no non-zero output"))
 	}
+	resultRows, resultColumns, err := resultShape(result)
+	fatal(err)
 	cancel()
 	_ = listener.Close()
 	select {
@@ -167,7 +169,7 @@ func main() {
 	}
 	sspHash, _ := benchmark.FileSHA256(ssp)
 	resultHash, _ := benchmark.FileSHA256(result)
-	evidence := map[string]any{"api_version": ael.APIVersion, "status": "passed", "source_revision": revision, "system": *systemPath, "experiment": *experimentPath, "input_hashes": inputHashes, "ssp_sha256": sspHash, "result_sha256": resultHash, "nonzero_outputs": nonzero, "components": len(system.Components), "connections": len(system.Connections), "hardware_validated": false, "limitations": []string{"FMI 2.0 functional exchange only; no calibrated hardware equivalence."}, "created_at": time.Now().UTC()}
+	evidence := map[string]any{"api_version": ael.APIVersion, "status": "passed", "source_revision": revision, "system": *systemPath, "experiment": *experimentPath, "input_hashes": inputHashes, "ssp_sha256": sspHash, "result_sha256": resultHash, "nonzero_outputs": nonzero, "components": len(system.Components), "connections": len(system.Connections), "start_value_count": len(startSpecs), "result_rows": resultRows, "result_columns": resultColumns, "communication_stop_time_s": 0.006, "coordinator": map[string]string{"name": "OMSimulator", "version": "2.1.3", "exchange": "FMI 2.0 Co-Simulation", "topology": "SSP 1.0"}, "hardware_validated": false, "limitations": []string{"FMI 2.0 functional exchange only; no calibrated hardware equivalence."}, "created_at": time.Now().UTC()}
 	evidenceData, _ := json.MarshalIndent(evidence, "", "  ")
 	fatal(os.MkdirAll(filepath.Dir(evidencePath), 0o700))
 	fatal(os.WriteFile(evidencePath, append(evidenceData, '\n'), 0o600))
@@ -255,6 +257,19 @@ func nonzeroResults(path string) (map[string]float64, error) {
 		}
 	}
 	return result, nil
+}
+
+func resultShape(path string) (int, int, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer file.Close()
+	rows, err := csv.NewReader(file).ReadAll()
+	if err != nil || len(rows) < 2 {
+		return 0, 0, errors.New("OMSimulator result shape is invalid")
+	}
+	return len(rows) - 1, len(rows[0]), nil
 }
 func containsCoordinatorError(value string) bool {
 	for _, line := range strings.Split(value, "\n") {

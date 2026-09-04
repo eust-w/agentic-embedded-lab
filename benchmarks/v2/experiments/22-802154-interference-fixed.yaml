@@ -4,6 +4,10 @@ assertions:
       id: A01
       metric: network.failure
       operator: ==
+    - {id: A02, metric: network.packet_loss, operator: "==", expected: 0}
+    - {id: A03, metric: network.retries, operator: "<=", expected: 8}
+    - {id: A04, metric: network.latency_ms, operator: "<", expected: 20}
+    - {id: A05, metric: network.energy_j, operator: ">=", expected: 0}
 duration_us: 3000
 faults: null
 id: 22-802154-interference-fixed
